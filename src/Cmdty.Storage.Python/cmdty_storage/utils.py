@@ -25,28 +25,37 @@ import pandas as pd
 from datetime import datetime
 import clr
 import System as dotnet
+import System.Collections.Generic as dotnet_cols_gen
 from pathlib import Path
+
 clr.AddReference(str(Path("cmdty_storage/lib/Cmdty.TimePeriodValueTypes")))
-import Cmdty.TimePeriodValueTypes as tp
+import Cmdty.TimePeriodValueTypes as net_tp
+
 clr.AddReference(str(Path('cmdty_storage/lib/Cmdty.TimeSeries')))
 import Cmdty.TimeSeries as ts
 from typing import Union
 from datetime import date
-
+import dateutil
+import typing as tp
 
 def from_datetime_like(datetime_like, time_period_type):
-    """ Converts either a pandas Period, datetime or date to a .NET Time Period"""
+    """ Converts either a pandas Period, str, datetime or date to a .NET Time Period"""
+
+    if isinstance(datetime_like, str):
+        datetime_like = dateutil.parser.parse(datetime_like)
+
     if (hasattr(datetime_like, 'hour')):
         time_args = (datetime_like.hour, datetime_like.minute, datetime_like.second)
     else:
         time_args = (0, 0, 0)
 
     date_time = dotnet.DateTime(datetime_like.year, datetime_like.month, datetime_like.day, *time_args)
-    return tp.TimePeriodFactory.FromDateTime[time_period_type](date_time)
+    return net_tp.TimePeriodFactory.FromDateTime[time_period_type](date_time)
 
 
 def net_datetime_to_py_datetime(net_datetime):
-    return datetime(net_datetime.Year, net_datetime.Month, net_datetime.Day, net_datetime.Hour, net_datetime.Minute, net_datetime.Second, net_datetime.Millisecond * 1000)
+    return datetime(net_datetime.Year, net_datetime.Month, net_datetime.Day, net_datetime.Hour, net_datetime.Minute,
+                    net_datetime.Second, net_datetime.Millisecond * 1000)
 
 
 def net_time_period_to_pandas_period(net_time_period, freq):
@@ -96,13 +105,13 @@ def raise_if_not_none(arg, error_message):
 
 
 FREQ_TO_PERIOD_TYPE = {
-        "15min" : tp.QuarterHour,
-        "30min" : tp.HalfHour,
-        "H" : tp.Hour,
-        "D" : tp.Day,
-        "M" : tp.Month,
-        "Q" : tp.Quarter
-    }
+    "15min": net_tp.QuarterHour,
+    "30min": net_tp.HalfHour,
+    "H": net_tp.Hour,
+    "D": net_tp.Day,
+    "M": net_tp.Month,
+    "Q": net_tp.Quarter
+}
 """ dict of str: .NET time period type.
 Each item describes an allowable granularity of curves constructed, as specified by the 
 freq parameter in the curves public methods.
@@ -112,19 +121,28 @@ The keys represent the pandas Offset Alias which describe the granularity, and w
 The values are the associated .NET time period types used in behind-the-scenes calculations.
 """
 
-def wrap_settle_for_dotnet(py_settle_func, freq):
 
+def wrap_settle_for_dotnet(py_settle_func, freq):
     def wrapper_settle_function(py_function, net_time_period, freq):
         pandas_period = net_time_period_to_pandas_period(net_time_period, freq)
         py_function_result = py_function(pandas_period)
-        net_settle_day = from_datetime_like(py_function_result, tp.Day)
+        net_settle_day = from_datetime_like(py_function_result, net_tp.Day)
         return net_settle_day
 
     def wrapped_function(net_time_period):
         return wrapper_settle_function(py_settle_func, net_time_period, freq)
 
     time_period_type = FREQ_TO_PERIOD_TYPE[freq]
-    return dotnet.Func[time_period_type, tp.Day](wrapped_function)
+    return dotnet.Func[time_period_type, net_tp.Day](wrapped_function)
 
 
-TimePeriodSpecType = Union[datetime, date, pd.Period]
+TimePeriodSpecType = tp.Union[datetime, date, pd.Period]
+CurveType = tp.Union[pd.Series, tp.Dict[tp.Union[str, date, datetime, pd.Period], float]]
+
+
+def curve_to_net_dict(curve: CurveType, time_period_type):
+    ret = dotnet_cols_gen.Dictionary[time_period_type, dotnet.Double]()
+    for key in curve.keys():
+        net_key = from_datetime_like(key, time_period_type)
+        ret.Add(net_key, curve[key])
+    return ret
