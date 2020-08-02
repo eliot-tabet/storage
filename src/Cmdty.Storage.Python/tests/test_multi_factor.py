@@ -12,9 +12,9 @@ class TestSpotPriceSim(unittest.TestCase):
             (0.0, {date(2020, 8, 1): 0.35,
                    '2021-01-15': 0.29,  # Can use string to specify forward delivery date
                    date(2021, 7, 30): 0.32}),
-            (2.5, {date(2020, 8, 1): 0.15,
-                   '2021-01-15': 0.18,
-                   date(2021, 7, 30): 0.21}),
+            # factor vol can also be specified as a pandas Series
+            (2.5, pd.Series(data=[0.15, 0.18, 0.21],
+                            index=pd.PeriodIndex(data=['2020-08-01', '2021-01-15', '2021-07-30'], freq='D'))),
             (16.2, {date(2020, 8, 1): 0.95,
                    '2021-01-15': 0.92,
                    date(2021, 7, 30): 0.89}),
@@ -25,6 +25,8 @@ class TestSpotPriceSim(unittest.TestCase):
             [0.6, 1.0, 0.4],
             [0.3, 0.4, 1.0]
         ])
+
+        # Like with factor vol, the fwd_curve can be a pandas Series object
         fwd_curve = {
             '2020-08-01': 56.85,
             pd.Period('2021-01-15', freq='D'): 59.08,
