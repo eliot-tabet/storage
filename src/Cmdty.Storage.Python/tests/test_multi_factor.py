@@ -34,6 +34,7 @@ class TestSpotPriceSim(unittest.TestCase):
 
         spot_simulator = mf.MultiFactorSpotSim('D', factors, factor_corrs, current_date, fwd_curve,
                                                spot_periods_to_sim, 12)
+        sim_spot_prices = spot_simulator.simulate(10)
 
         self.assertEqual(True, True)
 

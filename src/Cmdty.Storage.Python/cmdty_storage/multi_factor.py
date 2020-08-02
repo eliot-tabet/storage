@@ -76,6 +76,18 @@ class MultiFactorSpotSim:
 
         self._net_simulator = net_sim.MultiFactor.MultiFactorSpotPriceSimulator[time_period_type](
             net_multi_factor_params, net_current_date, net_forward_curve, net_sim_periods, net_time_func, mt_rand)
+        self._sim_periods = [_to_pd_period(freq, p) for p in sim_periods]
+        self._freq = freq
 
     def simulate(self, num_sims: int) -> pd.DataFrame:
-        pass
+        net_sim_results = self._net_simulator.Simulate(num_sims)
+        spot_sim_array = utils.as_numpy_array(net_sim_results.SpotPrices)
+        spot_sim_array.resize((net_sim_results.NumSteps, net_sim_results.NumSims))
+        period_index = pd.PeriodIndex(data=self._sim_periods, freq=self._freq)
+        return pd.DataFrame(data=spot_sim_array, index=period_index)
+
+
+def _to_pd_period(freq: str, date_like: tp.Union[pd.Period, datetime, date, str]) -> pd.Period:
+    if isinstance(date_like, pd.Period):
+        return date_like
+    return pd.Period(date_like, freq=freq)

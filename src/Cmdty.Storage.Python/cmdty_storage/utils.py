@@ -192,8 +192,8 @@ def as_net_array(np_array: np.ndarray):
         np_array = np_array.view(np.float64).reshape(dims)
 
     net_dims = dotnet.Array.CreateInstance(dotnet.Int32, np_array.ndim)
-    for I in range(np_array.ndim):
-        net_dims[I] = dotnet.Int32(dims[I])
+    for idx in range(np_array.ndim):
+        net_dims[idx] = dotnet.Int32(dims[idx])
 
     if not np_array.flags.c_contiguous:
         np_array = np_array.copy(order='C')
@@ -206,7 +206,7 @@ def as_net_array(np_array: np.ndarray):
 
     try:  # Memmove
         dest_handle = dotnet.Runtime.InteropServices.GCHandle.Alloc(net_array,
-                                                       dotnet.Runtime.InteropServices.GCHandleType.Pinned)
+                                                                    dotnet.Runtime.InteropServices.GCHandleType.Pinned)
         source_ptr = np_array.__array_interface__['data'][0]
         dest_ptr = dest_handle.AddrOfPinnedObject().ToInt64()
         ctypes.memmove(dest_ptr, source_ptr, np_array.nbytes)
@@ -214,3 +214,45 @@ def as_net_array(np_array: np.ndarray):
         if dest_handle.IsAllocated:
             dest_handle.Free()
     return net_array
+
+
+_MAP_NET_NP = {
+    'Single': np.dtype('float32'),
+    'Double': np.dtype('float64'),
+    'SByte': np.dtype('int8'),
+    'Int16': np.dtype('int16'),
+    'Int32': np.dtype('int32'),
+    'Int64': np.dtype('int64'),
+    'Byte': np.dtype('uint8'),
+    'UInt16': np.dtype('uint16'),
+    'UInt32': np.dtype('uint32'),
+    'UInt64': np.dtype('uint64'),
+    'Boolean': np.dtype('bool'),
+}
+
+
+def as_numpy_array(net_array) -> np.ndarray:
+    """
+    Given a CLR `System.Array` returns a `numpy.ndarray`.  See _MAP_NET_NP for
+    the mapping of CLR types to Numpy dtypes.
+    """
+    dims = np.empty(net_array.Rank, dtype=int)
+    for idx in range(net_array.Rank):
+        dims[idx] = net_array.GetLength(idx)
+    net_type = net_array.GetType().GetElementType().Name
+
+    try:
+        np_array = np.empty(dims, order='C', dtype=_MAP_NET_NP[net_type])
+    except KeyError:
+        raise NotImplementedError("asNumpyArray does not yet support System type {}".format(net_type))
+
+    try:  # Memmove
+        source_handle = dotnet.Runtime.InteropServices.GCHandle.Alloc(
+            net_array, dotnet.Runtime.InteropServices.GCHandleType.Pinned)
+        source_ptr = source_handle.AddrOfPinnedObject().ToInt64()
+        dest_ptr = np_array.__array_interface__['data'][0]
+        ctypes.memmove(dest_ptr, source_ptr, np_array.nbytes)
+    finally:
+        if source_handle.IsAllocated:
+            source_handle.Free()
+    return np_array
