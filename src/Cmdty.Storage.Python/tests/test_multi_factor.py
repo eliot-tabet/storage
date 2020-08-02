@@ -37,8 +37,9 @@ class TestSpotPriceSim(unittest.TestCase):
         # keys of fwd_curve
         spot_periods_to_sim = [pd.Period('2020-08-01'), '2021-01-15', date(2021, 7, 30)]
 
+        random_seed = 12
         spot_simulator = mf.MultiFactorSpotSim('D', factors, factor_corrs, current_date, fwd_curve,
-                                               spot_periods_to_sim, 12)
+                                               spot_periods_to_sim, random_seed)
         num_sims = 4
         sim_spot_prices = spot_simulator.simulate(num_sims)
         self.assertEqual(3, len(sim_spot_prices))
