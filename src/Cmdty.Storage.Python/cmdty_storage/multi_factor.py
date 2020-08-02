@@ -39,7 +39,7 @@ class MultiFactorSpotSim:
     def __init__(self,
                  freq: str,
                  factors: tp.Iterable[tp.Tuple[float, utils.CurveType]],
-                 factor_corr_mat: np.ndarray,
+                 factor_corrs: np.ndarray,
                  current_date: tp.Union[datetime, date],
                  fwd_curve: utils.CurveType,
                  sim_periods: tp.Iterable[tp.Union[pd.Period, datetime, date]],
@@ -58,7 +58,9 @@ class MultiFactorSpotSim:
             net_vol_curve = utils.curve_to_net_dict(vol_curve, time_period_type)
             net_factors.Add(net_sim.MultiFactor.Factor[time_period_type](mean_reversion, net_vol_curve))
 
-        # TODO change this to dictionary<T, double>
+        net_factor_corrs = utils.as_net_array(factor_corrs)
+        net_multi_factor_params = net_sim.MultiFactor.MultiFactorParameters[time_period_type](net_factors,
+                                                                                              net_factor_corrs)
         #net_forward_curve = utils.curve_to_net_dict(fwd_curve, time_period_type)
 
 

@@ -22,7 +22,9 @@
 # OTHER DEALINGS IN THE SOFTWARE.
 
 import pandas as pd
+import numpy as np
 from datetime import datetime
+import ctypes
 import clr
 import System as dotnet
 import System.Collections.Generic as dotnet_cols_gen
@@ -37,6 +39,7 @@ from typing import Union
 from datetime import date
 import dateutil
 import typing as tp
+
 
 def from_datetime_like(datetime_like, time_period_type):
     """ Converts either a pandas Period, str, datetime or date to a .NET Time Period"""
@@ -141,8 +144,70 @@ CurveType = tp.Union[pd.Series, tp.Dict[tp.Union[str, date, datetime, pd.Period]
 
 
 def curve_to_net_dict(curve: CurveType, time_period_type):
+    """Creates a .NET Dictionary<T, Double> instance from a Python curve, with type defined by CurveType."""
     ret = dotnet_cols_gen.Dictionary[time_period_type, dotnet.Double]()
     for key in curve.keys():
         net_key = from_datetime_like(key, time_period_type)
         ret.Add(net_key, curve[key])
     return ret
+
+
+_MAP_NP_NET = {
+    np.dtype('float32'): dotnet.Single,
+    np.dtype('float64'): dotnet.Double,
+    np.dtype('int8'): dotnet.SByte,
+    np.dtype('int16'): dotnet.Int16,
+    np.dtype('int32'): dotnet.Int32,
+    np.dtype('int64'): dotnet.Int64,
+    np.dtype('uint8'): dotnet.Byte,
+    np.dtype('uint16'): dotnet.UInt16,
+    np.dtype('uint32'): dotnet.UInt32,
+    np.dtype('uint64'): dotnet.UInt64,
+    np.dtype('bool'): dotnet.Boolean,
+}
+
+
+def as_net_array(np_array: np.ndarray):
+    """
+    Given a `numpy.ndarray` returns a CLR `System.Array`.  See _MAP_NP_NET for
+    the mapping of Numpy dtypes to CLR types.
+
+    Note: `complex64` and `complex128` arrays are converted to `float32`
+    and `float64` arrays respectively with shape [m,n,...] -> [m,n,...,2]
+    """
+    dims = np_array.shape
+    dtype = np_array.dtype
+    # For complex arrays, we must make a view of the array as its corresponding
+    # float type.
+    if dtype == np.complex64:
+        dtype = np.dtype('float32')
+        dims.append(2)
+        np_array = np_array.view(np.float32).reshape(dims)
+    elif dtype == np.complex128:
+        dtype = np.dtype('float64')
+        dims.append(2)
+        np_array = np_array.view(np.float64).reshape(dims)
+
+    net_dims = dotnet.Array.CreateInstance(dotnet.Int32, np_array.ndim)
+    for I in range(np_array.ndim):
+        net_dims[I] = dotnet.Int32(dims[I])
+
+    if not np_array.flags.c_contiguous:
+        np_array = np_array.copy(order='C')
+    assert np_array.flags.c_contiguous
+
+    try:
+        net_array = dotnet.Array.CreateInstance(_MAP_NP_NET[dtype], net_dims)
+    except KeyError:
+        raise NotImplementedError("asNetArray does not yet support dtype {}".format(dtype))
+
+    try:  # Memmove
+        dest_handle = dotnet.Runtime.InteropServices.GCHandle.Alloc(net_array,
+                                                       dotnet.Runtime.InteropServices.GCHandleType.Pinned)
+        source_ptr = np_array.__array_interface__['data'][0]
+        dest_ptr = dest_handle.AddrOfPinnedObject().ToInt64()
+        ctypes.memmove(dest_ptr, source_ptr, np_array.nbytes)
+    finally:
+        if dest_handle.IsAllocated:
+            dest_handle.Free()
+    return net_array
