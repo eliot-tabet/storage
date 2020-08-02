@@ -35,25 +35,28 @@ import Cmdty.TimePeriodValueTypes as net_tp
 
 clr.AddReference(str(Path('cmdty_storage/lib/Cmdty.TimeSeries')))
 import Cmdty.TimeSeries as ts
-from typing import Union
-from datetime import date
+from datetime import date, datetime
 import dateutil
 import typing as tp
 
 
-def from_datetime_like(datetime_like, time_period_type):
+def from_datetime_like(datetime_like: tp.Union[datetime, date, str, pd.Period], time_period_type):
     """ Converts either a pandas Period, str, datetime or date to a .NET Time Period"""
+    date_time = py_date_like_to_net_datetime(datetime_like)
+    return net_tp.TimePeriodFactory.FromDateTime[time_period_type](date_time)
 
+
+def py_date_like_to_net_datetime(datetime_like: tp.Union[datetime, date, str, pd.Period]):
+    """"""
     if isinstance(datetime_like, str):
         datetime_like = dateutil.parser.parse(datetime_like)
 
-    if (hasattr(datetime_like, 'hour')):
+    if hasattr(datetime_like, 'hour'):
         time_args = (datetime_like.hour, datetime_like.minute, datetime_like.second)
     else:
         time_args = (0, 0, 0)
 
-    date_time = dotnet.DateTime(datetime_like.year, datetime_like.month, datetime_like.day, *time_args)
-    return net_tp.TimePeriodFactory.FromDateTime[time_period_type](date_time)
+    return dotnet.DateTime(datetime_like.year, datetime_like.month, datetime_like.day, *time_args)
 
 
 def net_datetime_to_py_datetime(net_datetime):

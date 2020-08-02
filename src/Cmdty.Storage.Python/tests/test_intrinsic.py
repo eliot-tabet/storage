@@ -32,7 +32,7 @@ class TestIntrinsicValue(unittest.TestCase):
 
     def test_intrinsic_value_runs(self):
 
-        constraints =   [
+        constraints = [
                             (date(2019, 8, 28),
                                         [
                                             (0.0, -150.0, 255.2),

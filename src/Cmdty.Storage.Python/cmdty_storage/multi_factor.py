@@ -25,6 +25,7 @@ import clr
 import System as dotnet
 import System.Collections.Generic as dotnet_cols_gen
 import pathlib as pl
+
 clr.AddReference(str(pl.Path('cmdty_storage/lib/Cmdty.Core.Simulation')))
 import Cmdty.Core.Simulation as net_sim
 import pandas as pd
@@ -40,10 +41,10 @@ class MultiFactorSpotSim:
                  freq: str,
                  factors: tp.Iterable[tp.Tuple[float, utils.CurveType]],
                  factor_corrs: np.ndarray,
-                 current_date: tp.Union[datetime, date],
+                 current_date: tp.Union[datetime, date, str, pd.Period],
                  fwd_curve: utils.CurveType,
-                 sim_periods: tp.Iterable[tp.Union[pd.Period, datetime, date]],
-                 seed: tp.Optional[int]=None
+                 sim_periods: tp.Iterable[tp.Union[pd.Period, datetime, date, str]],
+                 seed: tp.Optional[int] = None
                  # time_func: Callable[[Union[datetime, date], Union[datetime, date]], float] TODO add this back in
                  ):
 
@@ -61,8 +62,20 @@ class MultiFactorSpotSim:
         net_factor_corrs = utils.as_net_array(factor_corrs)
         net_multi_factor_params = net_sim.MultiFactor.MultiFactorParameters[time_period_type](net_factors,
                                                                                               net_factor_corrs)
-        #net_forward_curve = utils.curve_to_net_dict(fwd_curve, time_period_type)
+        net_forward_curve = utils.curve_to_net_dict(fwd_curve, time_period_type)
+        net_current_date = utils.py_date_like_to_net_datetime(current_date)
+        net_time_func = dotnet.Func[dotnet.DateTime, dotnet.DateTime, dotnet.Double](net_sim.TimeFunctions.Act365)
+        net_sim_periods = dotnet_cols_gen.List[time_period_type]()
+        [net_sim_periods.Add(utils.from_datetime_like(p, time_period_type)) for p in sim_periods]
 
+        if seed is None:
+            mt_rand = net_sim.MersenneTwisterGenerator()
+        else:
+            mt_rand = net_sim.MersenneTwisterGenerator(seed)
+        mt_rand = net_sim.INormalGenerator(mt_rand)
+
+        self._net_simulator = net_sim.MultiFactor.MultiFactorSpotPriceSimulator[time_period_type](
+            net_multi_factor_params, net_current_date, net_forward_curve, net_sim_periods, net_time_func, mt_rand)
 
     def simulate(self, num_sims: int) -> pd.DataFrame:
         pass
