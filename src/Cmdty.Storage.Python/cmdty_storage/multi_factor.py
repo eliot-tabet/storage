@@ -47,7 +47,7 @@ class MultiFactorSpotSim:
                  seed: tp.Optional[int] = None
                  # time_func: Callable[[Union[datetime, date], Union[datetime, date]], float] TODO add this back in
                  ):
-
+        _validate_multi_factor_params(factors, factor_corrs)
         if freq not in utils.FREQ_TO_PERIOD_TYPE:
             raise ValueError("freq parameter value of '{}' not supported. The allowable values can be found in the "
                              "keys of the dict curves.FREQ_TO_PERIOD_TYPE.".format(freq))
@@ -91,3 +91,42 @@ def _to_pd_period(freq: str, date_like: tp.Union[pd.Period, datetime, date, str]
     if isinstance(date_like, pd.Period):
         return date_like
     return pd.Period(date_like, freq=freq)
+
+
+def _validate_multi_factor_params( # TODO unit test validation fails
+                    factors: tp.Iterable[tp.Tuple[float, utils.CurveType]],
+                    factor_corrs: np.ndarray) -> None:
+    if factor_corrs.ndim != 2:
+        raise ValueError("Factor correlation matrix is not 2-dimensional.")
+    corr_shape = factor_corrs.shape
+    if corr_shape[0] != corr_shape[1]:
+        raise ValueError("Factor correlation matrix is not square.")
+    for (i, j), corr in np.ndenumerate(factor_corrs):
+        if i == j:
+            if not np.isclose([corr], [1.0]):
+                raise ValueError("Factor correlation on diagonal position ({i}, {j}) value of {corr} not valid as not "
+                                 "equal to 1.").format(i=i, j=j, corr=corr)
+        else:
+            if not -1 <= corr <= 1:
+                raise ValueError("Factor correlation in position ({i}, {j}) value of {corr} not valid as not in the "
+                                 "interval [-1, 1]".format(i=i, j=j, corr=corr))
+    num_factors = corr_shape[0]
+    if len(factors) != num_factors:
+        raise ValueError("factors and factor_corrs are of inconsistent sizes.")
+    for idx, (mr, vol) in enumerate(factors):
+        if mr < 0.0:
+            raise ValueError("Mean reversion value of {mr} for factor at index {idx} not valid as is negative.".format(
+                mr=mr, idx=idx))
+
+
+class MultiFactorModel:
+    def __init__(self,
+                 freq: str,
+                 factors: tp.Iterable[tp.Tuple[float, utils.CurveType]],
+                 factor_corrs: np.ndarray):
+        _validate_multi_factor_params(factors, factor_corrs)
+
+        pass
+
+    def integrated_covariance(self) -> float:
+        pass
