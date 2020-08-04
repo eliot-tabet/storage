@@ -123,10 +123,19 @@ class MultiFactorModel:
     def __init__(self,
                  freq: str,
                  factors: tp.Iterable[tp.Tuple[float, utils.CurveType]],
-                 factor_corrs: np.ndarray):
+                 factor_corrs: np.ndarray,
+                 time_func: tp.Callable[[tp.Union[date, datetime],tp.Union[date, datetime]], float]):
         _validate_multi_factor_params(factors, factor_corrs)
+        self._factors = list(factors)
+        self._factor_corrs = factor_corrs
 
+    def integrated_covariance(self, obs_start, obs_end,
+                  fwd_contract_1: utils.ForwardPointType, fwd_contract_2: utils.ForwardPointType) -> float:
+        for (i, j), corr in np.ndenumerate(self._factor_corrs):
+            mri, vol_curve_i = self._factors[i]
+
+
+            mrj, vol_curve_j = self._factors[j]
+            #cov +=
         pass
 
-    def integrated_covariance(self) -> float:
-        pass

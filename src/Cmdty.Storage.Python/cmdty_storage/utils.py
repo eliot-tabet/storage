@@ -143,7 +143,8 @@ def wrap_settle_for_dotnet(py_settle_func, freq):
 
 
 TimePeriodSpecType = tp.Union[datetime, date, pd.Period]
-CurveType = tp.Union[pd.Series, tp.Dict[tp.Union[str, date, datetime, pd.Period], float]]
+ForwardPointType = tp.Union[str, date, datetime, pd.Period]
+CurveType = tp.Union[pd.Series, tp.Dict[ForwardPointType, float]]
 
 
 def curve_to_net_dict(curve: CurveType, time_period_type):
