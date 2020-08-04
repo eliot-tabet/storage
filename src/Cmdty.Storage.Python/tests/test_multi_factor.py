@@ -2,7 +2,6 @@ import unittest
 import pandas as pd
 import numpy as np
 from cmdty_storage import multi_factor as mf
-from tests import utils
 from datetime import date
 
 
