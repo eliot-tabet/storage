@@ -148,11 +148,11 @@ class MultiFactorModel:
         self._factors = list(factors)
         self._time_func = tf.act_365 if time_func is None else time_func
 
-    def integrated_covariance(self,
-                              obs_start: utils.TimePeriodSpecType,
-                              obs_end: utils.TimePeriodSpecType,
-                              fwd_contract_1: utils.ForwardPointType,
-                              fwd_contract_2: utils.ForwardPointType) -> float:
+    def integrated_covar(self,
+                         obs_start: utils.TimePeriodSpecType,
+                         obs_end: utils.TimePeriodSpecType,
+                         fwd_contract_1: utils.ForwardPointType,
+                         fwd_contract_2: utils.ForwardPointType) -> float:
         obs_start_t = 0.0
         obs_end_t = self._time_func(obs_start, obs_end)
         if obs_end_t < 0.0:
@@ -171,35 +171,35 @@ class MultiFactorModel:
                    self._cont_ext(-obs_start_t, -obs_end_t, mr_i + mr_j)
         return cov
 
-    def variance(self,
-                 obs_start: utils.TimePeriodSpecType,
-                 obs_end: utils.TimePeriodSpecType,
-                 fwd_contract: utils.ForwardPointType) -> float:
-        return self.integrated_covariance(obs_start, obs_end, fwd_contract, fwd_contract)
+    def integrated_variance(self,
+                            obs_start: utils.TimePeriodSpecType,
+                            obs_end: utils.TimePeriodSpecType,
+                            fwd_contract: utils.ForwardPointType) -> float:
+        return self.integrated_covar(obs_start, obs_end, fwd_contract, fwd_contract)
 
-    def stan_dev(self,
-                 obs_start: utils.TimePeriodSpecType,
-                 obs_end: utils.TimePeriodSpecType,
-                 fwd_contract: utils.ForwardPointType) -> float:
-        return math.sqrt(self.integrated_covariance(obs_start, obs_end, fwd_contract, fwd_contract))
+    def integrated_stan_dev(self,
+                            obs_start: utils.TimePeriodSpecType,
+                            obs_end: utils.TimePeriodSpecType,
+                            fwd_contract: utils.ForwardPointType) -> float:
+        return math.sqrt(self.integrated_covar(obs_start, obs_end, fwd_contract, fwd_contract))
 
-    def implied_vol(self,
-                    val_date: utils.TimePeriodSpecType,
-                    expiry: utils.TimePeriodSpecType,
-                    fwd_contract: utils.ForwardPointType) -> float:
+    def integrated_vol(self,
+                       val_date: utils.TimePeriodSpecType,
+                       expiry: utils.TimePeriodSpecType,
+                       fwd_contract: utils.ForwardPointType) -> float:
         time_to_expiry = self._time_func(val_date, expiry)
         if time_to_expiry <= 0:
             raise ValueError("val_date must be before expiry.")
-        return math.sqrt(self.integrated_covariance(val_date, expiry, fwd_contract, fwd_contract) / time_to_expiry)
+        return math.sqrt(self.integrated_covar(val_date, expiry, fwd_contract, fwd_contract) / time_to_expiry)
 
-    def integrated_correlation(self,
-                               obs_start: utils.TimePeriodSpecType,
-                               obs_end: utils.TimePeriodSpecType,
-                               fwd_contract_1: utils.ForwardPointType,
-                               fwd_contract_2: utils.ForwardPointType) -> float:
-        covariance = self.integrated_covariance(obs_start, obs_end, fwd_contract_1, fwd_contract_2)
-        variance_1 = self.variance(obs_start, obs_end, fwd_contract_1)
-        variance_2 = self.variance(obs_start, obs_end, fwd_contract_2)
+    def integrated_corr(self,
+                        obs_start: utils.TimePeriodSpecType,
+                        obs_end: utils.TimePeriodSpecType,
+                        fwd_contract_1: utils.ForwardPointType,
+                        fwd_contract_2: utils.ForwardPointType) -> float:
+        covariance = self.integrated_covar(obs_start, obs_end, fwd_contract_1, fwd_contract_2)
+        variance_1 = self.integrated_variance(obs_start, obs_end, fwd_contract_1)
+        variance_2 = self.integrated_variance(obs_start, obs_end, fwd_contract_2)
         corr = covariance / math.sqrt(variance_1 * variance_2)
         if 1.0 < corr < (1.0 + self._corr_tolerance):
             return 1.0
