@@ -24,6 +24,7 @@
 from cmdty_storage import utils
 import dateutil.parser as dt_parser
 from datetime import date
+import pandas as pd
 
 
 def act_365(start: utils.ForwardPointType, end: utils.ForwardPointType) -> float:
@@ -33,5 +34,9 @@ def act_365(start: utils.ForwardPointType, end: utils.ForwardPointType) -> float
 
 
 def _to_date(date_like: utils.ForwardPointType) -> date:
-    date_like = dt_parser.parse(date_like) if isinstance(date_like, str) else date_like
+    if isinstance(date_like, str):
+        date_like = dt_parser.parse(date_like)
+    else:
+        if isinstance(date_like, pd.Period):
+            date_like = date_like.asfreq('D', 's')
     return date(date_like.year, date_like.month, date_like.day)
