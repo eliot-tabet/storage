@@ -47,15 +47,13 @@ def from_datetime_like(datetime_like: tp.Union[datetime, date, str, pd.Period], 
 
 
 def py_date_like_to_net_datetime(datetime_like: tp.Union[datetime, date, str, pd.Period]):
-    """"""
+    """Converts either a pandas Period, str, datetime or date to a .NET DateTime."""
     if isinstance(datetime_like, str):
         datetime_like = dateutil.parser.parse(datetime_like)
-
     if hasattr(datetime_like, 'hour'):
         time_args = (datetime_like.hour, datetime_like.minute, datetime_like.second)
     else:
         time_args = (0, 0, 0)
-
     return dotnet.DateTime(datetime_like.year, datetime_like.month, datetime_like.day, *time_args)
 
 
@@ -145,6 +143,7 @@ def wrap_settle_for_dotnet(py_settle_func, freq):
 TimePeriodSpecType = tp.Union[datetime, date, pd.Period]
 ForwardPointType = tp.Union[str, date, datetime, pd.Period]
 CurveType = tp.Union[pd.Series, tp.Dict[ForwardPointType, float]]
+TimeFunctionType = tp.Callable[[tp.Union[date, datetime], tp.Union[date, datetime]], float]
 
 
 def curve_to_net_dict(curve: CurveType, time_period_type):
