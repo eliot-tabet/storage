@@ -142,7 +142,6 @@ class MultiFactorModel:
                  freq: str,
                  factors: tp.Iterable[tp.Tuple[float, utils.CurveType]],
                  factor_corrs: tp.Optional[tp.Union[np.ndarray, float]] = None,
-                 # TODO make factor_corrs argument optional for 1 factor, and float for 2-factors
                  time_func: tp.Optional[utils.TimeFunctionType] = None):
         self._factor_corrs = _validate_multi_factor_params(factors, factor_corrs)
         self._factors = list(factors)
@@ -219,5 +218,5 @@ class MultiFactorModel:
         if vol is None:
             raise ValueError(
                 "No point in vol curve of factor {factor_num} for fwd_contract_1 value of {fwd}.".format(
-                                                        factor_num=factor_num, fwd=fwd_contract))
+                    factor_num=factor_num, fwd=fwd_contract))
         return vol
