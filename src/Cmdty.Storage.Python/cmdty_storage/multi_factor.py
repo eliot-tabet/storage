@@ -103,15 +103,17 @@ def _validate_multi_factor_params(  # TODO unit test validation fails
         raise ValueError("factors cannot be empty.")
     if factors_len == 1 and factor_corrs is None:
         factor_corrs = np.array([[1.0]])
-    if factors_len == 2 and isinstance(factor_corrs, float):
-        factor_corrs = np.array([[1.0, factor_corrs],
-                                 [factor_corrs, 1.0]])
+    if factors_len == 2 and (isinstance(factor_corrs, float) or isinstance(factor_corrs, int)):
+        factor_corrs = np.array([[1.0, float(factor_corrs)],
+                                 [float(factor_corrs), 1.0]])
 
     if factor_corrs.ndim != 2:
         raise ValueError("Factor correlation matrix is not 2-dimensional.")
     corr_shape = factor_corrs.shape
     if corr_shape[0] != corr_shape[1]:
         raise ValueError("Factor correlation matrix is not square.")
+    if factor_corrs.dtype != np.float64:
+        factor_corrs = factor_corrs.astype(np.float64)
     for (i, j), corr in np.ndenumerate(factor_corrs):
         if i == j:
             if not np.isclose([corr], [1.0]):

@@ -31,7 +31,7 @@ import itertools
 
 class TestSpotPriceSim(unittest.TestCase):
     def test_regression(self):
-        factors = [ # Tuples where 1st element is factor mean-reversion, 2nd element is factor vol curve
+        factors = [  # Tuples where 1st element is factor mean-reversion, 2nd element is factor vol curve
             (0.0, {date(2020, 8, 1): 0.35,
                    '2021-01-15': 0.29,  # Can use string to specify forward delivery date
                    date(2021, 7, 30): 0.32}),
@@ -39,8 +39,8 @@ class TestSpotPriceSim(unittest.TestCase):
             (2.5, pd.Series(data=[0.15, 0.18, 0.21],
                             index=pd.PeriodIndex(data=['2020-08-01', '2021-01-15', '2021-07-30'], freq='D'))),
             (16.2, {date(2020, 8, 1): 0.95,
-                   '2021-01-15': 0.92,
-                   date(2021, 7, 30): 0.89}),
+                    '2021-01-15': 0.92,
+                    date(2021, 7, 30): 0.89}),
         ]
 
         factor_corrs = np.array([
@@ -90,14 +90,16 @@ class TestSpotPriceSim(unittest.TestCase):
 
 class TestMultiFactorModel(unittest.TestCase):
     _short_plus_long_indices = pd.period_range(start='2020-09-01', periods=25, freq='D') \
-                                             .append(pd.period_range(start='2030-09-01', periods=25, freq='D'))
+        .append(pd.period_range(start='2030-09-01', periods=25, freq='D'))
     _1f_0_mr_model = mf.MultiFactorModel('D', [(0.0, {'2020-09-01': 0.36, '2020-10-01': 0.29, '2020-11-01': 0.23})])
     _1f_pos_mr_model = mf.MultiFactorModel('D', [(2.5, pd.Series(data=np.linspace(0.65, 0.38, num=50),
-                                            index=_short_plus_long_indices))])
+                                                                 index=_short_plus_long_indices))])
     _2f_canonical_model = mf.MultiFactorModel('D',
-                      factors=[(0.0, pd.Series(data=np.linspace(0.53, 0.487, num=50), index=_short_plus_long_indices)),
-                            (2.5, pd.Series(data=np.linspace(1.45, 1.065, num=50), index=_short_plus_long_indices))],
-                      factor_corrs=0.87) # If only 2 factors can supply a float for factor_corrs rather than a matrix
+                                              factors=[(0.0, pd.Series(data=np.linspace(0.53, 0.487, num=50),
+                                                                       index=_short_plus_long_indices)),
+                                                       (2.5, pd.Series(data=np.linspace(1.45, 1.065, num=50),
+                                                                       index=_short_plus_long_indices))],
+                                              factor_corrs=0.87)  # If only 2 factors can supply a float for factor_corrs rather than a matrix
 
     def test_single_non_mean_reverting_factor_implied_vol_equals_factor_vol(self):
         fwd_contract = '2020-09-01'
@@ -127,6 +129,30 @@ class TestMultiFactorModel(unittest.TestCase):
         implied_vol = self._2f_canonical_model.integrated_vol('2020-08-05', '2021-08-05', fwd_contract)
         non_mr_factor_vol = self._2f_canonical_model._factors[0][1][fwd_contract]
         self.assertAlmostEquals(non_mr_factor_vol, implied_vol, places=10)
+
+    def test_diff_corr_types_give_same_results(self):
+        factors = [(0.0, pd.Series(data=np.linspace(0.53, 0.487, num=50),
+                                   index=self._short_plus_long_indices)),
+                   (2.5, pd.Series(data=np.linspace(1.45, 1.065, num=50),
+                                   index=self._short_plus_long_indices))]
+        two_f_model_float_corr = mf.MultiFactorModel('D', factors=factors, factor_corrs=0.0)
+        two_f_model_int_corr = mf.MultiFactorModel('D', factors=factors, factor_corrs=0)
+        two_f_model_float_array_corr = mf.MultiFactorModel('D', factors=factors, factor_corrs=np.array([[1.0, 0.0],
+                                                                                                        [0.0, 1.0]]))
+        two_f_model_int_array_corr = mf.MultiFactorModel('D', factors=factors, factor_corrs=np.array([[1, 0],
+                                                                                                      [0, 1]]))
+
+        two_f_model_float_corr_covar = two_f_model_float_corr.integrated_covar(date(2020, 8, 5),
+                                                                 date(2020, 8, 30), '2020-09-01', '2020-09-20')
+        two_f_model_float_array_corr_covar = two_f_model_float_array_corr.integrated_covar(date(2020, 8, 5),
+                                                               date(2020, 8, 30), '2020-09-01', '2020-09-20')
+        two_f_model_int_corr_covar = two_f_model_int_corr.integrated_covar(date(2020, 8, 5),
+                                                               date(2020, 8, 30), '2020-09-01', '2020-09-20')
+        two_f_model_int_array_corr_covar = two_f_model_int_array_corr.integrated_covar(date(2020, 8, 5),
+                                                               date(2020, 8, 30), '2020-09-01', '2020-09-20')
+        self.assertEqual(two_f_model_float_corr_covar, two_f_model_float_array_corr_covar)
+        self.assertEqual(two_f_model_float_corr_covar, two_f_model_int_corr_covar)
+        self.assertEqual(two_f_model_float_corr_covar, two_f_model_int_array_corr_covar)
 
 
 if __name__ == '__main__':
