@@ -38,6 +38,7 @@ import Cmdty.TimeSeries as ts
 from datetime import date, datetime
 import dateutil
 import typing as tp
+import re
 
 
 def from_datetime_like(datetime_like: tp.Union[datetime, date, str, pd.Period], time_period_type):
@@ -144,6 +145,10 @@ TimePeriodSpecType = tp.Union[datetime, date, pd.Period]
 ForwardPointType = tp.Union[str, date, datetime, pd.Period]
 CurveType = tp.Union[pd.Series, tp.Dict[ForwardPointType, float]]
 TimeFunctionType = tp.Callable[[tp.Union[date, datetime], tp.Union[date, datetime]], float]
+FwdContractType = tp.Union[date, datetime, pd.Period, float,
+                    tp.Tuple[date, date], tp.Tuple[datetime, datetime],
+                    tp.Tuple[pd.Period, pd.Period]]
+FwdContractsType = tp.Iterable[FwdContractType]
 
 
 def curve_to_net_dict(curve: CurveType, time_period_type):
@@ -256,3 +261,34 @@ def as_numpy_array(net_array) -> np.ndarray:
         if source_handle.IsAllocated:
             source_handle.Free()
     return np_array
+
+
+def to_period_range(freq: str,
+                    fwd_contract: FwdContractType) -> tp.Tuple[pd.Period, pd.Period]:
+    if isinstance(fwd_contract, pd.Period):
+        return fwd_contract.asfreq(freq, 's'), _last_period(fwd_contract, freq)
+    if isinstance(fwd_contract, tuple):
+        start = fwd_contract[0]
+        end = fwd_contract[1]
+    else:
+        start = fwd_contract
+        end = fwd_contract
+    if isinstance(start, pd.Period):
+        start_period = start.asfreq(freq, 's')
+    else:
+        start_period = pd.Period(start, freq=freq)
+    if isinstance(end, pd.Period):
+        end_period = _last_period(end, freq)
+    else:
+        end_period = pd.Period(end, freq=freq)
+    return start_period, end_period
+
+
+def _last_period(period: pd.Period, freq: str) -> pd.Period:
+    """Find the last pandas Period instance of a specific frequency within a Period instance"""
+    if not freq[0].isdigit():
+        return period.asfreq(freq, 'e')
+    m = re.match("(\d+)(\w+)", freq)
+    num = int(m.group(1))
+    sub_freq = m.group(2)
+    return (period.asfreq(sub_freq, 'e') - num + 1).asfreq(freq)

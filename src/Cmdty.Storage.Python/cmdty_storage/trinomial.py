@@ -25,9 +25,10 @@ import clr
 import System as dotnet
 from cmdty_storage import utils, CmdtyStorage
 from pathlib import Path
-from typing import Union, Callable
+import typing as tp
 from datetime import date
 import pandas as pd
+
 clr.AddReference(str(Path('cmdty_storage/lib/Cmdty.Storage')))
 import Cmdty.Storage as net_cs
 
@@ -40,7 +41,7 @@ def trinomial_value(cmdty_storage: CmdtyStorage,
                     mean_reversion: float,
                     time_step: float,
                     interest_rates: pd.Series,
-                    settlement_rule: Callable[[pd.Period], date],
+                    settlement_rule: tp.Callable[[pd.Period], date],
                     num_inventory_grid_points: int = 100,
                     numerical_tolerance: float = 1E-12) -> float:
     """
@@ -67,18 +68,50 @@ def trinomial_value(cmdty_storage: CmdtyStorage,
 
     net_spot_volatility = utils.series_to_double_time_series(spot_volatility, time_period_type)
     net_cs.TreeStorageValuationExtensions.WithOneFactorTrinomialTree[time_period_type](
-                        trinomial_calc, net_spot_volatility, mean_reversion, time_step)
+        trinomial_calc, net_spot_volatility, mean_reversion, time_step)
 
     net_settlement_rule = utils.wrap_settle_for_dotnet(settlement_rule, cmdty_storage.freq)
     net_cs.ITreeAddCmdtySettlementRule[time_period_type](trinomial_calc).WithCmdtySettlementRule(net_settlement_rule)
 
     interest_rate_time_series = utils.series_to_double_time_series(interest_rates, utils.FREQ_TO_PERIOD_TYPE['D'])
     net_cs.TreeStorageValuationExtensions.WithAct365ContinuouslyCompoundedInterestRateCurve[time_period_type](
-                                    trinomial_calc, interest_rate_time_series)
+        trinomial_calc, interest_rate_time_series)
 
     net_cs.TreeStorageValuationExtensions.WithFixedNumberOfPointsOnGlobalInventoryRange[time_period_type](
-                                    trinomial_calc, num_inventory_grid_points)
+        trinomial_calc, num_inventory_grid_points)
     net_cs.TreeStorageValuationExtensions.WithLinearInventorySpaceInterpolation[time_period_type](trinomial_calc)
     net_cs.ITreeAddNumericalTolerance[time_period_type](trinomial_calc).WithNumericalTolerance(numerical_tolerance)
     npv = net_cs.ITreeCalculate[time_period_type](trinomial_calc).Calculate()
     return npv.NetPresentValue
+
+
+def trinomial_deltas(cmdty_storage: CmdtyStorage,
+                     val_date: utils.TimePeriodSpecType,
+                     inventory: float,
+                     forward_curve: pd.Series,
+                     spot_volatility: pd.Series,
+                     mean_reversion: float,
+                     time_step: float,
+                     interest_rates: pd.Series,
+                     settlement_rule: tp.Callable[[pd.Period], date],
+                     fwd_contracts: utils.FwdContractsType,
+                     num_inventory_grid_points: int = 100,
+                     numerical_tolerance: float = 1E-12,
+                     delta_shift=0.00001  # TODO Improve this!
+                     ) -> tp.List[float]:
+    fwd_curve_copy = forward_curve.copy()
+    deltas = []
+    for fwd_contract in fwd_contracts:
+        start, end = utils.to_period_range(cmdty_storage.freq, fwd_contract)
+        fwd_curve_slice = fwd_curve_copy[start:end]
+        fwd_curve_slice = fwd_curve_slice + delta_shift  # TODO JF improve this!
+        value_up_shift = trinomial_value(cmdty_storage, val_date, inventory, fwd_curve_copy,
+                                         spot_volatility, mean_reversion, time_step, interest_rates, settlement_rule,
+                                         num_inventory_grid_points, numerical_tolerance)
+        fwd_curve_slice = fwd_curve_slice - 2.0 * delta_shift  # TODO JF improve this!
+        value_down_shift = trinomial_value(cmdty_storage, val_date, inventory, fwd_curve_copy,
+                                           spot_volatility, mean_reversion, time_step, interest_rates, settlement_rule,
+                                           num_inventory_grid_points, numerical_tolerance)
+        delta = (value_up_shift - value_down_shift) / (2.0 * delta_shift)
+        deltas.add(delta)
+    return deltas
