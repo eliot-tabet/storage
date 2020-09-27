@@ -103,15 +103,16 @@ def trinomial_deltas(cmdty_storage: CmdtyStorage,
     deltas = []
     for fwd_contract in fwd_contracts:
         start, end = utils.to_period_range(cmdty_storage.freq, fwd_contract)
-        fwd_curve_slice = fwd_curve_copy[start:end]
-        fwd_curve_slice = fwd_curve_slice + delta_shift  # TODO JF improve this!
+        fwd_curve_copy[start:end] = fwd_curve_copy[start:end] + delta_shift # TODO JF improve this!
         value_up_shift = trinomial_value(cmdty_storage, val_date, inventory, fwd_curve_copy,
                                          spot_volatility, mean_reversion, time_step, interest_rates, settlement_rule,
                                          num_inventory_grid_points, numerical_tolerance)
-        fwd_curve_slice = fwd_curve_slice - 2.0 * delta_shift  # TODO JF improve this!
+        fwd_curve_copy[start:end] = forward_curve[start:end] - delta_shift  # TODO JF improve this!
         value_down_shift = trinomial_value(cmdty_storage, val_date, inventory, fwd_curve_copy,
                                            spot_volatility, mean_reversion, time_step, interest_rates, settlement_rule,
                                            num_inventory_grid_points, numerical_tolerance)
         delta = (value_up_shift - value_down_shift) / (2.0 * delta_shift)
-        deltas.add(delta)
+        fwd_curve_copy[start:end] = forward_curve[start:end]
+        deltas.append(delta)
+    # TODO undiscount deltas
     return deltas

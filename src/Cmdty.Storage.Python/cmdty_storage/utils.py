@@ -140,8 +140,9 @@ def wrap_settle_for_dotnet(py_settle_func, freq):
     time_period_type = FREQ_TO_PERIOD_TYPE[freq]
     return dotnet.Func[time_period_type, net_tp.Day](wrapped_function)
 
-
-TimePeriodSpecType = tp.Union[datetime, date, pd.Period]
+# TODO get rid of TimePeriodSpecType or ForwardPointType?
+# TODO check that each type definition is correct still
+TimePeriodSpecType = tp.Union[str, datetime, date, pd.Period]
 ForwardPointType = tp.Union[str, date, datetime, pd.Period]
 CurveType = tp.Union[pd.Series, tp.Dict[ForwardPointType, float]]
 TimeFunctionType = tp.Callable[[tp.Union[date, datetime], tp.Union[date, datetime]], float]
