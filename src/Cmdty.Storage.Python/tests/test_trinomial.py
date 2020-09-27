@@ -167,7 +167,7 @@ class TestIntrinsicValue(unittest.TestCase):
         low_price = 23.87
         high_price = 150.32
         num_days_at_high_price = 20
-        date_switch_high_price = '2020-03-12'
+        date_switch_high_price = '2020-03-12' # TODO calculate this from num_days_at_high_price
         forward_curve = utils.create_piecewise_flat_series([low_price, high_price, high_price],
                                                            [val_date, date_switch_high_price,
                                                             storage_end], freq='D')
@@ -182,7 +182,6 @@ class TestIntrinsicValue(unittest.TestCase):
         time_step = 1.0 / 365.0
         twentieth_of_next_month = lambda period: period.asfreq('M').asfreq('D', 'end') + 20
 
-        #delta_fwd_contracts = pd.period_range(storage_start, '2020-03-11', freq='M')
         delta_fwd_contracts = [(storage_start, '2020-03-11'),
                                 (date_switch_high_price, storage_end)]
         trinomial_deltas = cs.trinomial_deltas(cmdty_storage, val_date, inventory, forward_curve,
@@ -191,5 +190,8 @@ class TestIntrinsicValue(unittest.TestCase):
                                                settlement_rule=twentieth_of_next_month,
                                                fwd_contracts=delta_fwd_contracts,
                                                num_inventory_grid_points=500)
-        print(trinomial_deltas)
+        withdraw_delta = trinomial_deltas[1]
+        expected_withdraw_delta = constant_withdrawal_rate * num_days_at_high_price
+        pcnt_error = (withdraw_delta - expected_withdraw_delta) / expected_withdraw_delta
+        self.assertAlmostEqual(pcnt_error, 0.0, 3)
         self.assertTrue(isinstance(trinomial_deltas, list))
