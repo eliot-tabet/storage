@@ -26,8 +26,10 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Cmdty.Core.Simulation.MultiFactor;
 using Cmdty.TimePeriodValueTypes;
 using Cmdty.TimeSeries;
+using MathNet.Numerics.LinearAlgebra;
 
 namespace Cmdty.Storage.LsmcValuation
 {
@@ -35,9 +37,10 @@ namespace Cmdty.Storage.LsmcValuation
     {
 
         public static LsmcStorageValuationResults<T> Calculate<T>(T currentPeriod, double startingInventory,
-                TimeSeries<T, double> forwardCurve, ICmdtyStorage<T> storage, Func<T, Day> settleDateRule, Func<Day, Day, double> discountFactors,
-                Func<ICmdtyStorage<T>, IDoubleStateSpaceGridCalc> gridCalcFactory, IInterpolatorFactory interpolatorFactory,
-                double numericalTolerance)
+            TimeSeries<T, double> forwardCurve, ICmdtyStorage<T> storage, Func<T, Day> settleDateRule,
+            Func<Day, Day, double> discountFactors,
+            Func<ICmdtyStorage<T>, IDoubleStateSpaceGridCalc> gridCalcFactory, IInterpolatorFactory interpolatorFactory,
+            double numericalTolerance, MultiFactorSpotSimResults<T> spotSims, int regressMaxPolyDegree, bool regressCrossProducts)
             where T : ITimePeriod<T>
         {
             if (startingInventory < 0)
@@ -69,6 +72,19 @@ namespace Cmdty.Storage.LsmcValuation
                 return discountFactor;
             }
 
+            int numSims = spotSims.NumSims;
+            int numFactors = spotSims.NumFactors;
+            int numNonCrossMonomials = regressMaxPolyDegree * numFactors;
+            int numCrossMonomials = regressCrossProducts ? numNonCrossMonomials * (numNonCrossMonomials - 1) / 2 : 0;
+            int numMonomials = 1 /*constant independent variable*/ + numNonCrossMonomials + numCrossMonomials;
+
+            Matrix<double> designMatrix = Matrix<double>.Build.Dense(numSims, numMonomials);
+            for (int i = 0; i < numSims; i++) // TODO see if Math.Net has simpler way of setting whole column to constant
+            {
+                designMatrix[i, 0] = 1.0;
+            }
+
+
             // Loop back through other periods
             T startActiveStorage = inventorySpace.Start.Offset(-1);
             T[] periodsForResultsTimeSeries = startActiveStorage.EnumerateTo(inventorySpace.End).ToArray();
@@ -76,8 +92,11 @@ namespace Cmdty.Storage.LsmcValuation
             int backCounter = numPeriods - 2;
             IDoubleStateSpaceGridCalc gridCalc = gridCalcFactory(storage);
 
+
+
             foreach (T periodLoop in periodsForResultsTimeSeries.Reverse().Skip(1))
             {
+                PopulateDesignMatrix(designMatrix, periodLoop, spotSims, regressMaxPolyDegree, regressCrossProducts);
                 double[] inventorySpaceGrid;
                 if (periodLoop.Equals(startActiveStorage))
                 {
@@ -94,6 +113,8 @@ namespace Cmdty.Storage.LsmcValuation
                 Day cmdtySettlementDate = settleDateRule(periodLoop);
                 double discountFactorFromCmdtySettlement = DiscountToCurrentDay(cmdtySettlementDate);
 
+
+
                 for (int i = 0; i < inventorySpaceGrid.Length; i++)
                 {
                     // TODO regress future cash flow versus factors
@@ -104,6 +125,32 @@ namespace Cmdty.Storage.LsmcValuation
             }
 
             throw new NotImplementedException();
+        }
+
+        private static void PopulateDesignMatrix<T>(Matrix<double> designMatrix, T period, MultiFactorSpotSimResults<T> spotSims, 
+            int regressMaxPolyDegree, bool regressCrossProducts)
+            where T : ITimePeriod<T>
+        {
+            // TODO think about if rearranging loop orders could minimize cache misses
+            for (int factorIndex = 0; factorIndex < spotSims.NumFactors; factorIndex++)
+            {
+                ReadOnlySpan<double> factorSims = spotSims.MarkovFactorsForPeriod(period, factorIndex).Span;
+                for (int simIndex = 0; simIndex < spotSims.NumSims; simIndex++)
+                {
+                    double factorSim = factorSims[simIndex];
+                    for (int polyDegree = 1; polyDegree <= regressMaxPolyDegree; polyDegree++)
+                    {
+                        double monomial = Math.Pow(factorSim, polyDegree);
+                        int colIndex = 1 + factorIndex * regressMaxPolyDegree + polyDegree;
+                        designMatrix[simIndex, colIndex] = monomial;
+                    }
+                }
+            }
+
+            if (regressCrossProducts)
+            {
+                throw new NotImplementedException(); // TODO
+            }
         }
 
     }
