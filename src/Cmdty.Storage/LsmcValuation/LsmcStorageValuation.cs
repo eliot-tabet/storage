@@ -30,6 +30,7 @@ using Cmdty.Core.Simulation.MultiFactor;
 using Cmdty.TimePeriodValueTypes;
 using Cmdty.TimeSeries;
 using MathNet.Numerics.LinearAlgebra;
+using MathNet.Numerics.LinearAlgebra.Factorization;
 
 namespace Cmdty.Storage.LsmcValuation
 {
@@ -94,29 +95,57 @@ namespace Cmdty.Storage.LsmcValuation
 
 
 
-            foreach (T periodLoop in periodsForResultsTimeSeries.Reverse().Skip(1))
+            foreach (T period in periodsForResultsTimeSeries.Reverse().Skip(1))
             {
-                PopulateDesignMatrix(designMatrix, periodLoop, spotSims, regressMaxPolyDegree, regressCrossProducts);
+                PopulateDesignMatrix(designMatrix, period, spotSims, regressMaxPolyDegree, regressCrossProducts);
+                Svd<double> svd = designMatrix.Svd(false); // TODO does computeVectors parameter matter for solution?
                 double[] inventorySpaceGrid;
-                if (periodLoop.Equals(startActiveStorage))
+                if (period.Equals(startActiveStorage))
                 {
                     inventorySpaceGrid = new[] { startingInventory };
                 }
                 else
                 {
-                    (double inventorySpaceMin, double inventorySpaceMax) = inventorySpace[periodLoop];
+                    (double inventorySpaceMin, double inventorySpaceMax) = inventorySpace[period];
                     inventorySpaceGrid = gridCalc.GetGridPoints(inventorySpaceMin, inventorySpaceMax)
                                                 .ToArray();
                 }
-                (double nextStepInventorySpaceMin, double nextStepInventorySpaceMax) = inventorySpace[periodLoop.Offset(1)];
+                (double nextStepInventorySpaceMin, double nextStepInventorySpaceMax) = inventorySpace[period.Offset(1)];
 
-                Day cmdtySettlementDate = settleDateRule(periodLoop);
+                Day cmdtySettlementDate = settleDateRule(period);
                 double discountFactorFromCmdtySettlement = DiscountToCurrentDay(cmdtySettlementDate);
 
-
+                ReadOnlySpan<double> simulatedPrices = spotSims.SpotPricesForPeriod(period).Span;
 
                 for (int i = 0; i < inventorySpaceGrid.Length; i++)
                 {
+                    double inventory = inventorySpaceGrid[i];
+                    InjectWithdrawRange injectWithdrawRange = storage.GetInjectWithdrawRange(period, inventory);
+                    double inventoryLoss = storage.CmdtyInventoryPercentLoss(period) * inventory;
+                    double[] decisionSet = StorageHelper.CalculateBangBangDecisionSet(injectWithdrawRange, inventory, inventoryLoss,
+                        nextStepInventorySpaceMin, nextStepInventorySpaceMax, numericalTolerance);
+                    IReadOnlyList<DomesticCashFlow> inventoryCostCashFlows = storage.CmdtyInventoryCost(period, inventory);
+                    double inventoryCostNpv = inventoryCostCashFlows.Sum(cashFlow => cashFlow.Amount * DiscountToCurrentDay(cashFlow.Date));
+
+
+                    for (int simIndex = 0; simIndex < numSims; simIndex++)
+                    {
+                        double simulatedSpotPrice = simulatedPrices[simIndex];
+                        for (var j = 0; j < decisionSet.Length; j++)
+                        {
+                            double decisionVolume = decisionSet[j];
+                            // TODO split StorageImmediateNpvForDecision into parts which are dependent on inventory and the other parts of the calc and do the inventory dependent calcs outside of this loop
+                            (double immediateNpv, double cmdtyConsumed) = StorageHelper.StorageImmediateNpvForDecision(storage, period, inventory,
+                                decisionVolume, simulatedSpotPrice, discountFactorFromCmdtySettlement, DiscountToCurrentDay);
+
+                            double inventoryAfterDecision = inventory + decisionVolume - inventoryLoss;
+                            // TODO calc future value:
+                            // 
+
+                        }
+
+                    }
+
                     // TODO regress future cash flow versus factors
                     // TODO for each simulation decide optimal decision
                 }
