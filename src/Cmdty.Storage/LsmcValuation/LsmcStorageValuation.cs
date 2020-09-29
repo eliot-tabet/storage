@@ -181,27 +181,55 @@ namespace Cmdty.Storage.LsmcValuation
                     IReadOnlyList<DomesticCashFlow> inventoryCostCashFlows = storage.CmdtyInventoryCost(period, inventory);
                     double inventoryCostNpv = inventoryCostCashFlows.Sum(cashFlow => cashFlow.Amount * DiscountToCurrentDay(cashFlow.Date));
 
+                    var continuationValueByDecisionSet = new Vector<double>[decisionSet.Length];
+                    for (int decisionIndex = 0; decisionIndex < decisionSet.Length; decisionIndex++)
+                    {
+                        double decisionVolume = decisionSet[decisionIndex];
+                        double inventoryAfterDecision = inventory + decisionVolume - inventoryLoss;
+                        for (int inventoryGridIndex = 0; inventoryGridIndex < nextPeriodInventorySpaceGrid.Length; inventoryGridIndex++) // TODO use binary search?
+                        {
+                            double nextPeriodInventory = nextPeriodInventorySpaceGrid[inventoryGridIndex];
+                            if (Math.Abs(nextPeriodInventory - inventoryAfterDecision) < 1E-8) // TODO get rid of hard coded constant
+                            {
+                                continuationValueByDecisionSet[decisionIndex] =
+                                    storageEstimatedValuesNextPeriod[inventoryGridIndex];
+                                break;
+                            }
+                            if (nextPeriodInventory > inventoryAfterDecision)
+                            {
+                                // Need to interpolate
+                                Vector<double> lowerStorageValues = storageEstimatedValuesNextPeriod[inventoryGridIndex - 1];
+                                Vector<double> upperStorageValues = storageEstimatedValuesNextPeriod[inventoryGridIndex];
+                                double lowerInventory = nextPeriodInventorySpaceGrid[inventoryGridIndex - 1];
+                                double upperInventory = nextPeriodInventory;
+                                double inventoryGridSpace = upperInventory - lowerInventory;
+                                double upperWeight = (upperInventory - inventoryAfterDecision) / inventoryGridSpace;
+                                double lowerWeight = 1.0 - upperWeight;
+                                Vector<double> interpolatedContinuationValue =
+                                    lowerStorageValues.Multiply(lowerWeight) + upperStorageValues.Multiply(upperWeight);
+                                continuationValueByDecisionSet[decisionIndex] = interpolatedContinuationValue;
+                                break;
+                            }
+                        }
+                    }
 
                     for (int simIndex = 0; simIndex < numSims; simIndex++)
                     {
                         double simulatedSpotPrice = simulatedPrices[simIndex];
-                        for (var j = 0; j < decisionSet.Length; j++)
+                        for (var decisionIndex = 0; decisionIndex < decisionSet.Length; decisionIndex++)
                         {
-                            double decisionVolume = decisionSet[j];
+                            double decisionVolume = decisionSet[decisionIndex];
                             // TODO split StorageImmediateNpvForDecision into parts which are dependent on inventory and the other parts of the calc and do the inventory dependent calcs outside of this loop
                             (double immediateNpv, double cmdtyConsumed) = StorageHelper.StorageImmediateNpvForDecision(storage, period, inventory,
                                 decisionVolume, simulatedSpotPrice, discountFactorFromCmdtySettlement, DiscountToCurrentDay);
 
-                            double inventoryAfterDecision = inventory + decisionVolume - inventoryLoss;
-                            // TODO calc future value:
-                            // 
+                            double continuationValue = continuationValueByDecisionSet[decisionIndex][simIndex];
+
+
 
                         }
-
                     }
 
-                    // TODO regress future cash flow versus factors
-                    // TODO for each simulation decide optimal decision
                 }
 
                 inventorySpaceGrids[backCounter] = inventorySpaceGrid;
