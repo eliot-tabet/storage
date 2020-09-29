@@ -30,6 +30,7 @@ using Cmdty.Core.Simulation.MultiFactor;
 using Cmdty.TimePeriodValueTypes;
 using Cmdty.TimeSeries;
 using MathNet.Numerics.LinearAlgebra;
+using MathNet.Numerics.LinearAlgebra.Double;
 using MathNet.Numerics.LinearAlgebra.Factorization;
 
 namespace Cmdty.Storage.LsmcValuation
@@ -47,6 +48,19 @@ namespace Cmdty.Storage.LsmcValuation
             if (startingInventory < 0)
                 throw new ArgumentException("Inventory cannot be negative.", nameof(startingInventory));
 
+            if (currentPeriod.CompareTo(storage.EndPeriod) > 0)
+                return LsmcStorageValuationResults<T>.CreateExpiredResults();
+
+            if (currentPeriod.Equals(storage.EndPeriod))
+            {
+                if (storage.MustBeEmptyAtEnd)
+                {
+                    if (startingInventory > 0)
+                        throw new InventoryConstraintsCannotBeFulfilledException("Storage must be empty at end, but inventory is greater than zero.");
+                    return LsmcStorageValuationResults<T>.CreateExpiredResults();
+                }
+            }
+            
             TimeSeries<T, InventoryRange> inventorySpace = StorageHelper.CalculateInventorySpace(storage, startingInventory, currentPeriod);
 
             if (forwardCurve.Start.CompareTo(currentPeriod) > 0)
@@ -57,7 +71,34 @@ namespace Cmdty.Storage.LsmcValuation
 
             // Perform backward induction
             int numPeriods = inventorySpace.Count + 1; // +1 as inventorySpaceGrid doesn't contain first period
+            var storageValuesByPeriod = new Vector<double>[numPeriods][]; // 1st dimension is period, 2nd is inventory, 3rd is simulation number
+            var inventorySpaceGrids = new double[numPeriods][];
 
+            IDoubleStateSpaceGridCalc gridCalc = gridCalcFactory(storage);
+            // Calculate NPVs at end period
+            var endInventorySpace = inventorySpace[storage.EndPeriod]; // TODO this will probably break!
+            var endInventorySpaceGrid = gridCalc.GetGridPoints(endInventorySpace.MinInventory, endInventorySpace.MaxInventory)
+                                            .ToArray();
+            inventorySpaceGrids[numPeriods - 1] = endInventorySpaceGrid;
+
+            var storageValuesEndPeriod = new Vector<double>[endInventorySpaceGrid.Length];
+            ReadOnlySpan<double> endPeriodSimSpotPrices = spotSims.SpotPricesForPeriod(storage.EndPeriod).Span;
+
+            int numSims = spotSims.NumSims;
+
+            for (int i = 0; i < endInventorySpaceGrid.Length; i++)
+            {
+                double inventory = endInventorySpaceGrid[i];
+                var storageValueBySim = new DenseVector(numSims);
+                for (int simIndex = 0; simIndex < numSims; simIndex++)
+                {
+                    double simSpotPrice = endPeriodSimSpotPrices[simIndex];
+                    storageValueBySim[simIndex] = storage.TerminalStorageNpv(simSpotPrice, inventory);
+                }
+                storageValuesEndPeriod[i] = storageValueBySim;
+            }
+            storageValuesByPeriod[numPeriods - 1] = storageValuesEndPeriod;
+            
             // Calculate discount factor function
             Day dayToDiscountTo = currentPeriod.First<Day>(); // TODO IMPORTANT, this needs to change
 
@@ -73,7 +114,6 @@ namespace Cmdty.Storage.LsmcValuation
                 return discountFactor;
             }
 
-            int numSims = spotSims.NumSims;
             int numFactors = spotSims.NumFactors;
             int numNonCrossMonomials = regressMaxPolyDegree * numFactors;
             int numCrossMonomials = regressCrossProducts ? numNonCrossMonomials * (numNonCrossMonomials - 1) / 2 : 0;
@@ -84,21 +124,33 @@ namespace Cmdty.Storage.LsmcValuation
             {
                 designMatrix[i, 0] = 1.0;
             }
-
-
+            
             // Loop back through other periods
             T startActiveStorage = inventorySpace.Start.Offset(-1);
             T[] periodsForResultsTimeSeries = startActiveStorage.EnumerateTo(inventorySpace.End).ToArray();
 
             int backCounter = numPeriods - 2;
-            IDoubleStateSpaceGridCalc gridCalc = gridCalcFactory(storage);
-
-
-
+            
+            
             foreach (T period in periodsForResultsTimeSeries.Reverse().Skip(1))
             {
                 PopulateDesignMatrix(designMatrix, period, spotSims, regressMaxPolyDegree, regressCrossProducts);
                 Svd<double> svd = designMatrix.Svd(false); // TODO does computeVectors parameter matter for solution?
+                // TODO use svd.Solve method, or I can I do this in a more efficient way, e.g. compute intermediate values myself? Check Math.Net source code.
+
+                double[] nextPeriodInventorySpaceGrid = inventorySpaceGrids[backCounter + 1];
+                Vector<double>[] storageActualValuesNextPeriod = storageValuesByPeriod[backCounter + 1];
+
+                // TODO doing the regressions for all next inventory could be inefficient as they might not all be needed
+                Vector<double>[] storageEstimatedValuesNextPeriod = new Vector<double>[nextPeriodInventorySpaceGrid.Length];
+                for (int i = 0; i < nextPeriodInventorySpaceGrid.Length; i++) // TODO parallelise 
+                {
+                    Vector<double> storageValuesBySimNextPeriod = storageActualValuesNextPeriod[i];
+                    Vector<double> regressResults = svd.Solve(storageValuesBySimNextPeriod);
+                    Vector<double> estimatedContinuationValues = designMatrix.Multiply(regressResults);
+                    storageEstimatedValuesNextPeriod[i] = estimatedContinuationValues;
+                }
+                
                 double[] inventorySpaceGrid;
                 if (period.Equals(startActiveStorage))
                 {
@@ -111,6 +163,8 @@ namespace Cmdty.Storage.LsmcValuation
                                                 .ToArray();
                 }
                 (double nextStepInventorySpaceMin, double nextStepInventorySpaceMax) = inventorySpace[period.Offset(1)];
+
+                var storageValuesByInventory = new Vector<double>[inventorySpaceGrid.Length];
 
                 Day cmdtySettlementDate = settleDateRule(period);
                 double discountFactorFromCmdtySettlement = DiscountToCurrentDay(cmdtySettlementDate);
@@ -150,8 +204,12 @@ namespace Cmdty.Storage.LsmcValuation
                     // TODO for each simulation decide optimal decision
                 }
 
+                inventorySpaceGrids[backCounter] = inventorySpaceGrid;
+                storageValuesByPeriod[backCounter] = storageValuesByInventory;
                 backCounter--;
             }
+
+            // TODO Loop forward from start inventory choosing optimal decisions (like with intrinsic valuation)
 
             throw new NotImplementedException();
         }

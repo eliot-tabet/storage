@@ -23,7 +23,9 @@
 // OTHER DEALINGS IN THE SOFTWARE.
 #endregion
 
+using System.Collections.Generic;
 using Cmdty.TimePeriodValueTypes;
+using Cmdty.TimeSeries;
 
 namespace Cmdty.Storage.LsmcValuation
 {
@@ -31,10 +33,23 @@ namespace Cmdty.Storage.LsmcValuation
         where T : ITimePeriod<T>
     {
         public double Npv { get; }
+        public TimeSeries<T, IReadOnlyList<double>> InventorySpaceGrids { get; }
+        public TimeSeries<T, IReadOnlyList<IReadOnlyList<double>>> InjectWithdrawDecisions { get; }
 
-        public LsmcStorageValuationResults(double npv)
+        public LsmcStorageValuationResults(double npv,
+            TimeSeries<T, IReadOnlyList<double>> inventorySpaceGrids,
+            TimeSeries<T, IReadOnlyList<IReadOnlyList<double>>> injectWithdrawDecisions)
         {
             Npv = npv;
+            InventorySpaceGrids = inventorySpaceGrids;
+            InjectWithdrawDecisions = injectWithdrawDecisions;
         }
+
+        public static LsmcStorageValuationResults<T> CreateExpiredResults()
+        {
+            return new LsmcStorageValuationResults<T>(0.0, TimeSeries<T, IReadOnlyList<double>>.Empty, 
+                TimeSeries<T, IReadOnlyList<IReadOnlyList<double>>>.Empty);
+        }
+
     }
 }
