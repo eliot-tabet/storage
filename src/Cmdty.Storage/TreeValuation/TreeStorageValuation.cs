@@ -317,7 +317,7 @@ namespace Cmdty.Storage
                 double decisionInjectWithdraw = decisionSet[j];
                 (double immediateNpv, double cmdtyConsumed) = StorageHelper.StorageImmediateNpvForDecision(storage, period, inventory,
                                                 decisionInjectWithdraw, treeNode.Value, discountFactorFromCmdtySettlement, discountFactors);
-                immediateNpv -= inventoryCostNpv;
+                immediateNpv -= inventoryCostNpv; // TODO IMPORTANT check if inventoryCostNpv should be subtracted
                 // Expected continuation value
                 double inventoryAfterDecision = inventory + decisionInjectWithdraw - inventoryLoss;
                 double expectedContinuationValue = 0.0;

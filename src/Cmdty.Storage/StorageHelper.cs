@@ -176,18 +176,18 @@ namespace Cmdty.Storage
             // TODO case of yieldedWithdrawalRate equals to yieldedInjectionRate?
         }
 
-        public static (double Max, int IndexOfMax) MaxValueAndIndex([NotNull] double[] array) // TODO move to Cmdty.Core?
+        public static (double Max, int IndexOfMax) MaxValueAndIndex(Span<double> span) // TODO move to Cmdty.Core?
         {
-            if (array == null) throw new ArgumentNullException(nameof(array));
-            if (array.Length == 0)
-                throw new ArgumentException($"Parameter {nameof(array)} cannot have zero length", nameof(array));
+            if (span == null) throw new ArgumentNullException(nameof(span));
+            if (span.Length == 0)
+                throw new ArgumentException($"Parameter {nameof(span)} cannot have zero length", nameof(span));
 
-            double max = array[0];
+            double max = span[0];
             int indexOfMax = 0;
 
-            for (int i = 1; i < array.Length; i++)
+            for (int i = 1; i < span.Length; i++)
             {
-                double val = array[i];
+                double val = span[i];
                 if (val > max)
                 {
                     max = val;

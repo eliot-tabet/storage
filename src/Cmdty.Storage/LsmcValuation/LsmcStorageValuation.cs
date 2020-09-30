@@ -164,16 +164,16 @@ namespace Cmdty.Storage.LsmcValuation
                 }
                 (double nextStepInventorySpaceMin, double nextStepInventorySpaceMax) = inventorySpace[period.Offset(1)];
 
-                var storageValuesByInventory = new Vector<double>[inventorySpaceGrid.Length];
+                var storageValuesByInventory = new Vector<double>[inventorySpaceGrid.Length]; // TODO change type to DenseVector?
 
                 Day cmdtySettlementDate = settleDateRule(period);
                 double discountFactorFromCmdtySettlement = DiscountToCurrentDay(cmdtySettlementDate);
 
                 ReadOnlySpan<double> simulatedPrices = spotSims.SpotPricesForPeriod(period).Span;
 
-                for (int i = 0; i < inventorySpaceGrid.Length; i++)
+                for (int inventoryIndex = 0; inventoryIndex < inventorySpaceGrid.Length; inventoryIndex++)
                 {
-                    double inventory = inventorySpaceGrid[i];
+                    double inventory = inventorySpaceGrid[inventoryIndex];
                     InjectWithdrawRange injectWithdrawRange = storage.GetInjectWithdrawRange(period, inventory);
                     double inventoryLoss = storage.CmdtyInventoryPercentLoss(period) * inventory;
                     double[] decisionSet = StorageHelper.CalculateBangBangDecisionSet(injectWithdrawRange, inventory, inventoryLoss,
@@ -213,6 +213,8 @@ namespace Cmdty.Storage.LsmcValuation
                         }
                     }
 
+                    var storageValuesBySim = new DenseVector(numSims);
+                    var decisionNpvs = new double[decisionSet.Length];
                     for (int simIndex = 0; simIndex < numSims; simIndex++)
                     {
                         double simulatedSpotPrice = simulatedPrices[simIndex];
@@ -224,12 +226,12 @@ namespace Cmdty.Storage.LsmcValuation
                                 decisionVolume, simulatedSpotPrice, discountFactorFromCmdtySettlement, DiscountToCurrentDay);
 
                             double continuationValue = continuationValueByDecisionSet[decisionIndex][simIndex];
-
-
-
+                            decisionNpvs[decisionIndex] = immediateNpv + continuationValue - inventoryCostNpv; // TODO IMPORTANT check if inventoryCostNpv should be subtracted
                         }
+                        (double optimalDecisionNpv, int indexOfOptimalDecision) = StorageHelper.MaxValueAndIndex(decisionNpvs);
+                        storageValuesBySim[simIndex] = optimalDecisionNpv;
                     }
-
+                    storageValuesByInventory[inventoryIndex] = storageValuesBySim;
                 }
 
                 inventorySpaceGrids[backCounter] = inventorySpaceGrid;
@@ -239,7 +241,10 @@ namespace Cmdty.Storage.LsmcValuation
 
             // TODO Loop forward from start inventory choosing optimal decisions (like with intrinsic valuation)
 
-            throw new NotImplementedException();
+            // Calculate NPVs for first active period using current inventory
+            double storageNpv = storageValuesByPeriod[0][0].Sum();
+
+            return new LsmcStorageValuationResults<T>(storageNpv, null, null);
         }
 
         private static void PopulateDesignMatrix<T>(Matrix<double> designMatrix, T period, MultiFactorSpotSimResults<T> spotSims, 
