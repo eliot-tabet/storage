@@ -1,5 +1,5 @@
 ﻿#region License
-// Copyright (c) 2019 Jake Fowler
+// Copyright (c) 2020 Jake Fowler
 //
 // Permission is hereby granted, free of charge, to any person 
 // obtaining a copy of this software and associated documentation 
@@ -26,6 +26,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Cmdty.Core.Simulation;
 using Cmdty.Core.Simulation.MultiFactor;
 using Cmdty.TimePeriodValueTypes;
 using Cmdty.TimeSeries;
@@ -41,7 +42,43 @@ namespace Cmdty.Storage.LsmcValuation
         public static LsmcStorageValuationResults<T> Calculate<T>(T currentPeriod, double startingInventory,
             TimeSeries<T, double> forwardCurve, ICmdtyStorage<T> storage, Func<T, Day> settleDateRule,
             Func<Day, Day, double> discountFactors,
-            Func<ICmdtyStorage<T>, IDoubleStateSpaceGridCalc> gridCalcFactory, IInterpolatorFactory interpolatorFactory,
+            Func<ICmdtyStorage<T>, IDoubleStateSpaceGridCalc> gridCalcFactory,
+            double numericalTolerance,
+            MultiFactorParameters<T> modelParameters,
+            int numSims,
+            int? seed,
+            int regressMaxPolyDegree, bool regressCrossProducts)
+            where T : ITimePeriod<T>
+        {
+            var normalGenerator = seed == null ? new MersenneTwisterGenerator() : new MersenneTwisterGenerator(seed.Value);
+            return Calculate(currentPeriod, startingInventory, forwardCurve, storage, settleDateRule, discountFactors,
+                gridCalcFactory, numericalTolerance, modelParameters, normalGenerator, numSims, regressMaxPolyDegree,
+                regressCrossProducts);
+        }
+
+        public static LsmcStorageValuationResults<T> Calculate<T>(T currentPeriod, double startingInventory,
+            TimeSeries<T, double> forwardCurve, ICmdtyStorage<T> storage, Func<T, Day> settleDateRule,
+            Func<Day, Day, double> discountFactors,
+            Func<ICmdtyStorage<T>, IDoubleStateSpaceGridCalc> gridCalcFactory,
+            double numericalTolerance,
+            MultiFactorParameters<T> modelParameters,
+            INormalGenerator normalGenerator,
+            int numSims,
+            int regressMaxPolyDegree, bool regressCrossProducts)
+            where T : ITimePeriod<T>
+        {
+            DateTime currentDate = currentPeriod.Start; // TODO IMPORTANT, this needs to change;
+            var simulatedPeriods = storage.StartPeriod.EnumerateTo(storage.EndPeriod);
+            var simulator = new MultiFactorSpotPriceSimulator<T>(modelParameters, currentDate, forwardCurve, simulatedPeriods, TimeFunctions.Act365, normalGenerator);
+            var spotSims = simulator.Simulate(numSims);
+            return Calculate(currentPeriod, startingInventory, forwardCurve, storage, settleDateRule, discountFactors,
+                gridCalcFactory, numericalTolerance, spotSims, regressMaxPolyDegree, regressCrossProducts);
+        }
+
+        public static LsmcStorageValuationResults<T> Calculate<T>(T currentPeriod, double startingInventory,
+            TimeSeries<T, double> forwardCurve, ICmdtyStorage<T> storage, Func<T, Day> settleDateRule,
+            Func<Day, Day, double> discountFactors,
+            Func<ICmdtyStorage<T>, IDoubleStateSpaceGridCalc> gridCalcFactory,
             double numericalTolerance, MultiFactorSpotSimResults<T> spotSims, int regressMaxPolyDegree, bool regressCrossProducts)
             where T : ITimePeriod<T>
         {

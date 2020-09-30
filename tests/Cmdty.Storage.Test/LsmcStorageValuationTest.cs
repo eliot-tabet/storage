@@ -23,32 +23,20 @@
 // OTHER DEALINGS IN THE SOFTWARE.
 #endregion
 
+using System;
 using System.Collections.Generic;
-using Cmdty.TimePeriodValueTypes;
-using Cmdty.TimeSeries;
+using System.Text;
+using Xunit;
 
-namespace Cmdty.Storage.LsmcValuation
+namespace Cmdty.Storage.Test
 {
-    public sealed class LsmcStorageValuationResults<T>
-        where T : ITimePeriod<T>
+    public sealed class LsmcStorageValuationTest
     {
-        public double Npv { get; }
-        public TimeSeries<T, IReadOnlyList<double>> InventorySpaceGrids { get; }
-        public TimeSeries<T, IReadOnlyList<IReadOnlyList<double>>> InjectWithdrawDecisions { get; }
-
-        public LsmcStorageValuationResults(double npv,
-            TimeSeries<T, IReadOnlyList<double>> inventorySpaceGrids,
-            TimeSeries<T, IReadOnlyList<IReadOnlyList<double>>> injectWithdrawDecisions)
+        [Fact]
+        public void Calculate_StorageLooksLikeCallOptions_NpvEqualsBlack76()
         {
-            Npv = npv;
-            InventorySpaceGrids = inventorySpaceGrids;
-            InjectWithdrawDecisions = injectWithdrawDecisions;
-        }
 
-        public static LsmcStorageValuationResults<T> CreateExpiredResults()
-        {
-            return new LsmcStorageValuationResults<T>(0.0, TimeSeries<T, IReadOnlyList<double>>.Empty, 
-                TimeSeries<T, IReadOnlyList<IReadOnlyList<double>>>.Empty);
+
         }
 
     }

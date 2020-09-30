@@ -381,7 +381,7 @@ namespace Cmdty.Storage.Test
             return Math.Exp(-paymentDate.OffsetFrom(currentDate) / 365.0 * interestRate);
         }
 
-        [Fact(Skip = "Trying to figure out why this isn't passing.")]
+        [Fact(Skip = "Trying to figure out why this isn't passing.")] // TODO this isn't passing because in the injection period there is still flexibility to shift are when the injection occurs, generating extrinsic value
         public void Calculate_DeepInTheMoney_NpvEqualsTrivialIntrinsicCalc()
         {
             var currentDate = new Day(2019, 8, 29);
