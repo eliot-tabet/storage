@@ -26,6 +26,8 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Cmdty.Storage", "src\Cmdty.
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Cmdty.Storage.Test", "tests\Cmdty.Storage.Test\Cmdty.Storage.Test.csproj", "{46F0DBAD-5955-4E19-A53C-3A3D3EE59D79}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Cmdty.Storage.Benchmarks", "tests\Cmdty.Storage.Benchmarks\Cmdty.Storage.Benchmarks.csproj", "{8D170D9F-3D71-4FCF-BF54-98D3B0E7F52C}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -46,6 +48,10 @@ Global
 		{46F0DBAD-5955-4E19-A53C-3A3D3EE59D79}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{46F0DBAD-5955-4E19-A53C-3A3D3EE59D79}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{46F0DBAD-5955-4E19-A53C-3A3D3EE59D79}.Release|Any CPU.Build.0 = Release|Any CPU
+		{8D170D9F-3D71-4FCF-BF54-98D3B0E7F52C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{8D170D9F-3D71-4FCF-BF54-98D3B0E7F52C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{8D170D9F-3D71-4FCF-BF54-98D3B0E7F52C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{8D170D9F-3D71-4FCF-BF54-98D3B0E7F52C}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -55,6 +61,7 @@ Global
 		{46E6B2AB-9279-420A-A5EF-726578D1D7C0} = {10F327D9-2E26-4747-B714-24ECF7C9CFCC}
 		{10B444B9-C569-4DB7-9AFC-A4AD92FA0230} = {10F327D9-2E26-4747-B714-24ECF7C9CFCC}
 		{46F0DBAD-5955-4E19-A53C-3A3D3EE59D79} = {3AC698D6-ED67-4C58-83C7-ED2BD46472F5}
+		{8D170D9F-3D71-4FCF-BF54-98D3B0E7F52C} = {3AC698D6-ED67-4C58-83C7-ED2BD46472F5}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {32876876-339D-4624-8B79-387C508559B1}

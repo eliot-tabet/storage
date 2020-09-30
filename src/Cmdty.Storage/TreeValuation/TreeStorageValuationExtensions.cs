@@ -64,21 +64,9 @@ namespace Cmdty.Storage
             where T : ITimePeriod<T>
         {
             if (treeAddSpacing == null) throw new ArgumentNullException(nameof(treeAddSpacing));
-            if (numGridPointsOverGlobalInventoryRange < 3)
-                throw new ArgumentException($"Parameter {nameof(numGridPointsOverGlobalInventoryRange)} value must be at least 3.", nameof(numGridPointsOverGlobalInventoryRange));
-
-            IDoubleStateSpaceGridCalc GridCalcFactory(ICmdtyStorage<T> storage)
-            {
-                T[] storagePeriods = storage.StartPeriod.EnumerateTo(storage.EndPeriod).ToArray();
-
-                double globalMaxInventory = storagePeriods.Max(period => storage.MaxInventory(period));
-                double globalMinInventory = storagePeriods.Min(period => storage.MinInventory(period));
-                double gridSpacing = (globalMaxInventory - globalMinInventory) /
-                                     (numGridPointsOverGlobalInventoryRange - 1);
-                return new FixedSpacingStateSpaceGridCalc(gridSpacing);
-            }
-
-            return treeAddSpacing.WithStateSpaceGridCalculation(GridCalcFactory);
+            Func<ICmdtyStorage<T>, IDoubleStateSpaceGridCalc> gridCalcFactory = InventorySpaceGrid.FixedNumberOfPointsOnGlobalInventoryRangeFactory<T>(
+                numGridPointsOverGlobalInventoryRange);
+            return treeAddSpacing.WithStateSpaceGridCalculation(gridCalcFactory);
         }
 
         public static ITreeAddNumericalTolerance<T> WithLinearInventorySpaceInterpolation<T>([NotNull] this ITreeAddInterpolator<T> addInterpolator)
@@ -140,16 +128,8 @@ namespace Cmdty.Storage
             where T : ITimePeriod<T>
         {
             if (addDiscountFactorFunc == null) throw new ArgumentNullException(nameof(addDiscountFactorFunc));
-
-            double DiscountFactor(Day presentDay, Day cashFlowDay)
-            {
-                if (cashFlowDay <= presentDay)
-                    return 1.0;
-                double interestRate = act365ContCompInterestRates(cashFlowDay);
-                return Math.Exp(-cashFlowDay.OffsetFrom(presentDay) / 365.0 * interestRate);
-            }
-
-            return addDiscountFactorFunc.WithDiscountFactorFunc(DiscountFactor);
+            Func<Day, Day, double> discounter = StorageHelper.CreateAct65ContCompDiscounter(act365ContCompInterestRates);
+            return addDiscountFactorFunc.WithDiscountFactorFunc(discounter);
         }
 
         public static ITreeAddInventoryGridCalculation<T> WithAct365ContinuouslyCompoundedInterestRateCurve<T>(

@@ -225,5 +225,23 @@ namespace Cmdty.Storage
             return (ImmediateNpv: immediateNpv, CmdtyConsumed: cmdtyUsedForInjectWithdrawVolume);
         }
 
+        // TODO equivalent functions to CreateAct65ContCompDiscounter with TimeSeries parameter types
+        public static Func<Day, Day, double> CreateAct65ContCompDiscounter([NotNull] Func<Day, double> settleDateToInterestRate)
+        {
+            if (settleDateToInterestRate == null) throw new ArgumentNullException(nameof(settleDateToInterestRate));
+
+            return (Day presentDay, Day cashFlowDay) =>
+            {
+                if (cashFlowDay <= presentDay)
+                    return 1.0;
+                double interestRate = settleDateToInterestRate(cashFlowDay);
+                return Math.Exp(-cashFlowDay.OffsetFrom(presentDay) / 365.0 * interestRate);
+            };
+        }
+
+        public static Func<Day, Day, double> CreateAct65ContCompDiscounter(double interestRate) =>
+            CreateAct65ContCompDiscounter(date=> interestRate);
+
+
     }
 }

@@ -24,19 +24,59 @@
 #endregion
 
 using System;
-using System.Collections.Generic;
-using System.Text;
+using System.Globalization;
+using Cmdty.Core.Simulation.MultiFactor;
+using Cmdty.Storage.LsmcValuation;
+using Cmdty.TimePeriodValueTypes;
+using Cmdty.TimeSeries;
+using MathNet.Numerics;
 using Xunit;
+using Xunit.Abstractions;
 
 namespace Cmdty.Storage.Test
 {
     public sealed class LsmcStorageValuationTest
     {
-        [Fact]
-        public void Calculate_StorageLooksLikeCallOptions_NpvEqualsBlack76()
+        private readonly ITestOutputHelper _testOutputHelper;
+
+        public LsmcStorageValuationTest(ITestOutputHelper testOutputHelper)
         {
+            _testOutputHelper = testOutputHelper;
+        }
 
+        [Fact]
+        public void Calculate_StorageLikeCallOptionsOneFactor_NpvEqualsBlack76()
+        {
+            const double percentTolerance = 0.005; // 0.5% tolerance
+            var valDate = new Day(2019, 8, 29);
+            const int numInventorySpacePoints = 100;
+            const int numSims = 1_000;
+            const int seed = 11;
 
+            (DoubleTimeSeries<Day> forwardCurve, DoubleTimeSeries<Day> spotVolCurve) =
+                TestHelper.CreateDailyTestForwardAndSpotVolCurves(valDate, new Day(2020, 4, 1));
+            const double meanReversion = 16.5;
+            const double interestRate = 0.09;
+            const double numTolerance = 1E-10;
+            const int regressMaxDegree = 2;
+            const bool regressCrossProducts = false;
+
+            TestHelper.CallOptionLikeTestData testData = TestHelper.CreateThreeCallsLikeStorageTestData(forwardCurve);
+
+            var multiFactorParams = MultiFactorParameters.For1Factor(meanReversion, spotVolCurve);
+            
+            Day SettleDateRule(Day settleDate) => testData.SettleDates[Month.FromDateTime(settleDate.Start)];
+            Func<Day, Day, double> discounter = StorageHelper.CreateAct65ContCompDiscounter(interestRate);
+            IDoubleStateSpaceGridCalc gridSpace = FixedSpacingStateSpaceGridCalc.CreateForFixedNumberOfPointsOnGlobalInventoryRange<Day>(testData.Storage, numInventorySpacePoints);
+
+            Control.UseNativeMKL();
+            LsmcStorageValuationResults<Day> results = LsmcStorageValuation.Calculate(valDate, testData.Inventory,
+                forwardCurve,
+                testData.Storage, SettleDateRule, discounter, gridSpace, numTolerance,
+                multiFactorParams, numSims, seed, regressMaxDegree, regressCrossProducts);
+
+            _testOutputHelper.WriteLine(results.Npv.ToString(CultureInfo.InvariantCulture));
+            Assert.Equal(9776.998383298625, results.Npv);
         }
 
     }

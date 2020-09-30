@@ -33,6 +33,7 @@ using Cmdty.TimeSeries;
 using MathNet.Numerics.LinearAlgebra;
 using MathNet.Numerics.LinearAlgebra.Double;
 using MathNet.Numerics.LinearAlgebra.Factorization;
+using MathNet.Numerics.Statistics;
 
 namespace Cmdty.Storage.LsmcValuation
 {
@@ -42,7 +43,7 @@ namespace Cmdty.Storage.LsmcValuation
         public static LsmcStorageValuationResults<T> Calculate<T>(T currentPeriod, double startingInventory,
             TimeSeries<T, double> forwardCurve, ICmdtyStorage<T> storage, Func<T, Day> settleDateRule,
             Func<Day, Day, double> discountFactors,
-            Func<ICmdtyStorage<T>, IDoubleStateSpaceGridCalc> gridCalcFactory,
+            IDoubleStateSpaceGridCalc gridCalc,
             double numericalTolerance,
             MultiFactorParameters<T> modelParameters,
             int numSims,
@@ -52,14 +53,14 @@ namespace Cmdty.Storage.LsmcValuation
         {
             var normalGenerator = seed == null ? new MersenneTwisterGenerator() : new MersenneTwisterGenerator(seed.Value);
             return Calculate(currentPeriod, startingInventory, forwardCurve, storage, settleDateRule, discountFactors,
-                gridCalcFactory, numericalTolerance, modelParameters, normalGenerator, numSims, regressMaxPolyDegree,
+                gridCalc, numericalTolerance, modelParameters, normalGenerator, numSims, regressMaxPolyDegree,
                 regressCrossProducts);
         }
 
         public static LsmcStorageValuationResults<T> Calculate<T>(T currentPeriod, double startingInventory,
             TimeSeries<T, double> forwardCurve, ICmdtyStorage<T> storage, Func<T, Day> settleDateRule,
             Func<Day, Day, double> discountFactors,
-            Func<ICmdtyStorage<T>, IDoubleStateSpaceGridCalc> gridCalcFactory,
+            IDoubleStateSpaceGridCalc gridCalc,
             double numericalTolerance,
             MultiFactorParameters<T> modelParameters,
             INormalGenerator normalGenerator,
@@ -72,14 +73,14 @@ namespace Cmdty.Storage.LsmcValuation
             var simulator = new MultiFactorSpotPriceSimulator<T>(modelParameters, currentDate, forwardCurve, simulatedPeriods, TimeFunctions.Act365, normalGenerator);
             var spotSims = simulator.Simulate(numSims);
             return Calculate(currentPeriod, startingInventory, forwardCurve, storage, settleDateRule, discountFactors,
-                gridCalcFactory, numericalTolerance, spotSims, regressMaxPolyDegree, regressCrossProducts);
+                gridCalc, numericalTolerance, spotSims, regressMaxPolyDegree, regressCrossProducts);
         }
 
         public static LsmcStorageValuationResults<T> Calculate<T>(T currentPeriod, double startingInventory,
             TimeSeries<T, double> forwardCurve, ICmdtyStorage<T> storage, Func<T, Day> settleDateRule,
             Func<Day, Day, double> discountFactors,
-            Func<ICmdtyStorage<T>, IDoubleStateSpaceGridCalc> gridCalcFactory,
-            double numericalTolerance, MultiFactorSpotSimResults<T> spotSims, int regressMaxPolyDegree, bool regressCrossProducts)
+            IDoubleStateSpaceGridCalc gridCalc,
+            double numericalTolerance, ISpotSimResults<T> spotSims, int regressMaxPolyDegree, bool regressCrossProducts)
             where T : ITimePeriod<T>
         {
             if (startingInventory < 0)
@@ -111,7 +112,6 @@ namespace Cmdty.Storage.LsmcValuation
             var storageValuesByPeriod = new Vector<double>[numPeriods][]; // 1st dimension is period, 2nd is inventory, 3rd is simulation number
             var inventorySpaceGrids = new double[numPeriods][];
 
-            IDoubleStateSpaceGridCalc gridCalc = gridCalcFactory(storage);
             // Calculate NPVs at end period
             var endInventorySpace = inventorySpace[storage.EndPeriod]; // TODO this will probably break!
             var endInventorySpaceGrid = gridCalc.GetGridPoints(endInventorySpace.MinInventory, endInventorySpace.MaxInventory)
@@ -172,7 +172,7 @@ namespace Cmdty.Storage.LsmcValuation
             foreach (T period in periodsForResultsTimeSeries.Reverse().Skip(1))
             {
                 PopulateDesignMatrix(designMatrix, period, spotSims, regressMaxPolyDegree, regressCrossProducts);
-                Svd<double> svd = designMatrix.Svd(false); // TODO does computeVectors parameter matter for solution?
+                Svd<double> svd = designMatrix.Svd();
                 // TODO use svd.Solve method, or I can I do this in a more efficient way, e.g. compute intermediate values myself? Check Math.Net source code.
 
                 double[] nextPeriodInventorySpaceGrid = inventorySpaceGrids[backCounter + 1];
@@ -279,12 +279,12 @@ namespace Cmdty.Storage.LsmcValuation
             // TODO Loop forward from start inventory choosing optimal decisions (like with intrinsic valuation)
 
             // Calculate NPVs for first active period using current inventory
-            double storageNpv = storageValuesByPeriod[0][0].Sum();
+            double storageNpv = storageValuesByPeriod[0][0].Average(); // TODO use non-linq average?
 
             return new LsmcStorageValuationResults<T>(storageNpv, null, null);
         }
 
-        private static void PopulateDesignMatrix<T>(Matrix<double> designMatrix, T period, MultiFactorSpotSimResults<T> spotSims, 
+        private static void PopulateDesignMatrix<T>(Matrix<double> designMatrix, T period, ISpotSimResults<T> spotSims, 
             int regressMaxPolyDegree, bool regressCrossProducts)
             where T : ITimePeriod<T>
         {
@@ -298,7 +298,7 @@ namespace Cmdty.Storage.LsmcValuation
                     for (int polyDegree = 1; polyDegree <= regressMaxPolyDegree; polyDegree++)
                     {
                         double monomial = Math.Pow(factorSim, polyDegree);
-                        int colIndex = 1 + factorIndex * regressMaxPolyDegree + polyDegree;
+                        int colIndex = factorIndex * regressMaxPolyDegree + polyDegree;
                         designMatrix[simIndex, colIndex] = monomial;
                     }
                 }

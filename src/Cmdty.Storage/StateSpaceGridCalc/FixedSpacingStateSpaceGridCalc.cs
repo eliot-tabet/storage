@@ -25,6 +25,9 @@
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
+using Cmdty.TimePeriodValueTypes;
+using JetBrains.Annotations;
 
 namespace Cmdty.Storage
 {
@@ -57,6 +60,24 @@ namespace Cmdty.Storage
                 } while (gridPoint < stateSpaceUpperBound);
             }
 
+        }
+
+        public static FixedSpacingStateSpaceGridCalc CreateForFixedNumberOfPointsOnGlobalInventoryRange<T>(
+            [NotNull] ICmdtyStorage<T> storage,
+            int numGridPointsOverGlobalInventoryRange)
+            where T : ITimePeriod<T>
+        {
+            if (storage == null) throw new ArgumentNullException(nameof(storage));
+            if (numGridPointsOverGlobalInventoryRange < 3)
+                throw new ArgumentException($"Parameter {nameof(numGridPointsOverGlobalInventoryRange)} value must be at least 3.", nameof(numGridPointsOverGlobalInventoryRange));
+
+            T[] storagePeriods = storage.StartPeriod.EnumerateTo(storage.EndPeriod).ToArray();
+
+            double globalMaxInventory = storagePeriods.Max(storage.MaxInventory);
+            double globalMinInventory = storagePeriods.Min(storage.MinInventory);
+            double gridSpacing = (globalMaxInventory - globalMinInventory) /
+                                 (numGridPointsOverGlobalInventoryRange - 1);
+            return new FixedSpacingStateSpaceGridCalc(gridSpacing);
         }
 
     }
