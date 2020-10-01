@@ -32,8 +32,6 @@ using Cmdty.TimePeriodValueTypes;
 using Cmdty.TimeSeries;
 using MathNet.Numerics.LinearAlgebra;
 using MathNet.Numerics.LinearAlgebra.Double;
-using MathNet.Numerics.LinearAlgebra.Factorization;
-using MathNet.Numerics.Statistics;
 
 namespace Cmdty.Storage.LsmcValuation
 {
@@ -138,7 +136,7 @@ namespace Cmdty.Storage.LsmcValuation
             
             // Calculate discount factor function
             Day dayToDiscountTo = currentPeriod.First<Day>(); // TODO IMPORTANT, this needs to change
-
+            
             // Memoize the discount factor
             var discountFactorCache = new Dictionary<Day, double>(); // TODO do this in more elegant way and share with intrinsic calc
             double DiscountToCurrentDay(Day cashFlowDate)
@@ -172,8 +170,7 @@ namespace Cmdty.Storage.LsmcValuation
             foreach (T period in periodsForResultsTimeSeries.Reverse().Skip(1))
             {
                 PopulateDesignMatrix(designMatrix, period, spotSims, regressMaxPolyDegree, regressCrossProducts);
-                Svd<double> svd = designMatrix.Svd();
-                // TODO use svd.Solve method, or I can I do this in a more efficient way, e.g. compute intermediate values myself? Check Math.Net source code.
+                Matrix<double> pseudoInverse = designMatrix.PseudoInverse();
 
                 double[] nextPeriodInventorySpaceGrid = inventorySpaceGrids[backCounter + 1];
                 Vector<double>[] storageActualValuesNextPeriod = storageValuesByPeriod[backCounter + 1];
@@ -183,7 +180,7 @@ namespace Cmdty.Storage.LsmcValuation
                 for (int i = 0; i < nextPeriodInventorySpaceGrid.Length; i++) // TODO parallelise 
                 {
                     Vector<double> storageValuesBySimNextPeriod = storageActualValuesNextPeriod[i];
-                    Vector<double> regressResults = svd.Solve(storageValuesBySimNextPeriod);
+                    Vector<double> regressResults = pseudoInverse.Multiply(storageValuesBySimNextPeriod);
                     Vector<double> estimatedContinuationValues = designMatrix.Multiply(regressResults);
                     storageEstimatedValuesNextPeriod[i] = estimatedContinuationValues;
                 }
@@ -206,70 +203,115 @@ namespace Cmdty.Storage.LsmcValuation
                 Day cmdtySettlementDate = settleDateRule(period);
                 double discountFactorFromCmdtySettlement = DiscountToCurrentDay(cmdtySettlementDate);
 
-                ReadOnlySpan<double> simulatedPrices = spotSims.SpotPricesForPeriod(period).Span;
+                var simulatedPrices = spotSims.SpotPricesForPeriod(period).Span; // TODO decide whether this ToArray is worth it to use parallel foreach
+                
 
-                for (int inventoryIndex = 0; inventoryIndex < inventorySpaceGrid.Length; inventoryIndex++)
-                {
-                    double inventory = inventorySpaceGrid[inventoryIndex];
-                    InjectWithdrawRange injectWithdrawRange = storage.GetInjectWithdrawRange(period, inventory);
-                    double inventoryLoss = storage.CmdtyInventoryPercentLoss(period) * inventory;
-                    double[] decisionSet = StorageHelper.CalculateBangBangDecisionSet(injectWithdrawRange, inventory, inventoryLoss,
-                        nextStepInventorySpaceMin, nextStepInventorySpaceMax, numericalTolerance);
-                    IReadOnlyList<DomesticCashFlow> inventoryCostCashFlows = storage.CmdtyInventoryCost(period, inventory);
-                    double inventoryCostNpv = inventoryCostCashFlows.Sum(cashFlow => cashFlow.Amount * DiscountToCurrentDay(cashFlow.Date));
-
-                    var continuationValueByDecisionSet = new Vector<double>[decisionSet.Length];
-                    for (int decisionIndex = 0; decisionIndex < decisionSet.Length; decisionIndex++)
+                //var partitioner = Partitioner.Create(0, inventorySpaceGrid.Length);
+                //Parallel.ForEach(partitioner, (range, loopState) => // TODO add parameter for degree of parallism
+                //{
+                    //for (int inventoryIndex = range.Item1; inventoryIndex < range.Item2; inventoryIndex++)
+                    for (int inventoryIndex = 0; inventoryIndex < inventorySpaceGrid.Length; inventoryIndex++)
                     {
-                        double decisionVolume = decisionSet[decisionIndex];
-                        double inventoryAfterDecision = inventory + decisionVolume - inventoryLoss;
-                        for (int inventoryGridIndex = 0; inventoryGridIndex < nextPeriodInventorySpaceGrid.Length; inventoryGridIndex++) // TODO use binary search?
-                        {
-                            double nextPeriodInventory = nextPeriodInventorySpaceGrid[inventoryGridIndex];
-                            if (Math.Abs(nextPeriodInventory - inventoryAfterDecision) < 1E-8) // TODO get rid of hard coded constant
-                            {
-                                continuationValueByDecisionSet[decisionIndex] =
-                                    storageEstimatedValuesNextPeriod[inventoryGridIndex];
-                                break;
-                            }
-                            if (nextPeriodInventory > inventoryAfterDecision)
-                            {
-                                // Need to interpolate
-                                Vector<double> lowerStorageValues = storageEstimatedValuesNextPeriod[inventoryGridIndex - 1];
-                                Vector<double> upperStorageValues = storageEstimatedValuesNextPeriod[inventoryGridIndex];
-                                double lowerInventory = nextPeriodInventorySpaceGrid[inventoryGridIndex - 1];
-                                double upperInventory = nextPeriodInventory;
-                                double inventoryGridSpace = upperInventory - lowerInventory;
-                                double upperWeight = (upperInventory - inventoryAfterDecision) / inventoryGridSpace;
-                                double lowerWeight = 1.0 - upperWeight;
-                                Vector<double> interpolatedContinuationValue =
-                                    lowerStorageValues.Multiply(lowerWeight) + upperStorageValues.Multiply(upperWeight);
-                                continuationValueByDecisionSet[decisionIndex] = interpolatedContinuationValue;
-                                break;
-                            }
-                        }
-                    }
+                        double inventory = inventorySpaceGrid[inventoryIndex];
+                        InjectWithdrawRange injectWithdrawRange = storage.GetInjectWithdrawRange(period, inventory);
+                        double inventoryLoss = storage.CmdtyInventoryPercentLoss(period) * inventory;
+                        double[] decisionSet = StorageHelper.CalculateBangBangDecisionSet(injectWithdrawRange, inventory, inventoryLoss,
+                            nextStepInventorySpaceMin, nextStepInventorySpaceMax, numericalTolerance);
+                        IReadOnlyList<DomesticCashFlow> inventoryCostCashFlows = storage.CmdtyInventoryCost(period, inventory);
+                        double inventoryCostNpv = inventoryCostCashFlows.Sum(cashFlow => cashFlow.Amount * DiscountToCurrentDay(cashFlow.Date));
 
-                    var storageValuesBySim = new DenseVector(numSims);
-                    var decisionNpvs = new double[decisionSet.Length];
-                    for (int simIndex = 0; simIndex < numSims; simIndex++)
-                    {
-                        double simulatedSpotPrice = simulatedPrices[simIndex];
-                        for (var decisionIndex = 0; decisionIndex < decisionSet.Length; decisionIndex++)
+                        double[] injectWithdrawCostNpvs = new double[decisionSet.Length];
+                        double[] cmdtyUsedForInjectWithdrawVolume = new double[decisionSet.Length];
+                        
+                        var continuationValueByDecisionSet = new Vector<double>[decisionSet.Length];
+                        for (int decisionIndex = 0; decisionIndex < decisionSet.Length; decisionIndex++)
                         {
                             double decisionVolume = decisionSet[decisionIndex];
-                            // TODO split StorageImmediateNpvForDecision into parts which are dependent on inventory and the other parts of the calc and do the inventory dependent calcs outside of this loop
-                            (double immediateNpv, double cmdtyConsumed) = StorageHelper.StorageImmediateNpvForDecision(storage, period, inventory,
-                                decisionVolume, simulatedSpotPrice, discountFactorFromCmdtySettlement, DiscountToCurrentDay);
 
-                            double continuationValue = continuationValueByDecisionSet[decisionIndex][simIndex];
-                            decisionNpvs[decisionIndex] = immediateNpv + continuationValue - inventoryCostNpv; // TODO IMPORTANT check if inventoryCostNpv should be subtracted
+                            // Inject/Withdraw cost (same for all price sims)
+                            IReadOnlyList<DomesticCashFlow> injectWithdrawCostCostCashFlows = decisionVolume > 0.0
+                                ? storage.InjectionCost(period, inventory, decisionVolume)
+                                : storage.WithdrawalCost(period, inventory, -decisionVolume);
+
+                            double injectWithdrawCostNpv = injectWithdrawCostCostCashFlows.Sum(cashFlow => cashFlow.Amount * DiscountToCurrentDay(cashFlow.Date));
+                            injectWithdrawCostNpvs[decisionIndex] = injectWithdrawCostNpv;
+
+                            // Cmdty Used For Inject/Withdraw (same for all price sims)
+                            cmdtyUsedForInjectWithdrawVolume[decisionIndex] = decisionVolume > 0.0
+                                ? storage.CmdtyVolumeConsumedOnInject(period, inventory, decisionVolume)
+                                : storage.CmdtyVolumeConsumedOnWithdraw(period, inventory, -decisionVolume);
+
+                            // Calculate continuation values
+                            double inventoryAfterDecision = inventory + decisionVolume - inventoryLoss;
+                            for (int inventoryGridIndex = 0; inventoryGridIndex < nextPeriodInventorySpaceGrid.Length; inventoryGridIndex++) // TODO use binary search?
+                            {
+                                double nextPeriodInventory = nextPeriodInventorySpaceGrid[inventoryGridIndex];
+                                if (Math.Abs(nextPeriodInventory - inventoryAfterDecision) < 1E-8) // TODO get rid of hard coded constant
+                                {
+                                    continuationValueByDecisionSet[decisionIndex] =
+                                        storageEstimatedValuesNextPeriod[inventoryGridIndex];
+                                    break;
+                                }
+                                if (nextPeriodInventory > inventoryAfterDecision)
+                                {
+                                    // Need to interpolate
+                                    Vector<double> lowerStorageValues = storageEstimatedValuesNextPeriod[inventoryGridIndex - 1];
+                                    Vector<double> upperStorageValues = storageEstimatedValuesNextPeriod[inventoryGridIndex];
+                                    double lowerInventory = nextPeriodInventorySpaceGrid[inventoryGridIndex - 1];
+                                    double upperInventory = nextPeriodInventory;
+                                    double inventoryGridSpace = upperInventory - lowerInventory;
+                                    double upperWeight = (upperInventory - inventoryAfterDecision) / inventoryGridSpace;
+                                    double lowerWeight = 1.0 - upperWeight;
+                                    Vector<double> interpolatedContinuationValue =
+                                        lowerStorageValues.Multiply(lowerWeight) + upperStorageValues.Multiply(upperWeight);
+                                    continuationValueByDecisionSet[decisionIndex] = interpolatedContinuationValue;
+                                    break;
+                                }
+                            }
                         }
-                        (double optimalDecisionNpv, int indexOfOptimalDecision) = StorageHelper.MaxValueAndIndex(decisionNpvs);
-                        storageValuesBySim[simIndex] = optimalDecisionNpv;
+
+                        var storageValuesBySim = new DenseVector(numSims);
+                        var decisionNpvs = new double[decisionSet.Length];
+                        for (int simIndex = 0; simIndex < numSims; simIndex++)
+                        {
+                            double simulatedSpotPrice = simulatedPrices[simIndex];
+                            //double optimalDecisionNpv = 0.0;
+                            //int indexOfOptimalDecision = 0;
+                            for (var decisionIndex = 0; decisionIndex < decisionSet.Length; decisionIndex++)
+                            {
+                                double decisionVolume = decisionSet[decisionIndex];
+
+                                double injectWithdrawNpv = -decisionVolume * simulatedSpotPrice * discountFactorFromCmdtySettlement;
+                                double cmdtyUsedForInjectWithdrawNpv = -cmdtyUsedForInjectWithdrawVolume[decisionIndex] * simulatedSpotPrice * 
+                                                                       discountFactorFromCmdtySettlement;
+                                double immediateNpv = injectWithdrawNpv - injectWithdrawCostNpvs[decisionIndex] + cmdtyUsedForInjectWithdrawNpv;
+
+                                double continuationValue = continuationValueByDecisionSet[decisionIndex][simIndex]; // TODO potentially this array lookup could be quite costly
+
+                                double totalNpv = immediateNpv + continuationValue - inventoryCostNpv; // TODO IMPORTANT check if inventoryCostNpv should be subtracted;
+                                decisionNpvs[decisionIndex] = totalNpv;
+
+                                //if (decisionIndex == 0)
+                                //{
+                                //    optimalDecisionNpv = totalNpv;
+                                //}
+                                //else
+                                //{
+                                //    if (totalNpv > optimalDecisionNpv)
+                                //    {
+                                //        optimalDecisionNpv = totalNpv;
+                                //        indexOfOptimalDecision = decisionIndex;
+                                //    }
+                                //}
+                            }
+                            (double optimalDecisionNpv, int indexOfOptimalDecision) = StorageHelper.MaxValueAndIndex(decisionNpvs);
+                            
+                            storageValuesBySim[simIndex] = optimalDecisionNpv;
+                        }
+                        storageValuesByInventory[inventoryIndex] = storageValuesBySim;
                     }
-                    storageValuesByInventory[inventoryIndex] = storageValuesBySim;
-                }
+                //});
+
 
                 inventorySpaceGrids[backCounter] = inventorySpaceGrid;
                 storageValuesByPeriod[backCounter] = storageValuesByInventory;

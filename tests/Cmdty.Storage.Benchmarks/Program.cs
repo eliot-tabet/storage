@@ -24,6 +24,7 @@
 #endregion
 
 using System;
+using System.Diagnostics;
 using System.Reflection;
 using BenchmarkDotNet.Running;
 
@@ -33,6 +34,12 @@ namespace Cmdty.Storage.Benchmarks
     {
         static void Main(string[] args)
         {
+            //var stopwatch = new Stopwatch();
+            //stopwatch.Start();
+            //double results = new LsmcBenchmarks().ValueSimpleDailyStorageOneFactor_ManagedNumerics();
+            //stopwatch.Stop();
+            //Console.WriteLine(results + " " + stopwatch.Elapsed);
+            //Console.ReadKey();
             new BenchmarkSwitcher(typeof(Program).GetTypeInfo().Assembly).Run(args);
         }
     }

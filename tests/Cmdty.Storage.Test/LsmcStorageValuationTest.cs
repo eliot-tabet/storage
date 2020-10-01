@@ -47,10 +47,9 @@ namespace Cmdty.Storage.Test
         [Fact]
         public void Calculate_StorageLikeCallOptionsOneFactor_NpvEqualsBlack76()
         {
-            const double percentTolerance = 0.005; // 0.5% tolerance
             var valDate = new Day(2019, 8, 29);
             const int numInventorySpacePoints = 100;
-            const int numSims = 1_000;
+            const int numSims = 2_000;
             const int seed = 11;
 
             (DoubleTimeSeries<Day> forwardCurve, DoubleTimeSeries<Day> spotVolCurve) =
@@ -67,7 +66,8 @@ namespace Cmdty.Storage.Test
             
             Day SettleDateRule(Day settleDate) => testData.SettleDates[Month.FromDateTime(settleDate.Start)];
             Func<Day, Day, double> discounter = StorageHelper.CreateAct65ContCompDiscounter(interestRate);
-            IDoubleStateSpaceGridCalc gridSpace = FixedSpacingStateSpaceGridCalc.CreateForFixedNumberOfPointsOnGlobalInventoryRange<Day>(testData.Storage, numInventorySpacePoints);
+            IDoubleStateSpaceGridCalc gridSpace = 
+                FixedSpacingStateSpaceGridCalc.CreateForFixedNumberOfPointsOnGlobalInventoryRange(testData.Storage, numInventorySpacePoints);
 
             Control.UseNativeMKL();
             LsmcStorageValuationResults<Day> results = LsmcStorageValuation.Calculate(valDate, testData.Inventory,
@@ -75,8 +75,25 @@ namespace Cmdty.Storage.Test
                 testData.Storage, SettleDateRule, discounter, gridSpace, numTolerance,
                 multiFactorParams, numSims, seed, regressMaxDegree, regressCrossProducts);
 
+            // Calculate value of equivalent call options
+            double expectStorageValue = 0.0;
+            foreach (TestHelper.CallOption option in testData.CallOptions)
+            {
+                double impliedVol = TestHelper.OneFactorImpliedVol(valDate, option.ExpiryDate, spotVolCurve, meanReversion);
+                double forwardPrice = forwardCurve[option.ExpiryDate];
+                double black76Value = TestHelper.Black76CallOptionValue(valDate, forwardPrice,
+                                          impliedVol, interestRate, option.StrikePrice, option.ExpiryDate,
+                                          option.SettleDate) * option.NotionalVolume;
+                expectStorageValue += black76Value;
+            }
+
             _testOutputHelper.WriteLine(results.Npv.ToString(CultureInfo.InvariantCulture));
-            Assert.Equal(9776.998383298625, results.Npv);
+
+            double percentError = (results.Npv - expectStorageValue) / expectStorageValue;
+            const double percentErrorLowerBound = -0.02; // Calculated value cannot be more than 2% lower than call options
+            const double percentErrorUpperBound = 0.0; // Calculate value will not be higher than call options as LSMC is a lower bound approximation
+
+            Assert.InRange(percentError, percentErrorLowerBound, percentErrorUpperBound);
         }
 
     }
