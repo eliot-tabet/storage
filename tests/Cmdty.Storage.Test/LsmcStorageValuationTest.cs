@@ -33,16 +33,81 @@ using Cmdty.TimeSeries;
 using MathNet.Numerics;
 using Xunit;
 using Xunit.Abstractions;
+using TimeSeriesFactory = Cmdty.TimeSeries.TimeSeries;
 
 namespace Cmdty.Storage.Test
 {
     public sealed class LsmcStorageValuationTest
     {
+        private const int NumSims = 2_000;
+        private const double Inventory = 5_685;
+        private const int RandomSeed = 11;
+        private const int RegressMaxDegree = 2;
+        private const bool RegressCrossProducts = false;
+        private const double NumTolerance = 1E-10;
+        private const double OneFactorMeanReversion = 12.5;
+        private const double TrinomialTimeDelta = 1.0 / 365.0;
+        private const int NumInventorySpacePoints = 100;
+        private readonly TimeSeries<Day, double> _oneFactorFlatSpotVols;
+
         private readonly ITestOutputHelper _testOutputHelper;
+        private readonly CmdtyStorage<Day> _simpleDailyStorage;
+
+        private readonly Day _valDate;
+        private readonly IDoubleStateSpaceGridCalc _gridCalc;
+        private readonly Func<Day, Day, double> _flatInterestRateDiscounter;
+        private readonly MultiFactorParameters<Day> _1FDailyMultiFactorParams;
+        private readonly Func<Day, Day> _settleDateRule;
+        private readonly TimeSeries<Day, double> _forwardCurve;
 
         public LsmcStorageValuationTest(ITestOutputHelper testOutputHelper)
         {
             _testOutputHelper = testOutputHelper;
+
+            #region Set Up Simple Storage
+            var storageStart = new Day(2019, 12, 1);
+            var storageEnd = new Day(2020, 4, 1);
+            const double maxWithdrawalRate = 850.0;
+            const double maxInjectionRate = 625.0;
+            const double maxInventory = 52_500.0;
+            const double constantInjectionCost = 1.25;
+            const double constantWithdrawalCost = 0.93;
+
+            _simpleDailyStorage = CmdtyStorage<Day>.Builder
+                .WithActiveTimePeriod(storageStart, storageEnd)
+                .WithConstantInjectWithdrawRange(-maxWithdrawalRate, maxInjectionRate)
+                .WithZeroMinInventory()
+                .WithConstantMaxInventory(maxInventory)
+                .WithPerUnitInjectionCost(constantInjectionCost, injectionDate => injectionDate)
+                .WithNoCmdtyConsumedOnInject()
+                .WithPerUnitWithdrawalCost(constantWithdrawalCost, withdrawalDate => withdrawalDate)
+                .WithNoCmdtyConsumedOnWithdraw()
+                .WithNoCmdtyInventoryLoss()
+                .WithNoInventoryCost()
+                .MustBeEmptyAtEnd()
+                .Build();
+            #endregion Set Up Simple Storage
+            
+            const double oneFactorSpotVol = 0.95;
+            _oneFactorFlatSpotVols = TimeSeriesFactory.ForConstantData(_valDate, storageEnd, oneFactorSpotVol);
+            _1FDailyMultiFactorParams = MultiFactorParameters.For1Factor(OneFactorMeanReversion, _oneFactorFlatSpotVols);
+            
+            _valDate = new Day(2019, 8, 29);
+
+            const double flatInterestRate = 0.055;
+            _flatInterestRateDiscounter = StorageHelper.CreateAct65ContCompDiscounter(flatInterestRate);
+            
+            _gridCalc = FixedSpacingStateSpaceGridCalc.CreateForFixedNumberOfPointsOnGlobalInventoryRange(_simpleDailyStorage, NumInventorySpacePoints);
+
+            _settleDateRule = deliveryDate => Month.FromDateTime(deliveryDate.Start).Offset(1).First<Day>() + 19; // Settlement on 20th of following month
+
+            const double baseForwardPrice = 53.5;
+            const double forwardSeasonalFactor = 24.6;
+            _forwardCurve = TimeSeriesFactory.FromMap(_valDate, storageEnd, day =>
+            {
+                int daysForward = day.OffsetFrom(_valDate);
+                return baseForwardPrice + Math.Sin(2.0 * Math.PI / 365.0 * daysForward) * forwardSeasonalFactor;
+            });
         }
 
         [Fact]
@@ -102,6 +167,28 @@ namespace Cmdty.Storage.Test
         // Two factor canonical the same as one-factor
         // Zero mean reversion the same as intrinsic. Try with one and two factors.
         // Zero/low vol the same as intrinsic
+
+        [Fact(Skip = "This is failing BADLY. Need to figure out why.")]
+        public void Calculate_OneFactor_NpvEqualTrinomialNpv()
+        {
+            LsmcStorageValuationResults<Day> lsmcResults = LsmcStorageValuation.Calculate(_valDate, Inventory,
+                _forwardCurve, _simpleDailyStorage, _settleDateRule, _flatInterestRateDiscounter, _gridCalc, NumTolerance,
+                _1FDailyMultiFactorParams, NumSims, RandomSeed, RegressMaxDegree, RegressCrossProducts);
+
+            TreeStorageValuationResults<Day> treeResults = TreeStorageValuation<Day>.ForStorage(_simpleDailyStorage)
+                .WithStartingInventory(Inventory)
+                .ForCurrentPeriod(_valDate)
+                .WithForwardCurve(_forwardCurve)
+                .WithOneFactorTrinomialTree(_oneFactorFlatSpotVols, OneFactorMeanReversion, TrinomialTimeDelta)
+                .WithCmdtySettlementRule(_settleDateRule)                     // No discounting 
+                .WithDiscountFactorFunc(_flatInterestRateDiscounter)
+                .WithFixedNumberOfPointsOnGlobalInventoryRange(NumInventorySpacePoints)
+                .WithLinearInventorySpaceInterpolation()
+                .WithNumericalTolerance(NumTolerance)
+                .Calculate();
+
+            Assert.Equal(treeResults.NetPresentValue, lsmcResults.Npv);
+        }
 
         // TODO refactor this to share code with trinomial test
         [Fact(Skip = "Figure out why this isn't passing. Numbers are close, but not exact, where the should be.")]

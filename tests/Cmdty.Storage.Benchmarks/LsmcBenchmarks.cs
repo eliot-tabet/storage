@@ -30,7 +30,6 @@ using Cmdty.Storage.LsmcValuation;
 using Cmdty.TimePeriodValueTypes;
 using Cmdty.TimeSeries;
 using MathNet.Numerics;
-using MathNet.Numerics.Providers.LinearAlgebra;
 using TimeSeriesFactory = Cmdty.TimeSeries.TimeSeries;
 
 namespace Cmdty.Storage.Benchmarks
