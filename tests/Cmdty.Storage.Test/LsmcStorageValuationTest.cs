@@ -191,9 +191,13 @@ namespace Cmdty.Storage.Test
         }
 
         // TODO refactor this to share code with trinomial test
-        [Fact(Skip = "Figure out why this isn't passing. Numbers are close, but not exact, where the should be.")]
-        public void Calculate_StorageWithForcedInjectAndWithdraw_NpvEqualsTrivialIntrinsicCalc()
+        [Fact]
+        public void Calculate_StorageWithForcedInjectAndWithdraw_NpvAlmostEqualsTrivialIntrinsicCalc()
         {
+            // There will be a small difference between the LSMC NPV and the intrinsic calc because of sampling error
+            // between the simulated spot price and the forward price. Thi isn't the case with the trinomial tree as by construction
+            // the tree expected spot price will exactly equal the forward price
+            const double percentageTol = 0.03;
             var currentDate = new Day(2019, 8, 29);
             const int numInventorySpacePoints = 500;
             const int numSims = 1_000;
@@ -341,7 +345,9 @@ namespace Cmdty.Storage.Test
 
             double expectedNpv = injectionPv + withdrawalPv;
 
-            Assert.Equal(expectedNpv, valuationResults.Npv, 10);
+            double percentError = (valuationResults.Npv - expectedNpv) / expectedNpv;
+
+            Assert.InRange(percentError, -percentageTol, percentageTol);
         }
 
         private static double Act365ContCompoundDiscountFactor(Day currentDate, Day paymentDate, double interestRate)
