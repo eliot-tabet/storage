@@ -57,6 +57,7 @@ namespace Cmdty.Storage.Test
         private readonly IDoubleStateSpaceGridCalc _gridCalc;
         private readonly Func<Day, Day, double> _flatInterestRateDiscounter;
         private readonly MultiFactorParameters<Day> _1FDailyMultiFactorParams;
+        private readonly MultiFactorParameters<Day> _1FZeroMeanReversionDailyMultiFactorParams;
         private readonly Func<Day, Day> _settleDateRule;
         private readonly TimeSeries<Day, double> _forwardCurve;
 
@@ -91,7 +92,8 @@ namespace Cmdty.Storage.Test
             const double oneFactorSpotVol = 0.95;
             _oneFactorFlatSpotVols = TimeSeriesFactory.ForConstantData(_valDate, storageEnd, oneFactorSpotVol);
             _1FDailyMultiFactorParams = MultiFactorParameters.For1Factor(OneFactorMeanReversion, _oneFactorFlatSpotVols);
-            
+            _1FZeroMeanReversionDailyMultiFactorParams = MultiFactorParameters.For1Factor(0.0, _oneFactorFlatSpotVols);
+
             _valDate = new Day(2019, 8, 29);
 
             const double flatInterestRate = 0.055;
@@ -163,13 +165,13 @@ namespace Cmdty.Storage.Test
         }
 
         // TODO:
-        // One factor value the same as trinomial
         // Two factor canonical the same as one-factor
-        // Zero mean reversion the same as intrinsic. Try with one and two factors.
+        // Zero mean reversion the same as intrinsic for two factors.
         // Zero/low vol the same as intrinsic
 
-        [Fact(Skip = "This is failing BADLY. ")]
-        public void Calculate_OneFactor_NpvEqualTrinomialNpv()
+        [Fact(Skip = "This is failing BADLY. Figure out why.")]
+        //[Fact]
+        public void Calculate_OneFactor_NpvApproximatelyEqualsTrinomialNpv()
         {
             LsmcStorageValuationResults<Day> lsmcResults = LsmcStorageValuation.Calculate(_valDate, Inventory,
                 _forwardCurve, _simpleDailyStorage, _settleDateRule, _flatInterestRateDiscounter, _gridCalc, NumTolerance,
@@ -188,6 +190,29 @@ namespace Cmdty.Storage.Test
                 .Calculate();
 
             Assert.Equal(treeResults.NetPresentValue, lsmcResults.Npv);
+        }
+
+        [Fact(Skip = "This is failing BADLY. Figure out why.")]
+        //[Fact]
+        public void Calculate_OneFactorZeroMeanReversion_NpvApproximatelyEqualsIntrinsicNpv()
+        {
+            LsmcStorageValuationResults<Day> lsmcResults = LsmcStorageValuation.Calculate(_valDate, Inventory,
+                _forwardCurve, _simpleDailyStorage, _settleDateRule, _flatInterestRateDiscounter, _gridCalc, NumTolerance,
+                _1FZeroMeanReversionDailyMultiFactorParams, NumSims, RandomSeed, RegressMaxDegree, RegressCrossProducts);
+
+            IntrinsicStorageValuationResults<Day> intrinsicResults = IntrinsicStorageValuation<Day>
+                .ForStorage(_simpleDailyStorage)
+                .WithStartingInventory(Inventory)
+                .ForCurrentPeriod(_valDate)
+                .WithForwardCurve(_forwardCurve)
+                .WithCmdtySettlementRule(_settleDateRule)
+                .WithDiscountFactorFunc(_flatInterestRateDiscounter)
+                .WithFixedNumberOfPointsOnGlobalInventoryRange(NumInventorySpacePoints)
+                .WithLinearInventorySpaceInterpolation()
+                .WithNumericalTolerance(NumTolerance)
+                .Calculate();
+
+            Assert.Equal(intrinsicResults.NetPresentValue, lsmcResults.Npv);
         }
 
         // TODO refactor this to share code with trinomial test
