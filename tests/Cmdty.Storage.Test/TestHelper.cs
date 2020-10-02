@@ -26,11 +26,10 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
 using Cmdty.TimePeriodValueTypes;
 using Cmdty.TimeSeries;
-using JetBrains.Annotations;
 using MathNet.Numerics.Distributions;
+using Xunit;
 
 namespace Cmdty.Storage.Test
 {
@@ -88,7 +87,7 @@ namespace Cmdty.Storage.Test
             return (forwardCurve: new DoubleTimeSeries<Day>(days, forwardPrices), spotVolCurve: new DoubleTimeSeries<Day>(days, spotVols));
         }
 
-        public static CallOptionLikeTestData CreateThreeCallsLikeStorageTestData(DoubleTimeSeries<Day> forwardCurve)
+        internal static CallOptionLikeTestData CreateThreeCallsLikeStorageTestData(DoubleTimeSeries<Day> forwardCurve)
         {
             var callOption1Date = new Day(2019, 12, 15);
             var callOption2Date = new Day(2020, 1, 20);
@@ -219,6 +218,12 @@ namespace Cmdty.Storage.Test
                 NotionalVolume = notionalVolume;
                 SettleDate = settleDate;
             }
+        }
+
+        internal static void AssertWithinPercentTol(double expected, double actual, double percentTol)
+        {
+            double percentError = (actual - expected) / expected;
+            Assert.InRange(percentError, -percentTol, percentTol);
         }
 
     }

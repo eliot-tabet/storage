@@ -26,7 +26,6 @@
 using System;
 using BenchmarkDotNet.Attributes;
 using Cmdty.Core.Simulation.MultiFactor;
-using Cmdty.Storage.LsmcValuation;
 using Cmdty.TimePeriodValueTypes;
 using Cmdty.TimeSeries;
 using MathNet.Numerics;

@@ -220,7 +220,18 @@ namespace Cmdty.Storage
             return (ImmediateNpv: immediateNpv, CmdtyConsumed: cmdtyUsedForInjectWithdrawVolume);
         }
 
-        // TODO equivalent functions to CreateAct65ContCompDiscounter with TimeSeries parameter types
+        // Long name because Pythonnet doesn't like overloads
+        public static Func<Day, Day, double> CreateAct65ContCompDiscounterFromSeries([NotNull] TimeSeries<Day, double> interestRateCurve)
+        {
+            double InterestRate(Day cashFlowDate)
+            {
+                if (!interestRateCurve.TryGetValue(cashFlowDate, out double interestRate))
+                    throw new ArgumentException($"No interest rate provided for {cashFlowDate.ToString()}.");
+                return interestRate;
+            }
+            return CreateAct65ContCompDiscounter(InterestRate);
+        }
+
         public static Func<Day, Day, double> CreateAct65ContCompDiscounter([NotNull] Func<Day, double> settleDateToInterestRate)
         {
             if (settleDateToInterestRate == null) throw new ArgumentNullException(nameof(settleDateToInterestRate));

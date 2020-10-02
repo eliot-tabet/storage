@@ -27,7 +27,7 @@ using System.Collections.Generic;
 using Cmdty.TimePeriodValueTypes;
 using Cmdty.TimeSeries;
 
-namespace Cmdty.Storage.LsmcValuation
+namespace Cmdty.Storage
 {
     public sealed class LsmcStorageValuationResults<T>
         where T : ITimePeriod<T>

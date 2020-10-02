@@ -33,7 +33,7 @@ using Cmdty.TimeSeries;
 using MathNet.Numerics.LinearAlgebra;
 using MathNet.Numerics.LinearAlgebra.Double;
 
-namespace Cmdty.Storage.LsmcValuation
+namespace Cmdty.Storage
 {
     public static class LsmcStorageValuation
     {
@@ -176,13 +176,13 @@ namespace Cmdty.Storage.LsmcValuation
                 Vector<double>[] storageActualValuesNextPeriod = storageValuesByPeriod[backCounter + 1];
 
                 // TODO doing the regressions for all next inventory could be inefficient as they might not all be needed
-                Vector<double>[] storageEstimatedValuesNextPeriod = new Vector<double>[nextPeriodInventorySpaceGrid.Length];
+                Vector<double>[] storageRegressValuesNextPeriod = new Vector<double>[nextPeriodInventorySpaceGrid.Length];
                 for (int i = 0; i < nextPeriodInventorySpaceGrid.Length; i++) // TODO parallelise 
                 {
                     Vector<double> storageValuesBySimNextPeriod = storageActualValuesNextPeriod[i];
                     Vector<double> regressResults = pseudoInverse.Multiply(storageValuesBySimNextPeriod);
                     Vector<double> estimatedContinuationValues = designMatrix.Multiply(regressResults);
-                    storageEstimatedValuesNextPeriod[i] = estimatedContinuationValues;
+                    storageRegressValuesNextPeriod[i] = estimatedContinuationValues;
                 }
                 
                 double[] inventorySpaceGrid;
@@ -203,113 +203,129 @@ namespace Cmdty.Storage.LsmcValuation
                 Day cmdtySettlementDate = settleDateRule(period);
                 double discountFactorFromCmdtySettlement = DiscountToCurrentDay(cmdtySettlementDate);
 
-                var simulatedPrices = spotSims.SpotPricesForPeriod(period).Span; // TODO decide whether this ToArray is worth it to use parallel foreach
+                var simulatedPrices = spotSims.SpotPricesForPeriod(period).Span;
                 
-
                 //var partitioner = Partitioner.Create(0, inventorySpaceGrid.Length);
                 //Parallel.ForEach(partitioner, (range, loopState) => // TODO add parameter for degree of parallism
                 //{
                     //for (int inventoryIndex = range.Item1; inventoryIndex < range.Item2; inventoryIndex++)
-                    for (int inventoryIndex = 0; inventoryIndex < inventorySpaceGrid.Length; inventoryIndex++)
-                    {
-                        double inventory = inventorySpaceGrid[inventoryIndex];
-                        InjectWithdrawRange injectWithdrawRange = storage.GetInjectWithdrawRange(period, inventory);
-                        double inventoryLoss = storage.CmdtyInventoryPercentLoss(period) * inventory;
-                        double[] decisionSet = StorageHelper.CalculateBangBangDecisionSet(injectWithdrawRange, inventory, inventoryLoss,
-                            nextStepInventorySpaceMin, nextStepInventorySpaceMax, numericalTolerance);
-                        IReadOnlyList<DomesticCashFlow> inventoryCostCashFlows = storage.CmdtyInventoryCost(period, inventory);
-                        double inventoryCostNpv = inventoryCostCashFlows.Sum(cashFlow => cashFlow.Amount * DiscountToCurrentDay(cashFlow.Date));
+                for (int inventoryIndex = 0; inventoryIndex < inventorySpaceGrid.Length; inventoryIndex++)
+                {
+                    double inventory = inventorySpaceGrid[inventoryIndex];
+                    InjectWithdrawRange injectWithdrawRange = storage.GetInjectWithdrawRange(period, inventory);
+                    double inventoryLoss = storage.CmdtyInventoryPercentLoss(period) * inventory;
+                    double[] decisionSet = StorageHelper.CalculateBangBangDecisionSet(injectWithdrawRange, inventory, inventoryLoss,
+                        nextStepInventorySpaceMin, nextStepInventorySpaceMax, numericalTolerance);
+                    IReadOnlyList<DomesticCashFlow> inventoryCostCashFlows = storage.CmdtyInventoryCost(period, inventory);
+                    double inventoryCostNpv = inventoryCostCashFlows.Sum(cashFlow => cashFlow.Amount * DiscountToCurrentDay(cashFlow.Date));
 
-                        double[] injectWithdrawCostNpvs = new double[decisionSet.Length];
-                        double[] cmdtyUsedForInjectWithdrawVolume = new double[decisionSet.Length];
-                        
-                        var continuationValueByDecisionSet = new Vector<double>[decisionSet.Length];
-                        for (int decisionIndex = 0; decisionIndex < decisionSet.Length; decisionIndex++)
+                    double[] injectWithdrawCostNpvs = new double[decisionSet.Length];
+                    double[] cmdtyUsedForInjectWithdrawVolume = new double[decisionSet.Length];
+                    
+                    var regressionContinuationValueByDecisionSet = new Vector<double>[decisionSet.Length];
+                    var actualContinuationValueByDecisionSet = new Vector<double>[decisionSet.Length];
+                    for (int decisionIndex = 0; decisionIndex < decisionSet.Length; decisionIndex++)
+                    {
+                        double decisionVolume = decisionSet[decisionIndex];
+
+                        // Inject/Withdraw cost (same for all price sims)
+                        IReadOnlyList<DomesticCashFlow> injectWithdrawCostCostCashFlows = decisionVolume > 0.0
+                            ? storage.InjectionCost(period, inventory, decisionVolume)
+                            : storage.WithdrawalCost(period, inventory, -decisionVolume);
+
+                        double injectWithdrawCostNpv = injectWithdrawCostCostCashFlows.Sum(cashFlow => cashFlow.Amount * DiscountToCurrentDay(cashFlow.Date));
+                        injectWithdrawCostNpvs[decisionIndex] = injectWithdrawCostNpv;
+
+                        // Cmdty Used For Inject/Withdraw (same for all price sims)
+                        cmdtyUsedForInjectWithdrawVolume[decisionIndex] = decisionVolume > 0.0
+                            ? storage.CmdtyVolumeConsumedOnInject(period, inventory, decisionVolume)
+                            : storage.CmdtyVolumeConsumedOnWithdraw(period, inventory, -decisionVolume);
+
+                        // Calculate continuation values
+                        double inventoryAfterDecision = inventory + decisionVolume - inventoryLoss;
+                        for (int inventoryGridIndex = 0; inventoryGridIndex < nextPeriodInventorySpaceGrid.Length; inventoryGridIndex++) // TODO use binary search?
+                        {
+                            double nextPeriodInventory = nextPeriodInventorySpaceGrid[inventoryGridIndex];
+                            if (Math.Abs(nextPeriodInventory - inventoryAfterDecision) < 1E-8) // TODO get rid of hard coded constant
+                            {
+                                regressionContinuationValueByDecisionSet[decisionIndex] =
+                                    storageRegressValuesNextPeriod[inventoryGridIndex];
+                                actualContinuationValueByDecisionSet[decisionIndex] =
+                                    storageActualValuesNextPeriod[inventoryGridIndex];
+                                break;
+                            }
+                            if (nextPeriodInventory > inventoryAfterDecision)
+                            {
+                                // Linearly interpolate inventory space
+                                double lowerInventory = nextPeriodInventorySpaceGrid[inventoryGridIndex - 1];
+                                double upperInventory = nextPeriodInventory;
+                                double inventoryGridSpace = upperInventory - lowerInventory;
+                                double lowerWeight = (upperInventory - inventoryAfterDecision) / inventoryGridSpace;
+                                double upperWeight = 1.0 - lowerWeight;
+                                
+                                // Regression storage values
+                                Vector<double> lowerRegressStorageValues = storageRegressValuesNextPeriod[inventoryGridIndex - 1];
+                                Vector<double> upperRegressStorageValues = storageRegressValuesNextPeriod[inventoryGridIndex];
+                                Vector<double> interpolatedRegressContinuationValue =
+                                    lowerRegressStorageValues.Multiply(lowerWeight) + upperRegressStorageValues.Multiply(upperWeight);
+                                regressionContinuationValueByDecisionSet[decisionIndex] = interpolatedRegressContinuationValue;
+
+                                // Actual (simulated) storage values
+                                Vector<double> lowerActualStorageValues = storageActualValuesNextPeriod[inventoryGridIndex - 1];
+                                Vector<double> upperActualStorageValues = storageActualValuesNextPeriod[inventoryGridIndex];
+                                Vector<double> interpolatedActualContinuationValue =
+                                    lowerActualStorageValues.Multiply(lowerWeight) + upperActualStorageValues.Multiply(upperWeight);
+                                actualContinuationValueByDecisionSet[decisionIndex] = interpolatedActualContinuationValue;
+                                break;
+                            }
+                        }
+                    }
+
+                    var storageValuesBySim = new DenseVector(numSims);
+                    var decisionNpvsRegress = new double[decisionSet.Length];
+                    for (int simIndex = 0; simIndex < numSims; simIndex++)
+                    {
+                        double simulatedSpotPrice = simulatedPrices[simIndex];
+                        //double optimalDecisionNpv = 0.0;
+                        //int indexOfOptimalDecision = 0;
+                        for (var decisionIndex = 0; decisionIndex < decisionSet.Length; decisionIndex++)
                         {
                             double decisionVolume = decisionSet[decisionIndex];
 
-                            // Inject/Withdraw cost (same for all price sims)
-                            IReadOnlyList<DomesticCashFlow> injectWithdrawCostCostCashFlows = decisionVolume > 0.0
-                                ? storage.InjectionCost(period, inventory, decisionVolume)
-                                : storage.WithdrawalCost(period, inventory, -decisionVolume);
+                            double injectWithdrawNpv = -decisionVolume * simulatedSpotPrice * discountFactorFromCmdtySettlement;
+                            double cmdtyUsedForInjectWithdrawNpv = -cmdtyUsedForInjectWithdrawVolume[decisionIndex] * simulatedSpotPrice * 
+                                                                   discountFactorFromCmdtySettlement;
+                            double immediateNpv = injectWithdrawNpv - injectWithdrawCostNpvs[decisionIndex] + cmdtyUsedForInjectWithdrawNpv;
 
-                            double injectWithdrawCostNpv = injectWithdrawCostCostCashFlows.Sum(cashFlow => cashFlow.Amount * DiscountToCurrentDay(cashFlow.Date));
-                            injectWithdrawCostNpvs[decisionIndex] = injectWithdrawCostNpv;
+                            double continuationValue = regressionContinuationValueByDecisionSet[decisionIndex][simIndex]; // TODO potentially this array lookup could be quite costly
 
-                            // Cmdty Used For Inject/Withdraw (same for all price sims)
-                            cmdtyUsedForInjectWithdrawVolume[decisionIndex] = decisionVolume > 0.0
-                                ? storage.CmdtyVolumeConsumedOnInject(period, inventory, decisionVolume)
-                                : storage.CmdtyVolumeConsumedOnWithdraw(period, inventory, -decisionVolume);
+                            double totalNpv = immediateNpv + continuationValue - inventoryCostNpv; // TODO IMPORTANT check if inventoryCostNpv should be subtracted;
+                            decisionNpvsRegress[decisionIndex] = totalNpv;
 
-                            // Calculate continuation values
-                            double inventoryAfterDecision = inventory + decisionVolume - inventoryLoss;
-                            for (int inventoryGridIndex = 0; inventoryGridIndex < nextPeriodInventorySpaceGrid.Length; inventoryGridIndex++) // TODO use binary search?
-                            {
-                                double nextPeriodInventory = nextPeriodInventorySpaceGrid[inventoryGridIndex];
-                                if (Math.Abs(nextPeriodInventory - inventoryAfterDecision) < 1E-8) // TODO get rid of hard coded constant
-                                {
-                                    continuationValueByDecisionSet[decisionIndex] =
-                                        storageEstimatedValuesNextPeriod[inventoryGridIndex];
-                                    break;
-                                }
-                                if (nextPeriodInventory > inventoryAfterDecision)
-                                {
-                                    // Need to interpolate
-                                    Vector<double> lowerStorageValues = storageEstimatedValuesNextPeriod[inventoryGridIndex - 1];
-                                    Vector<double> upperStorageValues = storageEstimatedValuesNextPeriod[inventoryGridIndex];
-                                    double lowerInventory = nextPeriodInventorySpaceGrid[inventoryGridIndex - 1];
-                                    double upperInventory = nextPeriodInventory;
-                                    double inventoryGridSpace = upperInventory - lowerInventory;
-                                    double upperWeight = (upperInventory - inventoryAfterDecision) / inventoryGridSpace;
-                                    double lowerWeight = 1.0 - upperWeight;
-                                    Vector<double> interpolatedContinuationValue =
-                                        lowerStorageValues.Multiply(lowerWeight) + upperStorageValues.Multiply(upperWeight);
-                                    continuationValueByDecisionSet[decisionIndex] = interpolatedContinuationValue;
-                                    break;
-                                }
-                            }
+                            //if (decisionIndex == 0)
+                            //{
+                            //    optimalDecisionNpv = totalNpv;
+                            //}
+                            //else
+                            //{
+                            //    if (totalNpv > optimalDecisionNpv)
+                            //    {
+                            //        optimalDecisionNpv = totalNpv;
+                            //        indexOfOptimalDecision = decisionIndex;
+                            //    }
+                            //}
                         }
+                        (double optimalRegressDecisionNpv, int indexOfOptimalDecision) = StorageHelper.MaxValueAndIndex(decisionNpvsRegress);
+                        // TODO do this tidier an potentially more efficiently
+                        double adjustFromRegressToActualContinuation =  
+                                                - regressionContinuationValueByDecisionSet[indexOfOptimalDecision][simIndex]
+                                                + actualContinuationValueByDecisionSet[indexOfOptimalDecision][simIndex];
+                        double optimalActualDecisionNpv = optimalRegressDecisionNpv + adjustFromRegressToActualContinuation;
 
-                        var storageValuesBySim = new DenseVector(numSims);
-                        var decisionNpvs = new double[decisionSet.Length];
-                        for (int simIndex = 0; simIndex < numSims; simIndex++)
-                        {
-                            double simulatedSpotPrice = simulatedPrices[simIndex];
-                            //double optimalDecisionNpv = 0.0;
-                            //int indexOfOptimalDecision = 0;
-                            for (var decisionIndex = 0; decisionIndex < decisionSet.Length; decisionIndex++)
-                            {
-                                double decisionVolume = decisionSet[decisionIndex];
-
-                                double injectWithdrawNpv = -decisionVolume * simulatedSpotPrice * discountFactorFromCmdtySettlement;
-                                double cmdtyUsedForInjectWithdrawNpv = -cmdtyUsedForInjectWithdrawVolume[decisionIndex] * simulatedSpotPrice * 
-                                                                       discountFactorFromCmdtySettlement;
-                                double immediateNpv = injectWithdrawNpv - injectWithdrawCostNpvs[decisionIndex] + cmdtyUsedForInjectWithdrawNpv;
-
-                                double continuationValue = continuationValueByDecisionSet[decisionIndex][simIndex]; // TODO potentially this array lookup could be quite costly
-
-                                double totalNpv = immediateNpv + continuationValue - inventoryCostNpv; // TODO IMPORTANT check if inventoryCostNpv should be subtracted;
-                                decisionNpvs[decisionIndex] = totalNpv;
-
-                                //if (decisionIndex == 0)
-                                //{
-                                //    optimalDecisionNpv = totalNpv;
-                                //}
-                                //else
-                                //{
-                                //    if (totalNpv > optimalDecisionNpv)
-                                //    {
-                                //        optimalDecisionNpv = totalNpv;
-                                //        indexOfOptimalDecision = decisionIndex;
-                                //    }
-                                //}
-                            }
-                            (double optimalDecisionNpv, int indexOfOptimalDecision) = StorageHelper.MaxValueAndIndex(decisionNpvs);
-                            
-                            storageValuesBySim[simIndex] = optimalDecisionNpv;
-                        }
-                        storageValuesByInventory[inventoryIndex] = storageValuesBySim;
+                        storageValuesBySim[simIndex] = optimalActualDecisionNpv;
                     }
+                    storageValuesByInventory[inventoryIndex] = storageValuesBySim;
+                }
                 //});
 
 

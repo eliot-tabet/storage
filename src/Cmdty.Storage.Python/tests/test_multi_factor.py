@@ -24,9 +24,10 @@
 import unittest
 import pandas as pd
 import numpy as np
-from cmdty_storage import multi_factor as mf
+from cmdty_storage import multi_factor as mf, multi_factor_value, CmdtyStorage
 from datetime import date
 import itertools
+from tests import utils
 
 
 class TestSpotPriceSim(unittest.TestCase):
@@ -153,6 +154,59 @@ class TestMultiFactorModel(unittest.TestCase):
         self.assertEqual(two_f_model_float_corr_covar, two_f_model_float_array_corr_covar)
         self.assertEqual(two_f_model_float_corr_covar, two_f_model_int_corr_covar)
         self.assertEqual(two_f_model_float_corr_covar, two_f_model_int_array_corr_covar)
+
+
+class TestMultiFactorValue(unittest.TestCase):
+    def test_regression(self):
+        storage_start = '2019-12-01'
+        storage_end = '2020-04-01'
+        constant_injection_rate = 700.0
+        constant_withdrawal_rate = 700.0
+        constant_injection_cost = 1.23
+        constant_withdrawal_cost = 0.98
+        min_inventory = 0.0
+        max_inventory = 100000.0
+
+        cmdty_storage = CmdtyStorage('D', storage_start, storage_end, constant_injection_cost,
+                                        constant_withdrawal_cost, min_inventory=min_inventory,
+                                        max_inventory=max_inventory,
+                                        max_injection_rate=constant_injection_rate,
+                                        max_withdrawal_rate=constant_withdrawal_rate)
+        inventory = 0.0
+        val_date = '2019-08-29'
+        low_price = 23.87
+        high_price = 150.32
+        num_days_at_high_price = 20
+        date_switch_high_price = '2020-03-12'  # TODO calculate this from num_days_at_high_price
+        forward_curve = utils.create_piecewise_flat_series([low_price, high_price, high_price],
+                                                           [val_date, date_switch_high_price,
+                                                            storage_end], freq='D')
+
+        flat_interest_rate = 0.03
+        interest_rate_curve = pd.Series(index=pd.period_range(val_date, '2020-06-01', freq='D'))
+        interest_rate_curve[:] = flat_interest_rate
+
+        # Multi-Factor parameters
+        mean_reversion = 14.5
+        spot_volatility = pd.Series(index=pd.period_range(val_date, '2020-06-01', freq='D'))
+        spot_volatility[:] = 1.15
+        twentieth_of_next_month = lambda period: period.asfreq('M').asfreq('D', 'end') + 20
+
+        long_term_vol = pd.Series(index=pd.period_range(val_date, '2020-06-01', freq='D'))
+        long_term_vol[:] = 0.14
+
+        factors = [(0.0, long_term_vol),
+                (16.2, spot_volatility)]
+        factor_corrs = 0.64
+
+        # Simulation parameter
+        num_sims = 500
+        seed = 11
+        regress_cross_products = False
+        multi_factor_val = multi_factor_value(cmdty_storage, val_date, inventory, forward_curve,
+                                              interest_rate_curve, twentieth_of_next_month,
+                                              factors, factor_corrs, num_sims, seed, regress_cross_products=False)
+        self.assertEqual(multi_factor_val.npv, 1754422.2052289937)
 
 
 if __name__ == '__main__':

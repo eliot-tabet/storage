@@ -27,7 +27,6 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using Cmdty.Core.Simulation.MultiFactor;
-using Cmdty.Storage.LsmcValuation;
 using Cmdty.TimePeriodValueTypes;
 using Cmdty.TimeSeries;
 using MathNet.Numerics;
@@ -174,11 +173,9 @@ namespace Cmdty.Storage.Test
         }
 
         // TODO:
-        // Two factor canonical the same as one-factor
-        // Zero mean reversion the same as intrinsic for two factors.
+        // Call option test with two factors
 
-        [Fact(Skip = "This is failing BADLY. Figure out why.")]
-        //[Fact]
+        [Fact]
         public void Calculate_OneFactor_NpvApproximatelyEqualsTrinomialNpv()
         {
             LsmcStorageValuationResults<Day> lsmcResults = LsmcStorageValuation.Calculate(_valDate, Inventory,
@@ -190,14 +187,19 @@ namespace Cmdty.Storage.Test
                 .ForCurrentPeriod(_valDate)
                 .WithForwardCurve(_forwardCurve)
                 .WithOneFactorTrinomialTree(_oneFactorFlatSpotVols, OneFactorMeanReversion, TrinomialTimeDelta)
-                .WithCmdtySettlementRule(_settleDateRule)                     // No discounting 
+                .WithCmdtySettlementRule(_settleDateRule)
                 .WithDiscountFactorFunc(_flatInterestRateDiscounter)
                 .WithFixedNumberOfPointsOnGlobalInventoryRange(NumInventorySpacePoints)
                 .WithLinearInventorySpaceInterpolation()
                 .WithNumericalTolerance(NumTolerance)
                 .Calculate();
 
-            Assert.Equal(treeResults.NetPresentValue, lsmcResults.Npv);
+            _testOutputHelper.WriteLine("Tree");
+            _testOutputHelper.WriteLine(treeResults.NetPresentValue.ToString(CultureInfo.InvariantCulture));
+            _testOutputHelper.WriteLine("LSMC");
+            _testOutputHelper.WriteLine(lsmcResults.Npv.ToString(CultureInfo.InvariantCulture));
+            const double percentageTol = 0.005; // 0.5%
+            TestHelper.AssertWithinPercentTol(treeResults.NetPresentValue, lsmcResults.Npv, percentageTol);
         }
 
         private IntrinsicStorageValuationResults<Day> CalcIntrinsic() =>IntrinsicStorageValuation<Day>
@@ -213,8 +215,8 @@ namespace Cmdty.Storage.Test
                                             .Calculate();
                                     
 
-        [Fact(Skip = "This is failing BADLY. Figure out why.")]
-        //[Fact]
+        // TODO come back and investigate why LSMC value is lower than intrinsic
+        [Fact]
         public void Calculate_OneFactorZeroMeanReversion_NpvApproximatelyEqualsIntrinsicNpv()
         {
             LsmcStorageValuationResults<Day> lsmcResults = LsmcStorageValuation.Calculate(_valDate, Inventory,
@@ -222,12 +224,16 @@ namespace Cmdty.Storage.Test
                 _1FZeroMeanReversionDailyMultiFactorParams, NumSims, RandomSeed, RegressMaxDegree, RegressCrossProducts);
 
             IntrinsicStorageValuationResults<Day> intrinsicResults = CalcIntrinsic();
-
-            Assert.Equal(intrinsicResults.NetPresentValue, lsmcResults.Npv);
+            
+            const double percentageTol = 0.09; // 9% quite big, but with zero mean reversion, standard error will be quite big
+            _testOutputHelper.WriteLine("Intrinsic");
+            _testOutputHelper.WriteLine(intrinsicResults.NetPresentValue.ToString(CultureInfo.InvariantCulture));
+            _testOutputHelper.WriteLine("LSMC");
+            _testOutputHelper.WriteLine(lsmcResults.Npv.ToString(CultureInfo.InvariantCulture));
+            TestHelper.AssertWithinPercentTol(intrinsicResults.NetPresentValue, lsmcResults.Npv, percentageTol);
         }
 
-        [Fact(Skip = "Failing badly. Use this for investigation as should be easier to debug than other unit tests.")]
-        //[Fact]
+        [Fact]
         public void Calculate_OneFactorVeryLowVols_NpvApproximatelyEqualsIntrinsicNpv()
         {
             LsmcStorageValuationResults<Day> lsmcResults = LsmcStorageValuation.Calculate(_valDate, Inventory,
@@ -236,11 +242,11 @@ namespace Cmdty.Storage.Test
 
             IntrinsicStorageValuationResults<Day> intrinsicResults = CalcIntrinsic();
 
-            Assert.Equal(intrinsicResults.NetPresentValue, lsmcResults.Npv);
+            const double percentageTol = 0.0001; // 0.01%
+            TestHelper.AssertWithinPercentTol(intrinsicResults.NetPresentValue, lsmcResults.Npv, percentageTol);
         }
 
-        [Fact(Skip = "This is failing BADLY. Figure out why.")]
-        //[Fact]
+        [Fact]
         public void Calculate_TwoFactorVeryLowVols_NpvApproximatelyEqualsIntrinsicNpv()
         {
             LsmcStorageValuationResults<Day> lsmcResults = LsmcStorageValuation.Calculate(_valDate, Inventory,
@@ -249,7 +255,8 @@ namespace Cmdty.Storage.Test
 
             IntrinsicStorageValuationResults<Day> intrinsicResults = CalcIntrinsic();
 
-            Assert.Equal(intrinsicResults.NetPresentValue, lsmcResults.Npv);
+            const double percentageTol = 0.0001; // 0.01%
+            TestHelper.AssertWithinPercentTol(intrinsicResults.NetPresentValue, lsmcResults.Npv, percentageTol);
         }
 
         // TODO refactor this to share code with trinomial test
