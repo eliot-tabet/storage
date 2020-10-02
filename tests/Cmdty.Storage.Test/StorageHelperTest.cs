@@ -144,9 +144,9 @@ namespace Cmdty.Storage.Test
         }
 
         [Fact]
-        public void MaxValueAndIndex_ArrayOfZeroLength_ThrowsArgumentException()
+        public void MaxValueAndIndex_ArrayOfZeroLength_ThrowsIndexOutOfRangeException()
         {
-            Assert.Throws<ArgumentException>(() => StorageHelper.MaxValueAndIndex(new double[0]));
+            Assert.Throws<IndexOutOfRangeException>(() => StorageHelper.MaxValueAndIndex(new double[0]));
         }
 
         [Fact]

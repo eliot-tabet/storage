@@ -36,7 +36,7 @@ namespace Cmdty.Storage.Benchmarks
 {
     public class LsmcBenchmarks
     {
-        private const int NumSims = 2_000;
+        private const int NumSims = 1_000;
         private const double Inventory = 5_685;
         private const int RandomSeed = 11;
         private const int RegressMaxDegree = 2;

@@ -27,7 +27,7 @@ using Cmdty.TimePeriodValueTypes;
 
 namespace Cmdty.Storage
 {
-    public sealed class DomesticCashFlow // TODO move to Cmdty.Core
+    public struct DomesticCashFlow // TODO move to Cmdty.Core
     {
         public Day Date { get; }
         public double Amount { get; } // TODO should this be decimal type?
