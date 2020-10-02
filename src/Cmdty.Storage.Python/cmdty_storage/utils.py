@@ -32,9 +32,11 @@ from pathlib import Path
 
 clr.AddReference(str(Path("cmdty_storage/lib/Cmdty.TimePeriodValueTypes")))
 import Cmdty.TimePeriodValueTypes as net_tp
-
 clr.AddReference(str(Path('cmdty_storage/lib/Cmdty.TimeSeries')))
 import Cmdty.TimeSeries as ts
+clr.AddReference(str(Path('cmdty_storage/lib/Cmdty.Storage')))
+import Cmdty.Storage as net_cs
+
 from datetime import date, datetime
 import dateutil
 import typing as tp
@@ -293,3 +295,7 @@ def _last_period(period: pd.Period, freq: str) -> pd.Period:
     num = int(m.group(1))
     sub_freq = m.group(2)
     return (period.asfreq(sub_freq, 'e') - num + 1).asfreq(freq)
+
+
+def numerics_provider() -> str:
+    return net_cs.StorageHelper.LinearAlgebraProvider()

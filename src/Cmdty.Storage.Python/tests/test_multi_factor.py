@@ -24,7 +24,7 @@
 import unittest
 import pandas as pd
 import numpy as np
-from cmdty_storage import multi_factor as mf, multi_factor_value, CmdtyStorage
+from cmdty_storage import multi_factor as mf, multi_factor_value, CmdtyStorage, numerics_provider
 from datetime import date
 import itertools
 from tests import utils
@@ -69,18 +69,18 @@ class TestSpotPriceSim(unittest.TestCase):
         self.assertEqual(3, len(sim_spot_prices))
 
         sim1 = sim_spot_prices[0]
-        self.assertEqual(52.599763976889733, sim1['2020-08-01'])
+        self.assertEqual(52.59976397688973, sim1['2020-08-01'])
         self.assertEqual(57.559631642935514, sim1['2021-01-15'])
-        self.assertEqual(89.405269927726337, sim1['2021-07-30'])
+        self.assertEqual(89.40526992772634, sim1['2021-07-30'])
 
         sim2 = sim_spot_prices[1]
         self.assertEqual(46.1206448628463, sim2['2020-08-01'])
         self.assertEqual(72.0381089486175, sim2['2021-01-15'])
-        self.assertEqual(85.188698031173786, sim2['2021-07-30'])
+        self.assertEqual(85.18869803117379, sim2['2021-07-30'])
 
         sim3 = sim_spot_prices[2]
-        self.assertEqual(58.158385806825891, sim3['2020-08-01'])
-        self.assertEqual(82.496071735623431, sim3['2021-01-15'])
+        self.assertEqual(58.15838580682589, sim3['2020-08-01'])
+        self.assertEqual(82.49607173562342, sim3['2021-01-15'])
         self.assertEqual(138.68587285875978, sim3['2021-07-30'])
 
         sim4 = sim_spot_prices[3]
@@ -206,7 +206,7 @@ class TestMultiFactorValue(unittest.TestCase):
         multi_factor_val = multi_factor_value(cmdty_storage, val_date, inventory, forward_curve,
                                               interest_rate_curve, twentieth_of_next_month,
                                               factors, factor_corrs, num_sims, seed, regress_cross_products=False)
-        self.assertEqual(multi_factor_val.npv, 1754422.2052289937)
+        self.assertEqual(multi_factor_val.npv, 1754422.205228994)
 
 
 if __name__ == '__main__':

@@ -62,7 +62,9 @@ setuptools.setup(
         ],
     package_data={'cmdty_storage' : [
                         'lib/*.dll',
-                        'lib/*.pdb'
+                        'lib/*.pdb',
+                        'lib/x86/*.dll',
+                        'lib/x64/*.dll'
                     ]},
     include_package_data=True
 )

@@ -29,6 +29,7 @@ using System.Linq;
 using Cmdty.TimePeriodValueTypes;
 using Cmdty.TimeSeries;
 using JetBrains.Annotations;
+using MathNet.Numerics.Providers.LinearAlgebra;
 
 namespace Cmdty.Storage
 {
@@ -248,6 +249,7 @@ namespace Cmdty.Storage
         public static Func<Day, Day, double> CreateAct65ContCompDiscounter(double interestRate) =>
             CreateAct65ContCompDiscounter(date=> interestRate);
 
+        public static string LinearAlgebraProvider() => LinearAlgebraControl.Provider.ToString();
 
     }
 }

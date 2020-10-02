@@ -404,5 +404,11 @@ class TestCmdtyStorage(unittest.TestCase):
                 self.assertEqual(expected_inventory_cost * inventory, inventory_cost)
 
 
+class TestUtils(unittest.TestCase):
+    def test_numerics_provider_mkl(self):
+        provider = cs.numerics_provider()
+        self.assertEqual(provider, 'Intel MKL (x64; revision 13; ahead revision 12; MKL 2020.0 Update 1)')
+
+
 if __name__ == '__main__':
     unittest.main()
