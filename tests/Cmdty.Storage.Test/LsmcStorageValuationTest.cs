@@ -39,6 +39,8 @@ namespace Cmdty.Storage.Test
 {
     public sealed class LsmcStorageValuationTest
     {
+        private const double SmallVol = 0.001;
+        private const double TwoFactorCorr = 0.61;
         private const int NumSims = 2_000;
         private const double Inventory = 5_685;
         private const int RandomSeed = 11;
@@ -58,6 +60,8 @@ namespace Cmdty.Storage.Test
         private readonly Func<Day, Day, double> _flatInterestRateDiscounter;
         private readonly MultiFactorParameters<Day> _1FDailyMultiFactorParams;
         private readonly MultiFactorParameters<Day> _1FZeroMeanReversionDailyMultiFactorParams;
+        private readonly MultiFactorParameters<Day> _1FVeryLowVolDailyMultiFactorParams;
+        private readonly MultiFactorParameters<Day> _2FVeryLowVolDailyMultiFactorParams;
         private readonly Func<Day, Day> _settleDateRule;
         private readonly TimeSeries<Day, double> _forwardCurve;
 
@@ -93,7 +97,12 @@ namespace Cmdty.Storage.Test
             _oneFactorFlatSpotVols = TimeSeriesFactory.ForConstantData(_valDate, storageEnd, oneFactorSpotVol);
             _1FDailyMultiFactorParams = MultiFactorParameters.For1Factor(OneFactorMeanReversion, _oneFactorFlatSpotVols);
             _1FZeroMeanReversionDailyMultiFactorParams = MultiFactorParameters.For1Factor(0.0, _oneFactorFlatSpotVols);
-
+            var smallFlatSpotVols = TimeSeriesFactory.ForConstantData(_valDate, storageEnd, SmallVol);
+            _1FVeryLowVolDailyMultiFactorParams =
+                MultiFactorParameters.For1Factor(OneFactorMeanReversion, smallFlatSpotVols);
+            _2FVeryLowVolDailyMultiFactorParams = MultiFactorParameters.For2Factors(TwoFactorCorr,
+                new Factor<Day>(0.0, smallFlatSpotVols),
+                new Factor<Day>(OneFactorMeanReversion, smallFlatSpotVols));
             _valDate = new Day(2019, 8, 29);
 
             const double flatInterestRate = 0.055;
@@ -167,7 +176,6 @@ namespace Cmdty.Storage.Test
         // TODO:
         // Two factor canonical the same as one-factor
         // Zero mean reversion the same as intrinsic for two factors.
-        // Zero/low vol the same as intrinsic
 
         [Fact(Skip = "This is failing BADLY. Figure out why.")]
         //[Fact]
@@ -192,6 +200,19 @@ namespace Cmdty.Storage.Test
             Assert.Equal(treeResults.NetPresentValue, lsmcResults.Npv);
         }
 
+        private IntrinsicStorageValuationResults<Day> CalcIntrinsic() =>IntrinsicStorageValuation<Day>
+                                            .ForStorage(_simpleDailyStorage)
+                                            .WithStartingInventory(Inventory)
+                                            .ForCurrentPeriod(_valDate)
+                                            .WithForwardCurve(_forwardCurve)
+                                            .WithCmdtySettlementRule(_settleDateRule)
+                                            .WithDiscountFactorFunc(_flatInterestRateDiscounter)
+                                            .WithFixedNumberOfPointsOnGlobalInventoryRange(NumInventorySpacePoints)
+                                            .WithLinearInventorySpaceInterpolation()
+                                            .WithNumericalTolerance(NumTolerance)
+                                            .Calculate();
+                                    
+
         [Fact(Skip = "This is failing BADLY. Figure out why.")]
         //[Fact]
         public void Calculate_OneFactorZeroMeanReversion_NpvApproximatelyEqualsIntrinsicNpv()
@@ -200,17 +221,33 @@ namespace Cmdty.Storage.Test
                 _forwardCurve, _simpleDailyStorage, _settleDateRule, _flatInterestRateDiscounter, _gridCalc, NumTolerance,
                 _1FZeroMeanReversionDailyMultiFactorParams, NumSims, RandomSeed, RegressMaxDegree, RegressCrossProducts);
 
-            IntrinsicStorageValuationResults<Day> intrinsicResults = IntrinsicStorageValuation<Day>
-                .ForStorage(_simpleDailyStorage)
-                .WithStartingInventory(Inventory)
-                .ForCurrentPeriod(_valDate)
-                .WithForwardCurve(_forwardCurve)
-                .WithCmdtySettlementRule(_settleDateRule)
-                .WithDiscountFactorFunc(_flatInterestRateDiscounter)
-                .WithFixedNumberOfPointsOnGlobalInventoryRange(NumInventorySpacePoints)
-                .WithLinearInventorySpaceInterpolation()
-                .WithNumericalTolerance(NumTolerance)
-                .Calculate();
+            IntrinsicStorageValuationResults<Day> intrinsicResults = CalcIntrinsic();
+
+            Assert.Equal(intrinsicResults.NetPresentValue, lsmcResults.Npv);
+        }
+
+        [Fact(Skip = "Failing badly. Use this for investigation as should be easier to debug than other unit tests.")]
+        //[Fact]
+        public void Calculate_OneFactorVeryLowVols_NpvApproximatelyEqualsIntrinsicNpv()
+        {
+            LsmcStorageValuationResults<Day> lsmcResults = LsmcStorageValuation.Calculate(_valDate, Inventory,
+                _forwardCurve, _simpleDailyStorage, _settleDateRule, _flatInterestRateDiscounter, _gridCalc, NumTolerance,
+                _1FVeryLowVolDailyMultiFactorParams, NumSims, RandomSeed, RegressMaxDegree, RegressCrossProducts);
+
+            IntrinsicStorageValuationResults<Day> intrinsicResults = CalcIntrinsic();
+
+            Assert.Equal(intrinsicResults.NetPresentValue, lsmcResults.Npv);
+        }
+
+        [Fact(Skip = "This is failing BADLY. Figure out why.")]
+        //[Fact]
+        public void Calculate_TwoFactorVeryLowVols_NpvApproximatelyEqualsIntrinsicNpv()
+        {
+            LsmcStorageValuationResults<Day> lsmcResults = LsmcStorageValuation.Calculate(_valDate, Inventory,
+                _forwardCurve, _simpleDailyStorage, _settleDateRule, _flatInterestRateDiscounter, _gridCalc, NumTolerance,
+                _2FVeryLowVolDailyMultiFactorParams, NumSims, RandomSeed, RegressMaxDegree, RegressCrossProducts);
+
+            IntrinsicStorageValuationResults<Day> intrinsicResults = CalcIntrinsic();
 
             Assert.Equal(intrinsicResults.NetPresentValue, lsmcResults.Npv);
         }
