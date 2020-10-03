@@ -267,15 +267,20 @@ namespace Cmdty.Storage
                                 // Regression storage values
                                 Vector<double> lowerRegressStorageValues = storageRegressValuesNextPeriod[inventoryGridIndex - 1];
                                 Vector<double> upperRegressStorageValues = storageRegressValuesNextPeriod[inventoryGridIndex];
-                                Vector<double> interpolatedRegressContinuationValue =
-                                    lowerRegressStorageValues.Multiply(lowerWeight) + upperRegressStorageValues.Multiply(upperWeight);
+
+                                var interpolatedRegressContinuationValue = 
+                                    WeightedAverage<T>(lowerRegressStorageValues, 
+                                        lowerWeight, upperRegressStorageValues, upperWeight);
+
                                 regressionContinuationValueByDecisionSet[decisionIndex] = interpolatedRegressContinuationValue;
 
                                 // Actual (simulated) storage values
                                 Vector<double> lowerActualStorageValues = storageActualValuesNextPeriod[inventoryGridIndex - 1];
                                 Vector<double> upperActualStorageValues = storageActualValuesNextPeriod[inventoryGridIndex];
+
                                 Vector<double> interpolatedActualContinuationValue =
-                                    lowerActualStorageValues.Multiply(lowerWeight) + upperActualStorageValues.Multiply(upperWeight);
+                                        WeightedAverage<T>(lowerActualStorageValues, lowerWeight, 
+                                            upperActualStorageValues, upperWeight);
                                 actualContinuationValueByDecisionSet[decisionIndex] = interpolatedActualContinuationValue;
                                 break;
                             }
@@ -326,6 +331,16 @@ namespace Cmdty.Storage
             double storageNpv = storageValuesByPeriod[0][0].Average(); // TODO use non-linq average?
 
             return new LsmcStorageValuationResults<T>(storageNpv, null, null);
+        }
+
+        private static Vector<double> WeightedAverage<T>(Vector<double> vector1,
+            double weight1, Vector<double> vector2, double weight2) where T : ITimePeriod<T>
+        {
+            Vector<double> interpolatedRegressContinuationValue = Vector<double>.Build.Dense(vector1.Count);
+            vector1.Multiply(weight1, interpolatedRegressContinuationValue);
+            Vector<double> upperWeighted = vector2.Multiply(weight2);
+            upperWeighted.Add(interpolatedRegressContinuationValue, interpolatedRegressContinuationValue);
+            return interpolatedRegressContinuationValue;
         }
 
         private static void PopulateDesignMatrix<T>(Matrix<double> designMatrix, T period, ISpotSimResults<T> spotSims, 
