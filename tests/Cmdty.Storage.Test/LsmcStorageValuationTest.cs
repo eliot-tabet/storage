@@ -59,6 +59,8 @@ namespace Cmdty.Storage.Test
 
         private readonly ITestOutputHelper _testOutputHelper;
         private readonly CmdtyStorage<Day> _simpleDailyStorage;
+        private readonly CmdtyStorage<Day> _simpleDailyStorageTerminalInventoryValue;
+        private readonly Func<double, double, double> _terminalInventoryValue;
 
         private readonly Day _valDate;
         private readonly IDoubleStateSpaceGridCalc _gridCalc;
@@ -97,7 +99,22 @@ namespace Cmdty.Storage.Test
                 .MustBeEmptyAtEnd()
                 .Build();
             #endregion Set Up Simple Storage
-            
+
+            _terminalInventoryValue = (cmdtyPrice, terminalInventory) => cmdtyPrice * terminalInventory - 999.0;
+            _simpleDailyStorageTerminalInventoryValue = CmdtyStorage<Day>.Builder
+                .WithActiveTimePeriod(storageStart, storageEnd)
+                .WithConstantInjectWithdrawRange(-maxWithdrawalRate, maxInjectionRate)
+                .WithZeroMinInventory()
+                .WithConstantMaxInventory(maxInventory)
+                .WithPerUnitInjectionCost(constantInjectionCost, injectionDate => injectionDate)
+                .WithNoCmdtyConsumedOnInject()
+                .WithPerUnitWithdrawalCost(constantWithdrawalCost, withdrawalDate => withdrawalDate)
+                .WithNoCmdtyConsumedOnWithdraw()
+                .WithNoCmdtyInventoryLoss()
+                .WithNoInventoryCost()
+                .WithTerminalInventoryNpv(_terminalInventoryValue)
+                .Build();
+
             const double oneFactorSpotVol = 0.95;
             _oneFactorFlatSpotVols = TimeSeriesFactory.ForConstantData(_valDate, storageEnd, oneFactorSpotVol);
             _1FDailyMultiFactorParams = MultiFactorParameters.For1Factor(OneFactorMeanReversion, _oneFactorFlatSpotVols);
@@ -125,6 +142,62 @@ namespace Cmdty.Storage.Test
                 return baseForwardPrice + Math.Sin(2.0 * Math.PI / 365.0 * daysForward) * forwardSeasonalFactor;
             });
         }
+
+        [Fact(Skip = "Still working on this.")]
+        public void Calculate_CurrentPeriodAfterStorageEnd_ResultWithZeroNpv()
+        {
+            Day valDate = _simpleDailyStorage.EndPeriod + 1;
+            LsmcStorageValuationResults<Day> lsmcResults = LsmcStorageValuation.Calculate(valDate, Inventory,
+                _forwardCurve, _simpleDailyStorage, _settleDateRule, _flatInterestRateDiscounter, _gridCalc, NumTolerance,
+                _1FDailyMultiFactorParams, NumSims, RandomSeed, RegressMaxDegree, RegressCrossProducts);
+            Assert.Equal(0.0, lsmcResults.Npv);
+        }
+        // TODO same unit test as above, but testing the other output data, delta, decision, simulated prices etc.
+
+        [Fact(Skip = "Still working on this.")]
+        public void Calculate_CurrentPeriodEqualToStorageEndStorageMustBeEmptyAtEnd_ResultWithZeroNpv()
+        {
+            Day valDate = _simpleDailyStorage.EndPeriod;
+            const double inventory = 0.0;
+            LsmcStorageValuationResults<Day> lsmcResults = LsmcStorageValuation.Calculate(valDate, inventory,
+                _forwardCurve, _simpleDailyStorage, _settleDateRule, _flatInterestRateDiscounter, _gridCalc, NumTolerance,
+                _1FDailyMultiFactorParams, NumSims, RandomSeed, RegressMaxDegree, RegressCrossProducts);
+            Assert.Equal(0.0, lsmcResults.Npv);
+        }
+        // TODO same unit test as above, but testing the other output data, delta, decision, simulated prices etc.
+
+        [Fact(Skip = "Still working on this.")]
+        public void Calculate_CurrentPeriodEqualToStorageEndAndInventoryHasTerminalValue_NpvEqualsTerminalValue()
+        {
+            Day valDate = _simpleDailyStorageTerminalInventoryValue.EndPeriod;
+            const double inventory = 0.0;
+            double valDateSpotPrice = _forwardCurve[valDate];
+            LsmcStorageValuationResults<Day> lsmcResults = LsmcStorageValuation.Calculate(valDate, inventory,
+                _forwardCurve, _simpleDailyStorageTerminalInventoryValue, _settleDateRule, _flatInterestRateDiscounter, _gridCalc, NumTolerance,
+                _1FDailyMultiFactorParams, NumSims, RandomSeed, RegressMaxDegree, RegressCrossProducts);
+
+            double expectedNpv = _terminalInventoryValue(valDateSpotPrice, inventory);
+            Assert.Equal(expectedNpv, lsmcResults.Npv);
+        }
+        // TODO same unit test as above, but testing the other output data, delta, decision, simulated prices etc.
+
+        [Fact(Skip = "Still working on this.")]
+        public void Calculate_CurrentPeriodDayBeforeStorageEndAndStorageMustBeEmptyAtEnd_NpvEqualsInventoryTimesSpotMinusWithdrawalCost()
+        {
+            Day valDate = _simpleDailyStorage.EndPeriod - 1;
+            const double inventory = 352.14;
+            double valDateSpotPrice = _forwardCurve[valDate];
+            LsmcStorageValuationResults<Day> lsmcResults = LsmcStorageValuation.Calculate(valDate, inventory,
+                _forwardCurve, _simpleDailyStorage, _settleDateRule, _flatInterestRateDiscounter, _gridCalc, NumTolerance,
+                _1FDailyMultiFactorParams, NumSims, RandomSeed, RegressMaxDegree, RegressCrossProducts);
+            const double constantWithdrawalCost = 0.93;
+
+            double expectedNpv = inventory * valDateSpotPrice - constantWithdrawalCost * inventory;
+            Assert.Equal(expectedNpv, lsmcResults.Npv);
+        }
+        // TODO same unit test as above, but testing the other output data, delta, decision, simulated prices etc.
+
+        // TODO terminal value looks like call option payoff, value day before equals call value
 
         [Fact]
         public void Calculate_StorageLikeCallOptionsOneFactor_NpvEqualsBlack76()
