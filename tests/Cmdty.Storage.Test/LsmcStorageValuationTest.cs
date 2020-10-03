@@ -36,6 +36,12 @@ using TimeSeriesFactory = Cmdty.TimeSeries.TimeSeries;
 
 namespace Cmdty.Storage.Test
 {
+    // TODO test:
+    // Current date equals storage end date
+    // Current date equals day before storage end date
+    // Current date after storage end date
+    // Call option test with two factors
+
     public sealed class LsmcStorageValuationTest
     {
         private const double SmallVol = 0.001;
@@ -172,9 +178,6 @@ namespace Cmdty.Storage.Test
             Assert.InRange(percentError, percentErrorLowerBound, percentErrorUpperBound);
         }
 
-        // TODO:
-        // Call option test with two factors
-
         [Fact]
         public void Calculate_OneFactor_NpvApproximatelyEqualsTrinomialNpv()
         {
@@ -185,6 +188,35 @@ namespace Cmdty.Storage.Test
             TreeStorageValuationResults<Day> treeResults = TreeStorageValuation<Day>.ForStorage(_simpleDailyStorage)
                 .WithStartingInventory(Inventory)
                 .ForCurrentPeriod(_valDate)
+                .WithForwardCurve(_forwardCurve)
+                .WithOneFactorTrinomialTree(_oneFactorFlatSpotVols, OneFactorMeanReversion, TrinomialTimeDelta)
+                .WithCmdtySettlementRule(_settleDateRule)
+                .WithDiscountFactorFunc(_flatInterestRateDiscounter)
+                .WithFixedNumberOfPointsOnGlobalInventoryRange(NumInventorySpacePoints)
+                .WithLinearInventorySpaceInterpolation()
+                .WithNumericalTolerance(NumTolerance)
+                .Calculate();
+
+            _testOutputHelper.WriteLine("Tree");
+            _testOutputHelper.WriteLine(treeResults.NetPresentValue.ToString(CultureInfo.InvariantCulture));
+            _testOutputHelper.WriteLine("LSMC");
+            _testOutputHelper.WriteLine(lsmcResults.Npv.ToString(CultureInfo.InvariantCulture));
+            const double percentageTol = 0.005; // 0.5%
+            TestHelper.AssertWithinPercentTol(treeResults.NetPresentValue, lsmcResults.Npv, percentageTol);
+        }
+
+
+        [Fact(Skip = "Still working on this.")]
+        public void Calculate_OneFactorValDateAfterStorageStart_NpvApproximatelyEqualsTrinomialNpv()
+        {
+            Day valDate = _simpleDailyStorage.StartPeriod + 10;
+            LsmcStorageValuationResults<Day> lsmcResults = LsmcStorageValuation.Calculate(valDate, Inventory,
+                _forwardCurve, _simpleDailyStorage, _settleDateRule, _flatInterestRateDiscounter, _gridCalc, NumTolerance,
+                _1FDailyMultiFactorParams, NumSims, RandomSeed, RegressMaxDegree, RegressCrossProducts);
+
+            TreeStorageValuationResults<Day> treeResults = TreeStorageValuation<Day>.ForStorage(_simpleDailyStorage)
+                .WithStartingInventory(Inventory)
+                .ForCurrentPeriod(valDate)
                 .WithForwardCurve(_forwardCurve)
                 .WithOneFactorTrinomialTree(_oneFactorFlatSpotVols, OneFactorMeanReversion, TrinomialTimeDelta)
                 .WithCmdtySettlementRule(_settleDateRule)
@@ -215,21 +247,17 @@ namespace Cmdty.Storage.Test
                                             .Calculate();
                                     
 
-        // TODO come back and investigate why LSMC value is lower than intrinsic
         [Fact]
         public void Calculate_OneFactorZeroMeanReversion_NpvApproximatelyEqualsIntrinsicNpv()
         {
+            const int regressPolyDegree = 4;  // Test requires a higher poly degree than the others
             LsmcStorageValuationResults<Day> lsmcResults = LsmcStorageValuation.Calculate(_valDate, Inventory,
                 _forwardCurve, _simpleDailyStorage, _settleDateRule, _flatInterestRateDiscounter, _gridCalc, NumTolerance,
-                _1FZeroMeanReversionDailyMultiFactorParams, NumSims, RandomSeed, RegressMaxDegree, RegressCrossProducts);
+                _1FZeroMeanReversionDailyMultiFactorParams, NumSims, RandomSeed, regressPolyDegree, RegressCrossProducts);
 
             IntrinsicStorageValuationResults<Day> intrinsicResults = CalcIntrinsic();
             
-            const double percentageTol = 0.09; // 9% quite big, but with zero mean reversion, standard error will be quite big
-            _testOutputHelper.WriteLine("Intrinsic");
-            _testOutputHelper.WriteLine(intrinsicResults.NetPresentValue.ToString(CultureInfo.InvariantCulture));
-            _testOutputHelper.WriteLine("LSMC");
-            _testOutputHelper.WriteLine(lsmcResults.Npv.ToString(CultureInfo.InvariantCulture));
+            const double percentageTol = 0.002; // 0.2%
             TestHelper.AssertWithinPercentTol(intrinsicResults.NetPresentValue, lsmcResults.Npv, percentageTol);
         }
 
