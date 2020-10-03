@@ -168,8 +168,9 @@ namespace Cmdty.Storage
             T[] periodsForResultsTimeSeries = startActiveStorage.EnumerateTo(inventorySpace.End).ToArray();
 
             int backCounter = numPeriods - 2;
-            
-            
+
+            Vector<double> numSimsMemoryBuffer = Vector<double>.Build.Dense(numSims);
+
             foreach (T period in periodsForResultsTimeSeries.Reverse().Skip(1))
             {
                 //if (!period.Equals(storage.StartPeriod))
@@ -270,7 +271,7 @@ namespace Cmdty.Storage
 
                                 var interpolatedRegressContinuationValue = 
                                     WeightedAverage<T>(lowerRegressStorageValues, 
-                                        lowerWeight, upperRegressStorageValues, upperWeight);
+                                        lowerWeight, upperRegressStorageValues, upperWeight, numSimsMemoryBuffer);
 
                                 regressionContinuationValueByDecisionSet[decisionIndex] = interpolatedRegressContinuationValue;
 
@@ -280,7 +281,7 @@ namespace Cmdty.Storage
 
                                 Vector<double> interpolatedActualContinuationValue =
                                         WeightedAverage<T>(lowerActualStorageValues, lowerWeight, 
-                                            upperActualStorageValues, upperWeight);
+                                            upperActualStorageValues, upperWeight, numSimsMemoryBuffer);
                                 actualContinuationValueByDecisionSet[decisionIndex] = interpolatedActualContinuationValue;
                                 break;
                             }
@@ -334,12 +335,12 @@ namespace Cmdty.Storage
         }
 
         private static Vector<double> WeightedAverage<T>(Vector<double> vector1,
-            double weight1, Vector<double> vector2, double weight2) where T : ITimePeriod<T>
+            double weight1, Vector<double> vector2, double weight2, Vector<double> upperWeightedBuffer) where T : ITimePeriod<T>
         {
             Vector<double> interpolatedRegressContinuationValue = Vector<double>.Build.Dense(vector1.Count);
             vector1.Multiply(weight1, interpolatedRegressContinuationValue);
-            Vector<double> upperWeighted = vector2.Multiply(weight2);
-            upperWeighted.Add(interpolatedRegressContinuationValue, interpolatedRegressContinuationValue);
+            vector2.Multiply(weight2, upperWeightedBuffer);
+            upperWeightedBuffer.Add(interpolatedRegressContinuationValue, interpolatedRegressContinuationValue);
             return interpolatedRegressContinuationValue;
         }
 
