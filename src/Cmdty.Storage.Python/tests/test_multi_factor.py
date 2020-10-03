@@ -176,7 +176,6 @@ class TestMultiFactorValue(unittest.TestCase):
         val_date = '2019-08-29'
         low_price = 23.87
         high_price = 150.32
-        num_days_at_high_price = 20
         date_switch_high_price = '2020-03-12'  # TODO calculate this from num_days_at_high_price
         forward_curve = utils.create_piecewise_flat_series([low_price, high_price, high_price],
                                                            [val_date, date_switch_high_price,
@@ -187,7 +186,7 @@ class TestMultiFactorValue(unittest.TestCase):
         interest_rate_curve[:] = flat_interest_rate
 
         # Multi-Factor parameters
-        mean_reversion = 14.5
+        mean_reversion = 16.2
         spot_volatility = pd.Series(index=pd.period_range(val_date, '2020-06-01', freq='D'))
         spot_volatility[:] = 1.15
         twentieth_of_next_month = lambda period: period.asfreq('M').asfreq('D', 'end') + 20
@@ -196,7 +195,7 @@ class TestMultiFactorValue(unittest.TestCase):
         long_term_vol[:] = 0.14
 
         factors = [(0.0, long_term_vol),
-                (16.2, spot_volatility)]
+                (mean_reversion, spot_volatility)]
         factor_corrs = 0.64
 
         # Simulation parameter

@@ -66,8 +66,11 @@ namespace Cmdty.Storage
             int regressMaxPolyDegree, bool regressCrossProducts)
             where T : ITimePeriod<T>
         {
+            // TODO IMPORTANT: this will break if current period equals the storage end period
+            // TODO allow intraday simulation?
             DateTime currentDate = currentPeriod.Start; // TODO IMPORTANT, this needs to change;
-            var simulatedPeriods = storage.StartPeriod.EnumerateTo(storage.EndPeriod);
+            T simStart = new[] {currentPeriod.Offset(1), storage.StartPeriod}.Max();
+            var simulatedPeriods = simStart.EnumerateTo(storage.EndPeriod);
             var simulator = new MultiFactorSpotPriceSimulator<T>(modelParameters, currentDate, forwardCurve, simulatedPeriods, TimeFunctions.Act365, normalGenerator);
             var spotSims = simulator.Simulate(numSims);
             return Calculate(currentPeriod, startingInventory, forwardCurve, storage, settleDateRule, discountFactors,
@@ -169,6 +172,8 @@ namespace Cmdty.Storage
             
             foreach (T period in periodsForResultsTimeSeries.Reverse().Skip(1))
             {
+                //if (!period.Equals(storage.StartPeriod))
+
                 PopulateDesignMatrix(designMatrix, period, spotSims, regressMaxPolyDegree, regressCrossProducts);
                 Matrix<double> pseudoInverse = designMatrix.PseudoInverse();
 
@@ -205,10 +210,6 @@ namespace Cmdty.Storage
 
                 var simulatedPrices = spotSims.SpotPricesForPeriod(period).Span;
                 
-                //var partitioner = Partitioner.Create(0, inventorySpaceGrid.Length);
-                //Parallel.ForEach(partitioner, (range, loopState) => // TODO add parameter for degree of parallism
-                //{
-                    //for (int inventoryIndex = range.Item1; inventoryIndex < range.Item2; inventoryIndex++)
                 for (int inventoryIndex = 0; inventoryIndex < inventorySpaceGrid.Length; inventoryIndex++)
                 {
                     double inventory = inventorySpaceGrid[inventoryIndex];
@@ -286,8 +287,6 @@ namespace Cmdty.Storage
                     for (int simIndex = 0; simIndex < numSims; simIndex++)
                     {
                         double simulatedSpotPrice = simulatedPrices[simIndex];
-                        //double optimalDecisionNpv = 0.0;
-                        //int indexOfOptimalDecision = 0;
                         for (var decisionIndex = 0; decisionIndex < decisionSet.Length; decisionIndex++)
                         {
                             double decisionVolume = decisionSet[decisionIndex];
@@ -302,20 +301,9 @@ namespace Cmdty.Storage
                             double totalNpv = immediateNpv + continuationValue - inventoryCostNpv; // TODO IMPORTANT check if inventoryCostNpv should be subtracted;
                             decisionNpvsRegress[decisionIndex] = totalNpv;
 
-                            //if (decisionIndex == 0)
-                            //{
-                            //    optimalDecisionNpv = totalNpv;
-                            //}
-                            //else
-                            //{
-                            //    if (totalNpv > optimalDecisionNpv)
-                            //    {
-                            //        optimalDecisionNpv = totalNpv;
-                            //        indexOfOptimalDecision = decisionIndex;
-                            //    }
-                            //}
                         }
                         (double optimalRegressDecisionNpv, int indexOfOptimalDecision) = StorageHelper.MaxValueAndIndex(decisionNpvsRegress);
+                        
                         // TODO do this tidier an potentially more efficiently
                         double adjustFromRegressToActualContinuation =  
                                                 - regressionContinuationValueByDecisionSet[indexOfOptimalDecision][simIndex]
@@ -326,8 +314,6 @@ namespace Cmdty.Storage
                     }
                     storageValuesByInventory[inventoryIndex] = storageValuesBySim;
                 }
-                //});
-
 
                 inventorySpaceGrids[backCounter] = inventorySpaceGrid;
                 storageValuesByPeriod[backCounter] = storageValuesByInventory;
