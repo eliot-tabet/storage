@@ -35,20 +35,23 @@ namespace Cmdty.Storage
         public double Npv { get; }
         public TimeSeries<T, IReadOnlyList<double>> InventorySpaceGrids { get; }
         public TimeSeries<T, IReadOnlyList<IReadOnlyList<double>>> InjectWithdrawDecisions { get; }
+        public DoubleTimeSeries<T> Deltas {get;}
 
         public LsmcStorageValuationResults(double npv,
             TimeSeries<T, IReadOnlyList<double>> inventorySpaceGrids,
-            TimeSeries<T, IReadOnlyList<IReadOnlyList<double>>> injectWithdrawDecisions)
+            TimeSeries<T, IReadOnlyList<IReadOnlyList<double>>> injectWithdrawDecisions,
+            DoubleTimeSeries<T> deltas)
         {
             Npv = npv;
             InventorySpaceGrids = inventorySpaceGrids;
             InjectWithdrawDecisions = injectWithdrawDecisions;
+            Deltas = deltas;
         }
 
         public static LsmcStorageValuationResults<T> CreateExpiredResults()
         {
             return new LsmcStorageValuationResults<T>(0.0, TimeSeries<T, IReadOnlyList<double>>.Empty, 
-                TimeSeries<T, IReadOnlyList<IReadOnlyList<double>>>.Empty);
+                TimeSeries<T, IReadOnlyList<IReadOnlyList<double>>>.Empty, DoubleTimeSeries<T>.Empty);
         }
 
     }

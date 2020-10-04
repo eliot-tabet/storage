@@ -335,7 +335,7 @@ namespace Cmdty.Storage
             // Calculate NPVs for first active period using current inventory
             double storageNpv = storageValuesByPeriod[0][0].Average(); // TODO use non-linq average?
 
-            return new LsmcStorageValuationResults<T>(storageNpv, null, null);
+            return new LsmcStorageValuationResults<T>(storageNpv, null, null, null);
         }
 
         private static Vector<double> WeightedAverage<T>(Vector<double> vector1,
