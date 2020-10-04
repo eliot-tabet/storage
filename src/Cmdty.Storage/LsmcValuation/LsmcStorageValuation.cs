@@ -49,7 +49,8 @@ namespace Cmdty.Storage
             int regressMaxPolyDegree, bool regressCrossProducts)
             where T : ITimePeriod<T>
         {
-            var normalGenerator = seed == null ? new MersenneTwisterGenerator() : new MersenneTwisterGenerator(seed.Value);
+            var normalGenerator = seed == null ? new MersenneTwisterGenerator(true) : 
+                new MersenneTwisterGenerator(seed.Value, true);
             return Calculate(currentPeriod, startingInventory, forwardCurve, storage, settleDateRule, discountFactors,
                 gridCalc, numericalTolerance, modelParameters, normalGenerator, numSims, regressMaxPolyDegree,
                 regressCrossProducts);
@@ -61,7 +62,7 @@ namespace Cmdty.Storage
             IDoubleStateSpaceGridCalc gridCalc,
             double numericalTolerance,
             MultiFactorParameters<T> modelParameters,
-            INormalGenerator normalGenerator,
+            IStandardNormalGenerator normalGenerator,
             int numSims,
             int regressMaxPolyDegree, bool regressCrossProducts)
             where T : ITimePeriod<T>

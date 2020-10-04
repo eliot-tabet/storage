@@ -205,14 +205,14 @@ namespace Cmdty.Storage.Test
             var valDate = new Day(2019, 8, 29);
             const int numInventorySpacePoints = 100;
             const int numSims = 2_000;
-            const int seed = 11;
+            const int seed = 13;
 
             (DoubleTimeSeries<Day> forwardCurve, DoubleTimeSeries<Day> spotVolCurve) =
                 TestHelper.CreateDailyTestForwardAndSpotVolCurves(valDate, new Day(2020, 4, 1));
             const double meanReversion = 16.5;
             const double interestRate = 0.09;
             const double numTolerance = 1E-10;
-            const int regressMaxDegree = 2;
+            const int regressMaxDegree = 3;
             const bool regressCrossProducts = false;
 
             TestHelper.CallOptionLikeTestData testData = TestHelper.CreateThreeCallsLikeStorageTestData(forwardCurve);
@@ -323,7 +323,7 @@ namespace Cmdty.Storage.Test
         [Fact]
         public void Calculate_OneFactorZeroMeanReversion_NpvApproximatelyEqualsIntrinsicNpv()
         {
-            const int regressPolyDegree = 4;  // Test requires a higher poly degree than the others
+            const int regressPolyDegree = 5;  // Test requires a higher poly degree than the others
             LsmcStorageValuationResults<Day> lsmcResults = LsmcStorageValuation.Calculate(_valDate, Inventory,
                 _forwardCurve, _simpleDailyStorage, _settleDateRule, _flatInterestRateDiscounter, _gridCalc, NumTolerance,
                 _1FZeroMeanReversionDailyMultiFactorParams, NumSims, RandomSeed, regressPolyDegree, RegressCrossProducts);
@@ -331,6 +331,8 @@ namespace Cmdty.Storage.Test
             IntrinsicStorageValuationResults<Day> intrinsicResults = CalcIntrinsic();
             
             const double percentageTol = 0.002; // 0.2%
+            _testOutputHelper.WriteLine(intrinsicResults.NetPresentValue.ToString(CultureInfo.InvariantCulture));
+            _testOutputHelper.WriteLine(lsmcResults.Npv.ToString(CultureInfo.InvariantCulture));
             TestHelper.AssertWithinPercentTol(intrinsicResults.NetPresentValue, lsmcResults.Npv, percentageTol);
         }
 
