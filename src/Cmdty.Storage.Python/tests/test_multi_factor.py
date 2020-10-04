@@ -123,13 +123,13 @@ class TestMultiFactorModel(unittest.TestCase):
 
     def test_single_mean_reverting_factor_variance_far_in_future_equals_zero(self):
         variance = self._1f_pos_mr_model.integrated_variance('2020-08-05', '2020-09-01', fwd_contract='2030-09-15')
-        self.assertAlmostEquals(0.0, variance, places=14)
+        self.assertAlmostEqual(0.0, variance, places=14)
 
     def test_2f_canonical_vol_far_in_future_equal_non_mr_vol(self):
         fwd_contract = '2030-09-15'
         implied_vol = self._2f_canonical_model.integrated_vol('2020-08-05', '2021-08-05', fwd_contract)
         non_mr_factor_vol = self._2f_canonical_model._factors[0][1][fwd_contract]
-        self.assertAlmostEquals(non_mr_factor_vol, implied_vol, places=10)
+        self.assertAlmostEqual(non_mr_factor_vol, implied_vol, places=10)
 
     def test_diff_corr_types_give_same_results(self):
         factors = [(0.0, pd.Series(data=np.linspace(0.53, 0.487, num=50),
