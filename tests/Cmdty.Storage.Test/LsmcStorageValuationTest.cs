@@ -143,7 +143,7 @@ namespace Cmdty.Storage.Test
             });
         }
 
-        [Fact(Skip = "Still working on this.")]
+        [Fact]
         public void Calculate_CurrentPeriodAfterStorageEnd_ResultWithZeroNpv()
         {
             Day valDate = _simpleDailyStorage.EndPeriod + 1;

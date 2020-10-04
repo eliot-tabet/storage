@@ -66,6 +66,9 @@ namespace Cmdty.Storage
             int regressMaxPolyDegree, bool regressCrossProducts)
             where T : ITimePeriod<T>
         {
+            if (currentPeriod.CompareTo(storage.EndPeriod) > 0)
+                return LsmcStorageValuationResults<T>.CreateExpiredResults();
+
             // TODO IMPORTANT: this will break if current period equals the storage end period
             // TODO allow intraday simulation?
             DateTime currentDate = currentPeriod.Start; // TODO IMPORTANT, this needs to change;
@@ -84,6 +87,7 @@ namespace Cmdty.Storage
             double numericalTolerance, ISpotSimResults<T> spotSims, int regressMaxPolyDegree, bool regressCrossProducts)
             where T : ITimePeriod<T>
         {
+            // TODO check spotSims is consistent with storage
             if (startingInventory < 0)
                 throw new ArgumentException("Inventory cannot be negative.", nameof(startingInventory));
 
