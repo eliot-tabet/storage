@@ -205,7 +205,7 @@ class TestMultiFactorValue(unittest.TestCase):
         multi_factor_val = multi_factor_value(cmdty_storage, val_date, inventory, forward_curve,
                                               interest_rate_curve, twentieth_of_next_month,
                                               factors, factor_corrs, num_sims, seed, regress_cross_products=False)
-        self.assertAlmostEqual(multi_factor_val.npv, 1754422.205228994, places=6)
+        self.assertAlmostEqual(multi_factor_val.npv, 1779708.1119639324, places=6)
 
 
 if __name__ == '__main__':
