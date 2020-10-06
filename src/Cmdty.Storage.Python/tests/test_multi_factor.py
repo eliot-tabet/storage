@@ -29,7 +29,7 @@ from datetime import date
 import itertools
 from tests import utils
 
-
+# TODO regression with antithetic
 class TestSpotPriceSim(unittest.TestCase):
     def test_regression(self):
         factors = [  # Tuples where 1st element is factor mean-reversion, 2nd element is factor vol curve

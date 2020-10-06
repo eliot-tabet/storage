@@ -40,6 +40,7 @@ import math
 
 FactorCorrsType = tp.Optional[tp.Union[float, np.ndarray]]
 
+
 class MultiFactorSpotSim:
 
     def __init__(self,
@@ -49,7 +50,8 @@ class MultiFactorSpotSim:
                  current_date: tp.Union[datetime, date, str, pd.Period],
                  fwd_curve: utils.CurveType,
                  sim_periods: tp.Iterable[tp.Union[pd.Period, datetime, date, str]],
-                 seed: tp.Optional[int] = None
+                 seed: tp.Optional[int] = None,
+                 antithetic: bool = False,
                  # time_func: Callable[[Union[datetime, date], Union[datetime, date]], float] TODO add this back in
                  ):
         factor_corrs = _validate_multi_factor_params(factors, factor_corrs)
@@ -67,10 +69,10 @@ class MultiFactorSpotSim:
         [net_sim_periods.Add(utils.from_datetime_like(p, time_period_type)) for p in sim_periods]
 
         if seed is None:
-            mt_rand = net_sim.MersenneTwisterGenerator()
+            mt_rand = net_sim.MersenneTwisterGenerator(antithetic)
         else:
-            mt_rand = net_sim.MersenneTwisterGenerator(seed)
-        mt_rand = net_sim.INormalGenerator(mt_rand)
+            mt_rand = net_sim.MersenneTwisterGenerator(seed, antithetic)
+        mt_rand = net_sim.IStandardNormalGeneratorWithSeed(mt_rand)
 
         self._net_simulator = net_sim.MultiFactor.MultiFactorSpotPriceSimulator[time_period_type](
             net_multi_factor_params, net_current_date, net_forward_curve, net_sim_periods, net_time_func, mt_rand)
