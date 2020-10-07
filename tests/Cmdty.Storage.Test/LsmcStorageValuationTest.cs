@@ -154,7 +154,7 @@ namespace Cmdty.Storage.Test
         }
         // TODO same unit test as above, but testing the other output data, delta, decision, simulated prices etc.
 
-        [Fact(Skip = "Still working on this.")]
+        [Fact]
         public void Calculate_CurrentPeriodEqualToStorageEndStorageMustBeEmptyAtEnd_ResultWithZeroNpv()
         {
             Day valDate = _simpleDailyStorage.EndPeriod;
@@ -166,8 +166,7 @@ namespace Cmdty.Storage.Test
         }
         // TODO same unit test as above, but testing the other output data, delta, decision, simulated prices etc.
 
-        [Fact(Skip = "Still working on this.")]
-        //[Fact]
+        [Fact]
         public void Calculate_CurrentPeriodEqualToStorageEndAndInventoryHasTerminalValue_NpvEqualsTerminalValue()
         {
             Day valDate = _simpleDailyStorageTerminalInventoryValue.EndPeriod;
@@ -182,7 +181,6 @@ namespace Cmdty.Storage.Test
         }
         // TODO same unit test as above, but testing the other output data, delta, decision, simulated prices etc.
 
-        //[Fact(Skip = "Still working on this.")]
         [Fact]
         public void Calculate_CurrentPeriodDayBeforeStorageEndAndStorageMustBeEmptyAtEnd_NpvEqualsInventoryTimesSpotMinusWithdrawalCost()
         {

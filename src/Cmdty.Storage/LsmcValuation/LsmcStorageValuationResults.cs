@@ -54,5 +54,11 @@ namespace Cmdty.Storage
                 TimeSeries<T, IReadOnlyList<IReadOnlyList<double>>>.Empty, DoubleTimeSeries<T>.Empty);
         }
 
+        public static LsmcStorageValuationResults<T> CreateEndPeriodResults(double npv)
+        {
+            return new LsmcStorageValuationResults<T>(npv, TimeSeries<T, IReadOnlyList<double>>.Empty,
+                TimeSeries<T, IReadOnlyList<IReadOnlyList<double>>>.Empty, DoubleTimeSeries<T>.Empty);
+        }
+
     }
 }

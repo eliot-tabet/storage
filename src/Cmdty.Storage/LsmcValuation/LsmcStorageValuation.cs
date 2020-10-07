@@ -75,8 +75,8 @@ namespace Cmdty.Storage
             if (currentPeriod.Equals(storage.EndPeriod))
             {
                 // TODO think of more elegant way of doing this
-                spotSims = null;// new MultiFactorSpotSimResults<T>(new double[0], 
-                    //new double[0], new T[0], 0, numSims, modelParameters.NumFactors);
+                spotSims = new MultiFactorSpotSimResults<T>(new double[0], 
+                    new double[0], new T[0], 0, numSims, modelParameters.NumFactors);
             }
             else
             {
@@ -113,6 +113,10 @@ namespace Cmdty.Storage
                         throw new InventoryConstraintsCannotBeFulfilledException("Storage must be empty at end, but inventory is greater than zero.");
                     return LsmcStorageValuationResults<T>.CreateExpiredResults();
                 }
+                // Potentially P&L at end
+                double spotPrice = forwardCurve[currentPeriod];
+                double npv = storage.TerminalStorageNpv(spotPrice, startingInventory);
+                return LsmcStorageValuationResults<T>.CreateEndPeriodResults(npv);
             }
             
             TimeSeries<T, InventoryRange> inventorySpace = StorageHelper.CalculateInventorySpace(storage, startingInventory, currentPeriod);
