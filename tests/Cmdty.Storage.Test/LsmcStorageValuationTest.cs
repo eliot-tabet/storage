@@ -167,6 +167,7 @@ namespace Cmdty.Storage.Test
         // TODO same unit test as above, but testing the other output data, delta, decision, simulated prices etc.
 
         [Fact(Skip = "Still working on this.")]
+        //[Fact]
         public void Calculate_CurrentPeriodEqualToStorageEndAndInventoryHasTerminalValue_NpvEqualsTerminalValue()
         {
             Day valDate = _simpleDailyStorageTerminalInventoryValue.EndPeriod;
@@ -181,7 +182,8 @@ namespace Cmdty.Storage.Test
         }
         // TODO same unit test as above, but testing the other output data, delta, decision, simulated prices etc.
 
-        [Fact(Skip = "Still working on this.")]
+        //[Fact(Skip = "Still working on this.")]
+        [Fact]
         public void Calculate_CurrentPeriodDayBeforeStorageEndAndStorageMustBeEmptyAtEnd_NpvEqualsInventoryTimesSpotMinusWithdrawalCost()
         {
             Day valDate = _simpleDailyStorage.EndPeriod - 1;
@@ -192,8 +194,9 @@ namespace Cmdty.Storage.Test
                 _1FDailyMultiFactorParams, NumSims, RandomSeed, RegressMaxDegree, RegressCrossProducts);
             const double constantWithdrawalCost = 0.93;
 
-            double expectedNpv = inventory * valDateSpotPrice - constantWithdrawalCost * inventory;
-            Assert.Equal(expectedNpv, lsmcResults.Npv);
+            double discountFactor = _flatInterestRateDiscounter(valDate, _settleDateRule(valDate));
+            double expectedNpv = inventory * valDateSpotPrice * discountFactor - constantWithdrawalCost * inventory;
+            Assert.Equal(expectedNpv, lsmcResults.Npv, 8);
         }
         // TODO same unit test as above, but testing the other output data, delta, decision, simulated prices etc.
 
@@ -280,6 +283,7 @@ namespace Cmdty.Storage.Test
 
 
         [Fact(Skip = "Still working on this.")]
+        //[Fact]
         public void Calculate_OneFactorValDateAfterStorageStart_NpvApproximatelyEqualsTrinomialNpv()
         {
             Day valDate = _simpleDailyStorage.StartPeriod + 10;

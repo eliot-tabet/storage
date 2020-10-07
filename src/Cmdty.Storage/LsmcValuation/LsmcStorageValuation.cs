@@ -70,13 +70,23 @@ namespace Cmdty.Storage
             if (currentPeriod.CompareTo(storage.EndPeriod) > 0)
                 return LsmcStorageValuationResults<T>.CreateExpiredResults();
 
-            // TODO IMPORTANT: this will break if current period equals the storage end period
             // TODO allow intraday simulation?
-            DateTime currentDate = currentPeriod.Start; // TODO IMPORTANT, this needs to change;
-            T simStart = new[] {currentPeriod.Offset(1), storage.StartPeriod}.Max();
-            var simulatedPeriods = simStart.EnumerateTo(storage.EndPeriod);
-            var simulator = new MultiFactorSpotPriceSimulator<T>(modelParameters, currentDate, forwardCurve, simulatedPeriods, TimeFunctions.Act365, normalGenerator);
-            var spotSims = simulator.Simulate(numSims);
+            MultiFactorSpotSimResults<T> spotSims;
+            if (currentPeriod.Equals(storage.EndPeriod))
+            {
+                // TODO think of more elegant way of doing this
+                spotSims = null;// new MultiFactorSpotSimResults<T>(new double[0], 
+                    //new double[0], new T[0], 0, numSims, modelParameters.NumFactors);
+            }
+            else
+            {
+                DateTime currentDate = currentPeriod.Start; // TODO IMPORTANT, this needs to change;
+                T simStart = new[] { currentPeriod.Offset(1), storage.StartPeriod }.Max();
+                var simulatedPeriods = simStart.EnumerateTo(storage.EndPeriod);
+                var simulator = new MultiFactorSpotPriceSimulator<T>(modelParameters, currentDate, forwardCurve, simulatedPeriods, TimeFunctions.Act365, normalGenerator);
+                spotSims = simulator.Simulate(numSims);
+            }
+
             return Calculate(currentPeriod, startingInventory, forwardCurve, storage, settleDateRule, discountFactors,
                 gridCalc, numericalTolerance, spotSims, regressMaxPolyDegree, regressCrossProducts);
         }
@@ -178,22 +188,34 @@ namespace Cmdty.Storage
 
             foreach (T period in periodsForResultsTimeSeries.Reverse().Skip(1))
             {
-                //if (!period.Equals(storage.StartPeriod))
-
-                PopulateDesignMatrix(designMatrix, period, spotSims, regressMaxPolyDegree, regressCrossProducts);
-                Matrix<double> pseudoInverse = designMatrix.PseudoInverse();
 
                 double[] nextPeriodInventorySpaceGrid = inventorySpaceGrids[backCounter + 1];
+                Vector<double>[] storageRegressValuesNextPeriod = new Vector<double>[nextPeriodInventorySpaceGrid.Length];
                 Vector<double>[] storageActualValuesNextPeriod = storageValuesByPeriod[backCounter + 1];
 
-                // TODO doing the regressions for all next inventory could be inefficient as they might not all be needed
-                Vector<double>[] storageRegressValuesNextPeriod = new Vector<double>[nextPeriodInventorySpaceGrid.Length];
-                for (int i = 0; i < nextPeriodInventorySpaceGrid.Length; i++) // TODO parallelise 
+                if (period.Equals(currentPeriod))
                 {
-                    Vector<double> storageValuesBySimNextPeriod = storageActualValuesNextPeriod[i];
-                    Vector<double> regressResults = pseudoInverse.Multiply(storageValuesBySimNextPeriod);
-                    Vector<double> estimatedContinuationValues = designMatrix.Multiply(regressResults);
-                    storageRegressValuesNextPeriod[i] = estimatedContinuationValues;
+                    // Current period, for which the price isn't random so expected storage values are just the average of the values for all sims
+                    for (int i = 0; i < nextPeriodInventorySpaceGrid.Length; i++) // TODO parallelise 
+                    {
+                        Vector<double> storageValuesBySimNextPeriod = storageActualValuesNextPeriod[i];
+                        double expectedStorageValueNextPeriod = storageValuesBySimNextPeriod.Average();
+                        storageRegressValuesNextPeriod[i] = Vector<double>.Build.Dense(numSims, expectedStorageValueNextPeriod); // TODO this is a bit inefficent, review
+                    }
+                }
+                else
+                {
+                    PopulateDesignMatrix(designMatrix, period, spotSims, regressMaxPolyDegree, regressCrossProducts);
+                    Matrix<double> pseudoInverse = designMatrix.PseudoInverse();
+
+                    // TODO doing the regressions for all next inventory could be inefficient as they might not all be needed
+                    for (int i = 0; i < nextPeriodInventorySpaceGrid.Length; i++) // TODO parallelise 
+                    {
+                        Vector<double> storageValuesBySimNextPeriod = storageActualValuesNextPeriod[i];
+                        Vector<double> regressResults = pseudoInverse.Multiply(storageValuesBySimNextPeriod);
+                        Vector<double> estimatedContinuationValues = designMatrix.Multiply(regressResults);
+                        storageRegressValuesNextPeriod[i] = estimatedContinuationValues;
+                    }
                 }
                 
                 double[] inventorySpaceGrid;
@@ -214,8 +236,15 @@ namespace Cmdty.Storage
                 Day cmdtySettlementDate = settleDateRule(period);
                 double discountFactorFromCmdtySettlement = DiscountToCurrentDay(cmdtySettlementDate);
 
-                var simulatedPrices = spotSims.SpotPricesForPeriod(period).Span;
-                
+                ReadOnlySpan<double> simulatedPrices;
+                if (period.Equals(currentPeriod))
+                {
+                    double spotPrice = forwardCurve[period];
+                    simulatedPrices = Enumerable.Repeat(spotPrice, numSims).ToArray(); // TODO inefficient - review.
+                }                
+                else
+                    simulatedPrices = spotSims.SpotPricesForPeriod(period).Span;
+
                 for (int inventoryIndex = 0; inventoryIndex < inventorySpaceGrid.Length; inventoryIndex++)
                 {
                     double inventory = inventorySpaceGrid[inventoryIndex];
@@ -334,6 +363,7 @@ namespace Cmdty.Storage
             // TODO Loop forward from start inventory choosing optimal decisions (like with intrinsic valuation)
 
             // Calculate NPVs for first active period using current inventory
+            // TODO this is unnecesarily introducing floating point error if the val date is during the storage active period and there should not be a Vector of simulated spot prices
             double storageNpv = storageValuesByPeriod[0][0].Average(); // TODO use non-linq average?
 
             return new LsmcStorageValuationResults<T>(storageNpv, null, null, null);
