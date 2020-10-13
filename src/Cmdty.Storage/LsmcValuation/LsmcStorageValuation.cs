@@ -364,7 +364,68 @@ namespace Cmdty.Storage
                 backCounter--;
             }
 
-            // TODO Loop forward from start inventory choosing optimal decisions (like with intrinsic valuation)
+#if RUN_DELTAS
+            var inventories = new double[periodsForResultsTimeSeries.Length + 1][]; // TODO rethink this + 1
+            var deltas = new double[periodsForResultsTimeSeries.Length];
+
+            var startingInventories = new double[numSims];
+            for (int i = 0; i < numSims; i++)
+                startingInventories[i] = startingInventory; // TODO ch
+            inventories[0] = startingInventories;
+
+            for (int periodIndex = 0; periodIndex < periodsForResultsTimeSeries.Length; periodIndex++)
+            {
+                T period = periodsForResultsTimeSeries[periodIndex];
+                var nextPeriodInventories = new double[numSims];
+                inventories[periodIndex + 1] = nextPeriodInventories;
+
+                double sumSpotPriceTimesVolume = 0.0;
+
+                ReadOnlySpan<double> simulatedPrices;
+                if (period.Equals(currentPeriod))
+                {
+                    double spotPrice = forwardCurve[period];
+                    simulatedPrices = Enumerable.Repeat(spotPrice, numSims).ToArray(); // TODO inefficient - review, and share code with backward induction
+                }
+                else
+                    simulatedPrices = spotSims.SpotPricesForPeriod(period).Span;
+                
+                (double nextStepInventorySpaceMin, double nextStepInventorySpaceMax) = inventorySpace[period.Offset(1)];
+                double[] thisPeriodInventories = inventories[periodIndex];
+                for (int simIndex = 0; simIndex < numSims; simIndex++)
+                {
+                    double simSpotPrice = simulatedPrices[simIndex];
+                    double inventory = thisPeriodInventories[simIndex];
+
+                    InjectWithdrawRange injectWithdrawRange = storage.GetInjectWithdrawRange(period, inventory);
+                    double inventoryLoss = storage.CmdtyInventoryPercentLoss(period) * inventory;
+                    double[] decisionSet = StorageHelper.CalculateBangBangDecisionSet(injectWithdrawRange, inventory,
+                        inventoryLoss,
+                        nextStepInventorySpaceMin, nextStepInventorySpaceMax, numericalTolerance);
+                    IReadOnlyList<DomesticCashFlow> inventoryCostCashFlows =
+                        storage.CmdtyInventoryCost(period, inventory);
+                    double inventoryCostNpv = inventoryCostCashFlows.Sum(cashFlow =>
+                        cashFlow.Amount * DiscountToCurrentDay(cashFlow.Date));
+
+                    var decisionNpvsRegress = new double[decisionSet.Length];
+                    for (var decisionIndex = 0; decisionIndex < decisionSet.Length; decisionIndex++)
+                    {
+                        double decisionVolume = decisionSet[decisionIndex];
+                        double inventoryAfterDecision = inventory + decisionVolume - inventoryLoss;
+
+
+                    }
+                    (double optimalRegressDecisionNpv, int indexOfOptimalDecision) = StorageHelper.MaxValueAndIndex(decisionNpvsRegress);
+                    double optimalDecisionVolume = decisionSet[indexOfOptimalDecision];
+                    double optimalNextStepInventory = inventory + optimalDecisionVolume - indexOfOptimalDecision;
+                    nextPeriodInventories[simIndex] = optimalNextStepInventory;
+                }
+
+                double forwardPrice = forwardCurve[period];
+                double periodDelta = sumSpotPriceTimesVolume / forwardPrice / numSims;
+                deltas[periodIndex] = periodDelta;
+            }
+#endif
 
             // Calculate NPVs for first active period using current inventory
             // TODO this is unnecesarily introducing floating point error if the val date is during the storage active period and there should not be a Vector of simulated spot prices
