@@ -1,4 +1,5 @@
-﻿#region License
+﻿//#define RUN_DELTAS
+#region License
 // Copyright (c) 2020 Jake Fowler
 //
 // Permission is hereby granted, free of charge, to any person 
@@ -364,6 +365,8 @@ namespace Cmdty.Storage
                 backCounter--;
             }
 
+
+
 #if RUN_DELTAS
             var inventories = new double[periodsForResultsTimeSeries.Length + 1][]; // TODO rethink this + 1
             var deltas = new double[periodsForResultsTimeSeries.Length];
@@ -378,6 +381,9 @@ namespace Cmdty.Storage
                 T period = periodsForResultsTimeSeries[periodIndex];
                 var nextPeriodInventories = new double[numSims];
                 inventories[periodIndex + 1] = nextPeriodInventories;
+
+                Day cmdtySettlementDate = settleDateRule(period);
+                double discountFactorFromCmdtySettlement = DiscountToCurrentDay(cmdtySettlementDate);
 
                 double sumSpotPriceTimesVolume = 0.0;
 
@@ -394,7 +400,7 @@ namespace Cmdty.Storage
                 double[] thisPeriodInventories = inventories[periodIndex];
                 for (int simIndex = 0; simIndex < numSims; simIndex++)
                 {
-                    double simSpotPrice = simulatedPrices[simIndex];
+                    double simulatedSpotPrice = simulatedPrices[simIndex];
                     double inventory = thisPeriodInventories[simIndex];
 
                     InjectWithdrawRange injectWithdrawRange = storage.GetInjectWithdrawRange(period, inventory);
@@ -408,17 +414,40 @@ namespace Cmdty.Storage
                         cashFlow.Amount * DiscountToCurrentDay(cashFlow.Date));
 
                     var decisionNpvsRegress = new double[decisionSet.Length];
+                    var cmdtyUsedForInjectWithdrawVolumes = new double[decisionSet.Length];
                     for (var decisionIndex = 0; decisionIndex < decisionSet.Length; decisionIndex++)
                     {
                         double decisionVolume = decisionSet[decisionIndex];
                         double inventoryAfterDecision = inventory + decisionVolume - inventoryLoss;
+                        double cmdtyUsedForInjectWithdrawVolume = decisionVolume > 0.0
+                            ? storage.CmdtyVolumeConsumedOnInject(period, inventory, decisionVolume)
+                            : storage.CmdtyVolumeConsumedOnWithdraw(period, inventory, -decisionVolume);
 
+                        double injectWithdrawNpv = -decisionVolume * simulatedSpotPrice * discountFactorFromCmdtySettlement;
+                        double cmdtyUsedForInjectWithdrawNpv = -cmdtyUsedForInjectWithdrawVolume * simulatedSpotPrice *
+                                                               discountFactorFromCmdtySettlement;
 
+                        IReadOnlyList<DomesticCashFlow> injectWithdrawCostCostCashFlows = decisionVolume > 0.0
+                            ? storage.InjectionCost(period, inventory, decisionVolume)
+                            : storage.WithdrawalCost(period, inventory, -decisionVolume);
+                        double injectWithdrawCostNpv = injectWithdrawCostCostCashFlows.Sum(cashFlow => cashFlow.Amount * DiscountToCurrentDay(cashFlow.Date));
+
+                        double immediateNpv = injectWithdrawNpv - injectWithdrawCostNpv + cmdtyUsedForInjectWithdrawNpv;
+
+                        double continuationValue = regressionContinuationValueByDecisionSet[decisionIndex][simIndex]; // TODO potentially this array lookup could be quite costly
+
+                        double totalNpv = immediateNpv + continuationValue - inventoryCostNpv; // TODO IMPORTANT check if inventoryCostNpv should be subtracted;
+                        decisionNpvsRegress[decisionIndex] = totalNpv;
+                        cmdtyUsedForInjectWithdrawVolumes[decisionIndex] = cmdtyUsedForInjectWithdrawVolume;
                     }
                     (double optimalRegressDecisionNpv, int indexOfOptimalDecision) = StorageHelper.MaxValueAndIndex(decisionNpvsRegress);
                     double optimalDecisionVolume = decisionSet[indexOfOptimalDecision];
                     double optimalNextStepInventory = inventory + optimalDecisionVolume - indexOfOptimalDecision;
                     nextPeriodInventories[simIndex] = optimalNextStepInventory;
+
+                    double optimalCmdtyUsedForInjectWithdrawVolume = cmdtyUsedForInjectWithdrawVolumes[indexOfOptimalDecision];
+
+                    sumSpotPriceTimesVolume += -(optimalDecisionVolume + optimalCmdtyUsedForInjectWithdrawVolume) * simulatedSpotPrice;
                 }
 
                 double forwardPrice = forwardCurve[period];
