@@ -90,6 +90,8 @@ def series_to_time_series(series, time_period_type, net_data_type, data_selector
 
 def net_time_series_to_pandas_series(net_time_series, freq):
     """Converts an instance of class Cmdty.TimeSeries.TimeSeries to a pandas Series"""
+    if net_time_series.IsEmpty:
+        return pd.Series()
     curve_start = net_time_series.Indices[0].Start
     curve_start_datetime = net_datetime_to_py_datetime(curve_start)
     index = pd.period_range(start=curve_start_datetime, freq=freq, periods=net_time_series.Count)

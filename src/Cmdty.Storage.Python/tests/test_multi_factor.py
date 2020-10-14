@@ -29,6 +29,7 @@ from datetime import date
 import itertools
 from tests import utils
 
+
 # TODO regression with antithetic
 class TestSpotPriceSim(unittest.TestCase):
     def test_regression(self):
@@ -144,13 +145,17 @@ class TestMultiFactorModel(unittest.TestCase):
                                                                                                       [0, 1]]))
 
         two_f_model_float_corr_covar = two_f_model_float_corr.integrated_covar(date(2020, 8, 5),
-                                                                 date(2020, 8, 30), '2020-09-01', '2020-09-20')
+                                                                               date(2020, 8, 30), '2020-09-01',
+                                                                               '2020-09-20')
         two_f_model_float_array_corr_covar = two_f_model_float_array_corr.integrated_covar(date(2020, 8, 5),
-                                                               date(2020, 8, 30), '2020-09-01', '2020-09-20')
+                                                                                           date(2020, 8, 30),
+                                                                                           '2020-09-01', '2020-09-20')
         two_f_model_int_corr_covar = two_f_model_int_corr.integrated_covar(date(2020, 8, 5),
-                                                               date(2020, 8, 30), '2020-09-01', '2020-09-20')
+                                                                           date(2020, 8, 30), '2020-09-01',
+                                                                           '2020-09-20')
         two_f_model_int_array_corr_covar = two_f_model_int_array_corr.integrated_covar(date(2020, 8, 5),
-                                                               date(2020, 8, 30), '2020-09-01', '2020-09-20')
+                                                                                       date(2020, 8, 30), '2020-09-01',
+                                                                                       '2020-09-20')
         self.assertEqual(two_f_model_float_corr_covar, two_f_model_float_array_corr_covar)
         self.assertEqual(two_f_model_float_corr_covar, two_f_model_int_corr_covar)
         self.assertEqual(two_f_model_float_corr_covar, two_f_model_int_array_corr_covar)
@@ -168,10 +173,10 @@ class TestMultiFactorValue(unittest.TestCase):
         max_inventory = 100000.0
 
         cmdty_storage = CmdtyStorage('D', storage_start, storage_end, constant_injection_cost,
-                                        constant_withdrawal_cost, min_inventory=min_inventory,
-                                        max_inventory=max_inventory,
-                                        max_injection_rate=constant_injection_rate,
-                                        max_withdrawal_rate=constant_withdrawal_rate)
+                                     constant_withdrawal_cost, min_inventory=min_inventory,
+                                     max_inventory=max_inventory,
+                                     max_injection_rate=constant_injection_rate,
+                                     max_withdrawal_rate=constant_withdrawal_rate)
         inventory = 0.0
         val_date = '2019-08-29'
         low_price = 23.87
@@ -195,7 +200,7 @@ class TestMultiFactorValue(unittest.TestCase):
         long_term_vol[:] = 0.14
 
         factors = [(0.0, long_term_vol),
-                (mean_reversion, spot_volatility)]
+                   (mean_reversion, spot_volatility)]
         factor_corrs = 0.64
 
         # Simulation parameter

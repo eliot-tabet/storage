@@ -1,5 +1,4 @@
-﻿//#define RUN_DELTAS
-#region License
+﻿#region License
 // Copyright (c) 2020 Jake Fowler
 //
 // Permission is hereby granted, free of charge, to any person 
@@ -38,6 +37,7 @@ namespace Cmdty.Storage
 {
     public static class LsmcStorageValuation
     {
+        private const double FloatingPointTol = 1E-8; // TODO better way to pick this.
 
         public static LsmcStorageValuationResults<T> Calculate<T>(T currentPeriod, double startingInventory,
             TimeSeries<T, double> forwardCurve, ICmdtyStorage<T> storage, Func<T, Day> settleDateRule,
@@ -130,7 +130,7 @@ namespace Cmdty.Storage
 
             // Perform backward induction
             int numPeriods = inventorySpace.Count + 1; // +1 as inventorySpaceGrid doesn't contain first period
-            var storageValuesByPeriod = new Vector<double>[numPeriods][]; // 1st dimension is period, 2nd is inventory, 3rd is simulation number
+            var storageRegressValuesByPeriod = new Vector<double>[numPeriods][]; // 1st dimension is period, 2nd is inventory, 3rd is simulation number
             var inventorySpaceGrids = new double[numPeriods][];
 
             // Calculate NPVs at end period
@@ -139,7 +139,7 @@ namespace Cmdty.Storage
                                             .ToArray();
             inventorySpaceGrids[numPeriods - 1] = endInventorySpaceGrid;
 
-            var storageValuesEndPeriod = new Vector<double>[endInventorySpaceGrid.Length];
+            var storageActualValuesNextPeriod = new Vector<double>[endInventorySpaceGrid.Length];
             ReadOnlySpan<double> endPeriodSimSpotPrices = spotSims.SpotPricesForPeriod(storage.EndPeriod).Span;
 
             int numSims = spotSims.NumSims;
@@ -153,9 +153,8 @@ namespace Cmdty.Storage
                     double simSpotPrice = endPeriodSimSpotPrices[simIndex];
                     storageValueBySim[simIndex] = storage.TerminalStorageNpv(simSpotPrice, inventory);
                 }
-                storageValuesEndPeriod[i] = storageValueBySim;
+                storageActualValuesNextPeriod[i] = storageValueBySim;
             }
-            storageValuesByPeriod[numPeriods - 1] = storageValuesEndPeriod;
             
             // Calculate discount factor function
             Day dayToDiscountTo = currentPeriod.First<Day>(); // TODO IMPORTANT, this needs to change
@@ -179,9 +178,7 @@ namespace Cmdty.Storage
 
             Matrix<double> designMatrix = Matrix<double>.Build.Dense(numSims, numMonomials);
             for (int i = 0; i < numSims; i++) // TODO see if Math.Net has simpler way of setting whole column to constant
-            {
                 designMatrix[i, 0] = 1.0;
-            }
             
             // Loop back through other periods
             T startActiveStorage = inventorySpace.Start.Offset(-1);
@@ -193,10 +190,8 @@ namespace Cmdty.Storage
 
             foreach (T period in periodsForResultsTimeSeries.Reverse().Skip(1))
             {
-
                 double[] nextPeriodInventorySpaceGrid = inventorySpaceGrids[backCounter + 1];
                 Vector<double>[] storageRegressValuesNextPeriod = new Vector<double>[nextPeriodInventorySpaceGrid.Length];
-                Vector<double>[] storageActualValuesNextPeriod = storageValuesByPeriod[backCounter + 1];
 
                 if (period.Equals(currentPeriod))
                 {
@@ -214,7 +209,7 @@ namespace Cmdty.Storage
                     Matrix<double> pseudoInverse = designMatrix.PseudoInverse();
 
                     // TODO doing the regressions for all next inventory could be inefficient as they might not all be needed
-                    for (int i = 0; i < nextPeriodInventorySpaceGrid.Length; i++) // TODO parallelise 
+                    for (int i = 0; i < nextPeriodInventorySpaceGrid.Length; i++) // TODO parallelise?
                     {
                         Vector<double> storageValuesBySimNextPeriod = storageActualValuesNextPeriod[i];
                         Vector<double> regressResults = pseudoInverse.Multiply(storageValuesBySimNextPeriod);
@@ -222,7 +217,10 @@ namespace Cmdty.Storage
                         storageRegressValuesNextPeriod[i] = estimatedContinuationValues;
                     }
                 }
-                
+
+                storageRegressValuesByPeriod[backCounter + 1] = storageRegressValuesNextPeriod;
+
+
                 double[] inventorySpaceGrid;
                 if (period.Equals(startActiveStorage))
                 {
@@ -236,7 +234,7 @@ namespace Cmdty.Storage
                 }
                 (double nextStepInventorySpaceMin, double nextStepInventorySpaceMax) = inventorySpace[period.Offset(1)];
 
-                var storageValuesByInventory = new Vector<double>[inventorySpaceGrid.Length]; // TODO change type to DenseVector?
+                var storageActualValuesThisPeriod = new Vector<double>[inventorySpaceGrid.Length]; // TODO change type to DenseVector?
 
                 Day cmdtySettlementDate = settleDateRule(period);
                 double discountFactorFromCmdtySettlement = DiscountToCurrentDay(cmdtySettlementDate);
@@ -289,10 +287,8 @@ namespace Cmdty.Storage
                             double nextPeriodInventory = nextPeriodInventorySpaceGrid[inventoryGridIndex];
                             if (Math.Abs(nextPeriodInventory - inventoryAfterDecision) < 1E-8) // TODO get rid of hard coded constant
                             {
-                                regressionContinuationValueByDecisionSet[decisionIndex] =
-                                    storageRegressValuesNextPeriod[inventoryGridIndex];
-                                actualContinuationValueByDecisionSet[decisionIndex] =
-                                    storageActualValuesNextPeriod[inventoryGridIndex];
+                                regressionContinuationValueByDecisionSet[decisionIndex] = storageRegressValuesNextPeriod[inventoryGridIndex];
+                                actualContinuationValueByDecisionSet[decisionIndex] = storageActualValuesNextPeriod[inventoryGridIndex];
                                 break;
                             }
                             if (nextPeriodInventory > inventoryAfterDecision)
@@ -357,17 +353,14 @@ namespace Cmdty.Storage
 
                         storageValuesBySim[simIndex] = optimalActualDecisionNpv;
                     }
-                    storageValuesByInventory[inventoryIndex] = storageValuesBySim;
+                    storageActualValuesThisPeriod[inventoryIndex] = storageValuesBySim;
                 }
 
                 inventorySpaceGrids[backCounter] = inventorySpaceGrid;
-                storageValuesByPeriod[backCounter] = storageValuesByInventory;
+                storageActualValuesNextPeriod = storageActualValuesThisPeriod;
                 backCounter--;
             }
-
-
-
-#if RUN_DELTAS
+            
             var inventories = new double[periodsForResultsTimeSeries.Length + 1][]; // TODO rethink this + 1
             var deltas = new double[periodsForResultsTimeSeries.Length];
 
@@ -376,12 +369,14 @@ namespace Cmdty.Storage
                 startingInventories[i] = startingInventory; // TODO ch
             inventories[0] = startingInventories;
 
-            for (int periodIndex = 0; periodIndex < periodsForResultsTimeSeries.Length; periodIndex++)
+            for (int periodIndex = 0; periodIndex < periodsForResultsTimeSeries.Length - 1; periodIndex++) // TODO more clearly handle this -1
             {
                 T period = periodsForResultsTimeSeries[periodIndex];
                 var nextPeriodInventories = new double[numSims];
                 inventories[periodIndex + 1] = nextPeriodInventories;
 
+                Vector<double>[] regressContinuationValues = storageRegressValuesByPeriod[periodIndex + 1];
+                double[] inventoryGridNexPeriod = inventorySpaceGrids[periodIndex + 1];
                 Day cmdtySettlementDate = settleDateRule(period);
                 double discountFactorFromCmdtySettlement = DiscountToCurrentDay(cmdtySettlementDate);
 
@@ -419,6 +414,8 @@ namespace Cmdty.Storage
                     {
                         double decisionVolume = decisionSet[decisionIndex];
                         double inventoryAfterDecision = inventory + decisionVolume - inventoryLoss;
+
+
                         double cmdtyUsedForInjectWithdrawVolume = decisionVolume > 0.0
                             ? storage.CmdtyVolumeConsumedOnInject(period, inventory, decisionVolume)
                             : storage.CmdtyVolumeConsumedOnWithdraw(period, inventory, -decisionVolume);
@@ -434,7 +431,9 @@ namespace Cmdty.Storage
 
                         double immediateNpv = injectWithdrawNpv - injectWithdrawCostNpv + cmdtyUsedForInjectWithdrawNpv;
 
-                        double continuationValue = regressionContinuationValueByDecisionSet[decisionIndex][simIndex]; // TODO potentially this array lookup could be quite costly
+                        // TODO interpolate continuation value
+                        double continuationValue =
+                            InterpolateContinuationValue(inventoryAfterDecision, inventoryGridNexPeriod, regressContinuationValues, simIndex);
 
                         double totalNpv = immediateNpv + continuationValue - inventoryCostNpv; // TODO IMPORTANT check if inventoryCostNpv should be subtracted;
                         decisionNpvsRegress[decisionIndex] = totalNpv;
@@ -454,13 +453,41 @@ namespace Cmdty.Storage
                 double periodDelta = sumSpotPriceTimesVolume / forwardPrice / numSims;
                 deltas[periodIndex] = periodDelta;
             }
-#endif
-
+            
+            // TODO calculate PV from forward loop and compare?
             // Calculate NPVs for first active period using current inventory
-            // TODO this is unnecesarily introducing floating point error if the val date is during the storage active period and there should not be a Vector of simulated spot prices
-            double storageNpv = storageValuesByPeriod[0][0].Average(); // TODO use non-linq average?
+            // TODO this is unnecessarily introducing floating point error if the val date is during the storage active period and there should not be a Vector of simulated spot prices
+            double storageNpv = storageActualValuesNextPeriod[0].Average(); // TODO use non-linq average?
 
-            return new LsmcStorageValuationResults<T>(storageNpv, null, null, null);
+            var deltasSeries = new DoubleTimeSeries<T>(periodsForResultsTimeSeries[0], deltas);
+            return new LsmcStorageValuationResults<T>(storageNpv, null, null, deltasSeries);
+        }
+
+        private static double InterpolateContinuationValue(double inventoryAfterDecision, double[] inventoryGrid, 
+                            Vector<double>[] storageRegressValuesNextPeriod, int simIndex)
+        {
+            // TODO look into the efficiency of memory access in this method and think about reordering dimension of arrays
+            (int lowerInventoryIndex, int upperInventoryIndex) = StorageHelper.BisectInventorySpace(inventoryGrid, inventoryAfterDecision);
+
+            if (lowerInventoryIndex == upperInventoryIndex)
+                return storageRegressValuesNextPeriod[lowerInventoryIndex][simIndex];
+
+            double lowerInventory = inventoryGrid[lowerInventoryIndex];
+            if (Math.Abs(inventoryAfterDecision - lowerInventory) < FloatingPointTol)
+                return storageRegressValuesNextPeriod[lowerInventoryIndex][simIndex];
+
+            double upperInventory = inventoryGrid[upperInventoryIndex];
+            if (Math.Abs(inventoryAfterDecision - upperInventory) < FloatingPointTol)
+                return storageRegressValuesNextPeriod[upperInventoryIndex][simIndex];
+
+            double inventoryGridSpace = upperInventory - lowerInventory;
+            double lowerWeight = (upperInventory - inventoryAfterDecision) / inventoryGridSpace;
+            double upperWeight = 1.0 - lowerWeight;
+
+            double lowerStorageRegressValue = storageRegressValuesNextPeriod[lowerInventoryIndex][simIndex];
+            double upperStorageRegressValue = storageRegressValuesNextPeriod[upperInventoryIndex][simIndex];
+
+            return lowerStorageRegressValue * lowerWeight + upperStorageRegressValue * upperWeight;
         }
 
         private static Vector<double> WeightedAverage<T>(Vector<double> vector1,

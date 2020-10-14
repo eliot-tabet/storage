@@ -235,6 +235,7 @@ class MultiFactorModel:
 
 class MultiFactorValuationResults(tp.NamedTuple):
     npv: float
+    deltas: pd.Series
 
 
 def multi_factor_value(cmdty_storage: CmdtyStorage,
@@ -274,4 +275,5 @@ def multi_factor_value(cmdty_storage: CmdtyStorage,
                                                                               net_multi_factor_params, num_sims, seed,
                                                                               regress_poly_degree,
                                                                               regress_cross_products)
-    return MultiFactorValuationResults(net_val_results.Npv)
+    deltas = utils.net_time_series_to_pandas_series(net_val_results.Deltas, cmdty_storage.freq)
+    return MultiFactorValuationResults(net_val_results.Npv, deltas)

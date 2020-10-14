@@ -251,5 +251,36 @@ namespace Cmdty.Storage
 
         public static string LinearAlgebraProvider() => LinearAlgebraControl.Provider.ToString();
 
+        public static (int LowerIndex, int UpperIndex) BisectInventorySpace(double[] inventoryGrid, double inventory)
+        {
+            if (inventoryGrid.Length == 1 && inventory == inventoryGrid[0]) // TODO put in tolerance to avoid comparing floating point numbers
+                return (LowerIndex: 0, UpperIndex: 0);
+
+            int lowerIndex = 0;
+            int upperIndex = inventoryGrid.Length - 1;
+            int topIndex = upperIndex;
+            while (upperIndex > lowerIndex)
+            {
+                int midIndex = (lowerIndex + upperIndex) / 2;
+                double inventoryMid = inventoryGrid[midIndex];
+
+                if (inventoryMid > inventory)
+                {
+                    upperIndex = midIndex; // Search lower half
+                }
+                else // inventory >= inventoryMid
+                {
+                    int midIndexPlusOne = midIndex + 1;
+                    double inventoryMidPlusOne = inventoryGrid[midIndexPlusOne];
+                    if (inventory <= inventoryMidPlusOne)
+                        return (LowerIndex: midIndex, UpperIndex: midIndexPlusOne);
+                    if (midIndexPlusOne == topIndex)
+                        throw new ArgumentException("Inventory is outside of inventoryGrid bounds.");
+                    lowerIndex = midIndex; // Search upper half
+                }
+            }
+            throw new ArgumentException("Inventory is outside of inventoryGrid bounds.");
+        }
+
     }
 }

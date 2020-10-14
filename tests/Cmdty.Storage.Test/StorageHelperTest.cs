@@ -217,9 +217,7 @@ namespace Cmdty.Storage.Test
             AssertInventoryRangeEqualsExpected(inventorySpace[new Day(2019, 8, 28)], expectedInventoryLower, expectedInventoryUpper);
             
         }
-
-
-
+        
         [Fact]
         public void CalculateInventorySpace_CurrentPeriodBeforeStorageStartPeriod_AsExpected()
         {
@@ -298,6 +296,148 @@ namespace Cmdty.Storage.Test
             Assert.Equal(expectedInventoryUpper, inventoryRange.MaxInventory);
         }
 
+        [Fact]
+        public void BisectInventorySpace_InventoryEqualsHighestGridValue_ReturnsTopIndexMinusOneAndTopIndex()
+        {
+            var inventoryGrid = new[] { 0.0, 5.3, 9.5, 15.63, 25.8};
+            int topIndex = inventoryGrid.Length - 1;
+            double inventory = inventoryGrid[topIndex];
+
+            (int lowerIndex, int upperIndex) = StorageHelper.BisectInventorySpace(inventoryGrid, inventory);
+
+            Assert.Equal(topIndex-1, lowerIndex);
+            Assert.Equal(topIndex, upperIndex);
+        }
+
+        [Fact]
+        public void BisectInventorySpace_InventoryEqualsLowestGridValue_ReturnsBottomIndexAndBottomIndexPlusOne()
+        {
+            var inventoryGrid = new[] { 0.0, 5.3, 9.5, 15.63, 25.8 };
+            const int bottomIndex = 0;
+            double inventory = inventoryGrid[bottomIndex];
+
+            (int lowerIndex, int upperIndex) = StorageHelper.BisectInventorySpace(inventoryGrid, inventory);
+
+            Assert.Equal(bottomIndex, lowerIndex);
+            Assert.Equal(bottomIndex + 1, upperIndex);
+        }
+
+        [Fact]
+        public void BisectInventorySpace_InventoryBetweenTopTwoValues_ReturnsTopIndexMinusOneAndTopIndex()
+        {
+            var inventoryGrid = new[] { 0.0, 5.3, 9.5, 15.63, 25.8 };
+            int topIndex = inventoryGrid.Length - 1;
+            double inventory = 20.01;
+
+            (int lowerIndex, int upperIndex) = StorageHelper.BisectInventorySpace(inventoryGrid, inventory);
+
+            Assert.Equal(topIndex - 1, lowerIndex);
+            Assert.Equal(topIndex, upperIndex);
+        }
+
+        [Fact]
+        public void BisectInventorySpace_InventoryBetweenBottomTwoValues_ReturnsBottomIndexAndBottomIndexPlusOne()
+        {
+            var inventoryGrid = new[] { 0.0, 5.3, 9.5, 15.63, 25.8 };
+            const int bottomIndex = 0;
+            double inventory = 1.23;
+
+            (int lowerIndex, int upperIndex) = StorageHelper.BisectInventorySpace(inventoryGrid, inventory);
+
+            Assert.Equal(bottomIndex, lowerIndex);
+            Assert.Equal(bottomIndex + 1, upperIndex);
+        }
+
+        [Fact]
+        public void BisectInventorySpace_InventoryEqualsSecondLowestValue_ReturnsBottomIndexPlusOneAndBottomIndexPlusTwo()
+        {
+            var inventoryGrid = new[] { 0.0, 5.3, 9.5, 15.63, 25.8 };
+            const int bottomIndex = 0;
+            double inventory = 5.3;
+
+            (int lowerIndex, int upperIndex) = StorageHelper.BisectInventorySpace(inventoryGrid, inventory);
+
+            Assert.Equal(bottomIndex + 1, lowerIndex);
+            Assert.Equal(bottomIndex + 2, upperIndex);
+        }
+
+        [Fact]
+        public void BisectInventorySpace_InventoryWithinGrid_AsExpected()
+        {
+            var inventoryGrid = new[] { 0.0, 5.3, 9.5, 15.63, 25.8 };
+            double inventory = 10.89;
+
+            (int lowerIndex, int upperIndex) = StorageHelper.BisectInventorySpace(inventoryGrid, inventory);
+
+            Assert.Equal(2, lowerIndex);
+            Assert.Equal(3, upperIndex);
+        }
+
+        [Fact]
+        public void BisectInventorySpace_GridWithTwoPointsInventoryWithin_ReturnsZeroAndOne()
+        {
+            var inventoryGrid = new[] { 1.3, 2.8 };
+            double inventory = 1.4;
+
+            (int lowerIndex, int upperIndex) = StorageHelper.BisectInventorySpace(inventoryGrid, inventory);
+
+            Assert.Equal(0, lowerIndex);
+            Assert.Equal(1, upperIndex);
+        }
+
+        [Fact]
+        public void BisectInventorySpace_GridWithTwoPointsInventoryEqualsLowestPoint_ReturnsZeroAndOne()
+        {
+            var inventoryGrid = new[] { 1.3, 2.8 };
+            double inventory = 1.3;
+
+            (int lowerIndex, int upperIndex) = StorageHelper.BisectInventorySpace(inventoryGrid, inventory);
+
+            Assert.Equal(0, lowerIndex);
+            Assert.Equal(1, upperIndex);
+        }
+
+        [Fact]
+        public void BisectInventorySpace_GridWithTwoPointsInventoryEqualsUpperPoint_ReturnsZeroAndOne()
+        {
+            var inventoryGrid = new[] { 1.3, 2.8 };
+            double inventory = 2.8;
+
+            (int lowerIndex, int upperIndex) = StorageHelper.BisectInventorySpace(inventoryGrid, inventory);
+
+            Assert.Equal(0, lowerIndex);
+            Assert.Equal(1, upperIndex);
+        }
+
+        [Fact]
+        public void BisectInventorySpace_SingleItemGridEqualsInventory_ReturnsTwoZeros()
+        {
+            var inventoryGrid = new[] { 1.3 };
+            double inventory = 1.3;
+
+            (int lowerIndex, int upperIndex) = StorageHelper.BisectInventorySpace(inventoryGrid, inventory);
+
+            Assert.Equal(0, lowerIndex);
+            Assert.Equal(0, upperIndex);
+        }
+
+        [Fact]
+        public void BisectInventorySpace_InventoryHigherThanRange_Throws()
+        {
+            var inventoryGrid = new[] { 0.0, 5.3, 9.5, 15.63, 25.8 };
+            double inventory = 26.8;
+
+            Assert.Throws<ArgumentException>(() => StorageHelper.BisectInventorySpace(inventoryGrid, inventory));
+        }
+
+        [Fact]
+        public void BisectInventorySpace_InventoryLowerThanRange_Throws()
+        {
+            var inventoryGrid = new[] { 0.0, 5.3, 9.5, 15.63, 25.8 };
+            double inventory = -1.2;
+
+            Assert.Throws<ArgumentException>(() => StorageHelper.BisectInventorySpace(inventoryGrid, inventory));
+        }
 
     }
 }
