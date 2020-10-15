@@ -26,6 +26,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using Cmdty.Core.Simulation.MultiFactor;
 using Cmdty.TimePeriodValueTypes;
 using Cmdty.TimeSeries;
@@ -338,6 +339,7 @@ namespace Cmdty.Storage.Test
             TestHelper.AssertWithinPercentTol(intrinsicResults.NetPresentValue, lsmcResults.Npv, percentageTol);
         }
 
+        // TODO IMPORTANT why are intrinsic decisions to empty storage ASAP? Forward curve has some contango so should be better to wait or even inject.
         [Fact]
         public void Calculate_OneFactorVeryLowVols_NpvApproximatelyEqualsIntrinsicNpv()
         {
@@ -349,6 +351,31 @@ namespace Cmdty.Storage.Test
 
             const double percentageTol = 0.0001; // 0.01%
             TestHelper.AssertWithinPercentTol(intrinsicResults.NetPresentValue, lsmcResults.Npv, percentageTol);
+        }
+
+        [Fact]
+        public void Calculate_OneFactorVeryLowVols_DeltasApproximatelyEqualIntrinsicVolumeProfile()
+        {
+            LsmcStorageValuationResults<Day> lsmcResults = LsmcStorageValuation.Calculate(_valDate, Inventory,
+                _forwardCurve, _simpleDailyStorage, _settleDateRule, _flatInterestRateDiscounter, _gridCalc, NumTolerance,
+                _1FVeryLowVolDailyMultiFactorParams, NumSims, RandomSeed, RegressMaxDegree, RegressCrossProducts);
+
+            IntrinsicStorageValuationResults<Day> intrinsicResults = CalcIntrinsic();
+
+            TimeSeries<Day, StorageProfile> intrinsicProfile = intrinsicResults.StorageProfile;
+            DoubleTimeSeries<Day> lsmcDeltas = lsmcResults.Deltas;
+
+            Assert.Equal(intrinsicProfile.Start, lsmcDeltas.Start);
+            Assert.Equal(intrinsicProfile.End, lsmcDeltas.End - 1); // TODO IMPORTANT get rid of -1 and don't include end date in lsmc deltas?
+
+            const int precision = 5;
+
+            foreach (Day day in intrinsicProfile.Indices)
+            {
+                double intrinsicVolume = intrinsicProfile[day].NetPosition;
+                double lsmcDelta = lsmcDeltas[day];
+                Assert.Equal(intrinsicVolume, lsmcDelta, precision);
+            }
         }
 
         [Fact]
@@ -527,6 +554,28 @@ namespace Cmdty.Storage.Test
         private static double Act365ContCompoundDiscountFactor(Day currentDate, Day paymentDate, double interestRate)
         {
             return Math.Exp(-paymentDate.OffsetFrom(currentDate) / 365.0 * interestRate);
+        }
+
+        [Fact]
+        public void Calculate_OnProgressCalledWithArgumentsInAscendingOrderBetweenZeroAndOne()
+        {
+            var progresses = new List<double>();
+            void OnProgress(double progressPcnt) => progresses.Add(progressPcnt);
+
+            // ReSharper disable once UnusedVariable
+            LsmcStorageValuationResults<Day> lsmcResults = LsmcStorageValuation.Calculate(_valDate, Inventory,
+                _forwardCurve, _simpleDailyStorage, _settleDateRule, _flatInterestRateDiscounter, _gridCalc, NumTolerance,
+                _1FDailyMultiFactorParams, NumSims, RandomSeed, RegressMaxDegree, RegressCrossProducts, OnProgress);
+
+            Assert.InRange(progresses[0], 0.0, 1.0);
+            // ReSharper disable once UseIndexFromEndExpression
+            Assert.Equal(1.0, progresses[progresses.Count - 1]);
+
+            foreach ((double progress, double nextProgress) in progresses.Zip(progresses.Skip(1), (progress, nextProgress) => (progress, nextProgress)))
+            {
+                bool isAscending = nextProgress > progress;
+                Assert.True(isAscending);
+            }
         }
 
     }

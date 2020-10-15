@@ -29,6 +29,7 @@ import pathlib as pl
 clr.AddReference(str(pl.Path('cmdty_storage/lib/Cmdty.Core.Simulation')))
 import Cmdty.Core.Simulation as net_sim
 import Cmdty.Storage as net_cs
+import Cmdty.Core.Simulation.MultiFactor as net_mf
 
 import pandas as pd
 import numpy as np
@@ -238,6 +239,50 @@ class MultiFactorValuationResults(tp.NamedTuple):
     deltas: pd.Series
 
 
+def three_factor_seasonal_value(cmdty_storage: CmdtyStorage,
+                       val_date: utils.TimePeriodSpecType,
+                       inventory: float,
+                       fwd_curve: pd.Series,
+                       interest_rates: pd.Series,
+                       settlement_rule: tp.Callable[[pd.Period], date],
+                        spot_mean_reversion: float,
+                        spot_vol: float,
+                        long_term_vol: float,
+                        seasonal_vol: float,
+                       num_sims: int,
+                       seed: tp.Optional[int] = None,
+                       regress_poly_degree: int = 2,
+                       regress_cross_products: bool = True,
+                       num_inventory_grid_points: int = 100,
+                       numerical_tolerance: float = 1E-12,
+                       on_progress_update: tp.Optional[tp.Callable[[float], tp.NoReturn]] = None,
+                        ) -> MultiFactorValuationResults:
+    time_period_type = utils.FREQ_TO_PERIOD_TYPE[cmdty_storage.freq]
+    net_current_period = utils.from_datetime_like(val_date, time_period_type)
+    net_multi_factor_params = net_mf.MultiFactorParameters.For3FactorSeasonal[time_period_type](
+        spot_mean_reversion, spot_vol, long_term_vol, seasonal_vol, net_current_period,
+        cmdty_storage.net_storage.EndPeriod)
+    net_forward_curve = utils.series_to_double_time_series(fwd_curve, time_period_type)
+    net_current_period = utils.from_datetime_like(val_date, time_period_type)
+    net_grid_calc = net_cs.FixedSpacingStateSpaceGridCalc.CreateForFixedNumberOfPointsOnGlobalInventoryRange[
+        time_period_type](cmdty_storage.net_storage, num_inventory_grid_points)
+    net_settlement_rule = utils.wrap_settle_for_dotnet(settlement_rule, cmdty_storage.freq)
+    net_interest_rate_time_series = utils.series_to_double_time_series(interest_rates, utils.FREQ_TO_PERIOD_TYPE['D'])
+    net_discount_func = net_cs.StorageHelper.CreateAct65ContCompDiscounterFromSeries(net_interest_rate_time_series)
+    net_on_progress = utils.wrap_on_progress_for_dotnet(on_progress_update)
+    net_val_results = net_cs.LsmcStorageValuation.Calculate[time_period_type](net_current_period,
+                                                                              inventory, net_forward_curve,
+                                                                              cmdty_storage.net_storage,
+                                                                              net_settlement_rule, net_discount_func,
+                                                                              net_grid_calc, numerical_tolerance,
+                                                                              net_multi_factor_params, num_sims, seed,
+                                                                              regress_poly_degree,
+                                                                              regress_cross_products,
+                                                                              net_on_progress)
+    deltas = utils.net_time_series_to_pandas_series(net_val_results.Deltas, cmdty_storage.freq)
+    return MultiFactorValuationResults(net_val_results.Npv, deltas)
+
+
 def multi_factor_value(cmdty_storage: CmdtyStorage,
                        val_date: utils.TimePeriodSpecType,
                        inventory: float,
@@ -251,7 +296,8 @@ def multi_factor_value(cmdty_storage: CmdtyStorage,
                        regress_poly_degree: int = 2,
                        regress_cross_products: bool = True,
                        num_inventory_grid_points: int = 100,
-                       numerical_tolerance: float = 1E-12
+                       numerical_tolerance: float = 1E-12,
+                       on_progress_update: tp.Optional[tp.Callable[[float], tp.NoReturn]] = None,
                        ) -> MultiFactorValuationResults:
     factor_corrs = _validate_multi_factor_params(factors, factor_corrs)
     if cmdty_storage.freq != fwd_curve.index.freqstr:
@@ -266,7 +312,7 @@ def multi_factor_value(cmdty_storage: CmdtyStorage,
     net_settlement_rule = utils.wrap_settle_for_dotnet(settlement_rule, cmdty_storage.freq)
     net_interest_rate_time_series = utils.series_to_double_time_series(interest_rates, utils.FREQ_TO_PERIOD_TYPE['D'])
     net_discount_func = net_cs.StorageHelper.CreateAct65ContCompDiscounterFromSeries(net_interest_rate_time_series)
-
+    net_on_progress = utils.wrap_on_progress_for_dotnet(on_progress_update)
     net_val_results = net_cs.LsmcStorageValuation.Calculate[time_period_type](net_current_period,
                                                                               inventory, net_forward_curve,
                                                                               cmdty_storage.net_storage,
@@ -274,6 +320,7 @@ def multi_factor_value(cmdty_storage: CmdtyStorage,
                                                                               net_grid_calc, numerical_tolerance,
                                                                               net_multi_factor_params, num_sims, seed,
                                                                               regress_poly_degree,
-                                                                              regress_cross_products)
+                                                                              regress_cross_products,
+                                                                              net_on_progress)
     deltas = utils.net_time_series_to_pandas_series(net_val_results.Deltas, cmdty_storage.freq)
     return MultiFactorValuationResults(net_val_results.Npv, deltas)

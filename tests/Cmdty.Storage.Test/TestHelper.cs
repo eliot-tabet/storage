@@ -226,5 +226,11 @@ namespace Cmdty.Storage.Test
             Assert.InRange(percentError, -percentTol, percentTol);
         }
 
+        internal static void AssertWithinTol(double expected, double actual, double tol)
+        {
+            double error = expected - actual;
+            Assert.InRange(error, -tol, tol);
+        }
+
     }
 }

@@ -25,5 +25,6 @@ from cmdty_storage.__version__ import __version__
 from cmdty_storage.cmdty_storage import CmdtyStorage
 from cmdty_storage.intrinsic import intrinsic_value
 from cmdty_storage.trinomial import trinomial_value, trinomial_deltas
-from cmdty_storage.multi_factor import MultiFactorSpotSim, MultiFactorModel, multi_factor_value
+from cmdty_storage.multi_factor import MultiFactorSpotSim, MultiFactorModel, multi_factor_value, \
+    three_factor_seasonal_value
 from cmdty_storage.utils import FREQ_TO_PERIOD_TYPE, numerics_provider

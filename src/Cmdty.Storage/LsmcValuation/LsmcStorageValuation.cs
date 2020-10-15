@@ -37,7 +37,8 @@ namespace Cmdty.Storage
 {
     public static class LsmcStorageValuation
     {
-        private const double FloatingPointTol = 1E-8; // TODO better way to pick this.
+        private const double FloatingPointTol = 1E-8;   // TODO better way to pick this.
+        private const double BackwardPcntTime = 0.7;    // TODO estimate what this should be.
 
         public static LsmcStorageValuationResults<T> Calculate<T>(T currentPeriod, double startingInventory,
             TimeSeries<T, double> forwardCurve, ICmdtyStorage<T> storage, Func<T, Day> settleDateRule,
@@ -47,14 +48,15 @@ namespace Cmdty.Storage
             MultiFactorParameters<T> modelParameters,
             int numSims,
             int? seed,
-            int regressMaxPolyDegree, bool regressCrossProducts)
+            int regressMaxPolyDegree, bool regressCrossProducts,
+            Action<double> onProgressUpdate = null)
             where T : ITimePeriod<T>
         {
             var normalGenerator = seed == null ? new MersenneTwisterGenerator(true) : 
                 new MersenneTwisterGenerator(seed.Value, true);
             return Calculate(currentPeriod, startingInventory, forwardCurve, storage, settleDateRule, discountFactors,
                 gridCalc, numericalTolerance, modelParameters, normalGenerator, numSims, regressMaxPolyDegree,
-                regressCrossProducts);
+                regressCrossProducts, onProgressUpdate);
         }
 
         public static LsmcStorageValuationResults<T> Calculate<T>(T currentPeriod, double startingInventory,
@@ -65,12 +67,16 @@ namespace Cmdty.Storage
             MultiFactorParameters<T> modelParameters,
             IStandardNormalGenerator normalGenerator,
             int numSims,
-            int regressMaxPolyDegree, bool regressCrossProducts)
+            int regressMaxPolyDegree, bool regressCrossProducts,
+            Action<double> onProgressUpdate = null)
             where T : ITimePeriod<T>
         {
             if (currentPeriod.CompareTo(storage.EndPeriod) > 0)
+            {
+                onProgressUpdate?.Invoke(1.0);
                 return LsmcStorageValuationResults<T>.CreateExpiredResults();
-
+            }
+            // TODO progress update for price simulation?
             // TODO allow intraday simulation?
             MultiFactorSpotSimResults<T> spotSims;
             if (currentPeriod.Equals(storage.EndPeriod))
@@ -89,14 +95,15 @@ namespace Cmdty.Storage
             }
 
             return Calculate(currentPeriod, startingInventory, forwardCurve, storage, settleDateRule, discountFactors,
-                gridCalc, numericalTolerance, spotSims, regressMaxPolyDegree, regressCrossProducts);
+                gridCalc, numericalTolerance, spotSims, regressMaxPolyDegree, regressCrossProducts, onProgressUpdate);
         }
 
         public static LsmcStorageValuationResults<T> Calculate<T>(T currentPeriod, double startingInventory,
             TimeSeries<T, double> forwardCurve, ICmdtyStorage<T> storage, Func<T, Day> settleDateRule,
             Func<Day, Day, double> discountFactors,
             IDoubleStateSpaceGridCalc gridCalc,
-            double numericalTolerance, ISpotSimResults<T> spotSims, int regressMaxPolyDegree, bool regressCrossProducts)
+            double numericalTolerance, ISpotSimResults<T> spotSims, int regressMaxPolyDegree, bool regressCrossProducts,
+            Action<double> onProgressUpdate = null)
             where T : ITimePeriod<T>
         {
             // TODO check spotSims is consistent with storage
@@ -104,7 +111,10 @@ namespace Cmdty.Storage
                 throw new ArgumentException("Inventory cannot be negative.", nameof(startingInventory));
 
             if (currentPeriod.CompareTo(storage.EndPeriod) > 0)
+            {
+                onProgressUpdate?.Invoke(1.0);
                 return LsmcStorageValuationResults<T>.CreateExpiredResults();
+            }
 
             if (currentPeriod.Equals(storage.EndPeriod))
             {
@@ -112,11 +122,13 @@ namespace Cmdty.Storage
                 {
                     if (startingInventory > 0)
                         throw new InventoryConstraintsCannotBeFulfilledException("Storage must be empty at end, but inventory is greater than zero.");
+                    onProgressUpdate?.Invoke(1.0);
                     return LsmcStorageValuationResults<T>.CreateExpiredResults();
                 }
                 // Potentially P&L at end
                 double spotPrice = forwardCurve[currentPeriod];
                 double npv = storage.TerminalStorageNpv(spotPrice, startingInventory);
+                onProgressUpdate?.Invoke(1.0);
                 return LsmcStorageValuationResults<T>.CreateEndPeriodResults(npv);
             }
             
@@ -185,8 +197,9 @@ namespace Cmdty.Storage
             T[] periodsForResultsTimeSeries = startActiveStorage.EnumerateTo(inventorySpace.End).ToArray();
 
             int backCounter = numPeriods - 2;
-
             Vector<double> numSimsMemoryBuffer = Vector<double>.Build.Dense(numSims);
+            double progress = 0.0;
+            double backStepProgressPcnt = BackwardPcntTime / (periodsForResultsTimeSeries.Length - 1);
 
             foreach (T period in periodsForResultsTimeSeries.Reverse().Skip(1))
             {
@@ -359,6 +372,8 @@ namespace Cmdty.Storage
                 inventorySpaceGrids[backCounter] = inventorySpaceGrid;
                 storageActualValuesNextPeriod = storageActualValuesThisPeriod;
                 backCounter--;
+                progress += backStepProgressPcnt;
+                onProgressUpdate?.Invoke(progress);
             }
             
             var inventories = new double[periodsForResultsTimeSeries.Length + 1][]; // TODO rethink this + 1
@@ -369,6 +384,7 @@ namespace Cmdty.Storage
                 startingInventories[i] = startingInventory; // TODO ch
             inventories[0] = startingInventories;
 
+            double forwardStepProgressPcnt = (1.0 - BackwardPcntTime) / (periodsForResultsTimeSeries.Length - 1);
             for (int periodIndex = 0; periodIndex < periodsForResultsTimeSeries.Length - 1; periodIndex++) // TODO more clearly handle this -1
             {
                 T period = periodsForResultsTimeSeries[periodIndex];
@@ -431,7 +447,6 @@ namespace Cmdty.Storage
 
                         double immediateNpv = injectWithdrawNpv - injectWithdrawCostNpv + cmdtyUsedForInjectWithdrawNpv;
 
-                        // TODO interpolate continuation value
                         double continuationValue =
                             InterpolateContinuationValue(inventoryAfterDecision, inventoryGridNexPeriod, regressContinuationValues, simIndex);
 
@@ -452,6 +467,8 @@ namespace Cmdty.Storage
                 double forwardPrice = forwardCurve[period];
                 double periodDelta = sumSpotPriceTimesVolume / forwardPrice / numSims;
                 deltas[periodIndex] = periodDelta;
+                progress += forwardStepProgressPcnt;
+                onProgressUpdate?.Invoke(progress);
             }
             
             // TODO calculate PV from forward loop and compare?
@@ -460,6 +477,7 @@ namespace Cmdty.Storage
             double storageNpv = storageActualValuesNextPeriod[0].Average(); // TODO use non-linq average?
 
             var deltasSeries = new DoubleTimeSeries<T>(periodsForResultsTimeSeries[0], deltas);
+            onProgressUpdate?.Invoke(1.0); // Progress with approximately 1.0 should have occured already, but might have been a bit off because of floating-point error.
             return new LsmcStorageValuationResults<T>(storageNpv, null, null, deltasSeries);
         }
 
