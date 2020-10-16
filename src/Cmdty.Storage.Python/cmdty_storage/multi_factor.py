@@ -255,7 +255,7 @@ def three_factor_seasonal_value(cmdty_storage: CmdtyStorage,
                        regress_cross_products: bool = True,
                        num_inventory_grid_points: int = 100,
                        numerical_tolerance: float = 1E-12,
-                       on_progress_update: tp.Optional[tp.Callable[[float], tp.NoReturn]] = None,
+                       on_progress_update: tp.Optional[tp.Callable[[float], None]] = None,
                         ) -> MultiFactorValuationResults:
     time_period_type = utils.FREQ_TO_PERIOD_TYPE[cmdty_storage.freq]
     net_current_period = utils.from_datetime_like(val_date, time_period_type)
@@ -297,7 +297,7 @@ def multi_factor_value(cmdty_storage: CmdtyStorage,
                        regress_cross_products: bool = True,
                        num_inventory_grid_points: int = 100,
                        numerical_tolerance: float = 1E-12,
-                       on_progress_update: tp.Optional[tp.Callable[[float], tp.NoReturn]] = None,
+                       on_progress_update: tp.Optional[tp.Callable[[float], None]] = None,
                        ) -> MultiFactorValuationResults:
     factor_corrs = _validate_multi_factor_params(factors, factor_corrs)
     if cmdty_storage.freq != fwd_curve.index.freqstr:
