@@ -385,7 +385,7 @@ namespace Cmdty.Storage
                 startingInventories[i] = startingInventory; // TODO ch
             inventories[0] = startingInventories;
 
-            double forwardStepProgressPcnt = (1.0 - BackwardPcntTime) / (periodsForResultsTimeSeries.Length - 1);
+            double forwardStepProgressPcnt = (1.0 - BackwardPcntTime) / periodsForResultsTimeSeries.Length;
             for (int periodIndex = 0; periodIndex < periodsForResultsTimeSeries.Length - 1; periodIndex++) // TODO more clearly handle this -1
             {
                 T period = periodsForResultsTimeSeries[periodIndex];
