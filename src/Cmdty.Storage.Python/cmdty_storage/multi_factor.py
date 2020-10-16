@@ -251,7 +251,7 @@ def three_factor_seasonal_value(cmdty_storage: CmdtyStorage,
                         seasonal_vol: float,
                        num_sims: int,
                        seed: tp.Optional[int] = None,
-                       regress_poly_degree: int = 2,
+                       regress_poly_degree: int = 2, # TODO either increase this or make it non-optional
                        regress_cross_products: bool = True,
                        num_inventory_grid_points: int = 100,
                        numerical_tolerance: float = 1E-12,

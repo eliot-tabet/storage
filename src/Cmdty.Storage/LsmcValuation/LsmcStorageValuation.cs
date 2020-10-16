@@ -38,7 +38,8 @@ namespace Cmdty.Storage
     public static class LsmcStorageValuation
     {
         private const double FloatingPointTol = 1E-8;   // TODO better way to pick this.
-        private const double BackwardPcntTime = 0.7;    // TODO estimate what this should be.
+        // This has been very roughly estimated. Probably there is a better way of splitting up progress by estimating the order of the backward and forward components.
+        private const double BackwardPcntTime = 0.96;
 
         public static LsmcStorageValuationResults<T> Calculate<T>(T currentPeriod, double startingInventory,
             TimeSeries<T, double> forwardCurve, ICmdtyStorage<T> storage, Func<T, Day> settleDateRule,
