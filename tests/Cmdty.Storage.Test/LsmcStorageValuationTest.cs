@@ -27,10 +27,10 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Threading;
 using Cmdty.Core.Simulation.MultiFactor;
 using Cmdty.TimePeriodValueTypes;
 using Cmdty.TimeSeries;
-using MathNet.Numerics;
 using Xunit;
 using Xunit.Abstractions;
 using TimeSeriesFactory = Cmdty.TimeSeries.TimeSeries;
@@ -38,9 +38,6 @@ using TimeSeriesFactory = Cmdty.TimeSeries.TimeSeries;
 namespace Cmdty.Storage.Test
 {
     // TODO test:
-    // Current date equals storage end date
-    // Current date equals day before storage end date
-    // Current date after storage end date
     // Call option test with two factors
 
     public sealed class LsmcStorageValuationTest
@@ -153,7 +150,17 @@ namespace Cmdty.Storage.Test
                 _1FDailyMultiFactorParams, NumSims, RandomSeed, RegressMaxDegree, RegressCrossProducts);
             Assert.Equal(0.0, lsmcResults.Npv);
         }
-        // TODO same unit test as above, but testing the other output data, delta, decision, simulated prices etc.
+
+        [Fact]
+        public void Calculate_CurrentPeriodAfterStorageEnd_ResultWithEmptyDeltas()
+        {
+            Day valDate = _simpleDailyStorage.EndPeriod + 1;
+            LsmcStorageValuationResults<Day> lsmcResults = LsmcStorageValuation.Calculate(valDate, Inventory,
+                _forwardCurve, _simpleDailyStorage, _settleDateRule, _flatInterestRateDiscounter, _gridCalc, NumTolerance,
+                _1FDailyMultiFactorParams, NumSims, RandomSeed, RegressMaxDegree, RegressCrossProducts);
+            Assert.True(lsmcResults.Deltas.IsEmpty);
+        }
+        // TODO same unit test as above, but testing the other output data, decision, simulated prices etc.
 
         [Fact]
         public void Calculate_CurrentPeriodEqualToStorageEndStorageMustBeEmptyAtEnd_ResultWithZeroNpv()
@@ -165,7 +172,19 @@ namespace Cmdty.Storage.Test
                 _1FDailyMultiFactorParams, NumSims, RandomSeed, RegressMaxDegree, RegressCrossProducts);
             Assert.Equal(0.0, lsmcResults.Npv);
         }
-        // TODO same unit test as above, but testing the other output data, delta, decision, simulated prices etc.
+
+        [Fact]
+        public void Calculate_CurrentPeriodEqualToStorageEndStorageMustBeEmptyAtEnd_ResultWithEmptyDeltas()
+        {
+            Day valDate = _simpleDailyStorage.EndPeriod;
+            const double inventory = 0.0;
+            LsmcStorageValuationResults<Day> lsmcResults = LsmcStorageValuation.Calculate(valDate, inventory,
+                _forwardCurve, _simpleDailyStorage, _settleDateRule, _flatInterestRateDiscounter, _gridCalc, NumTolerance,
+                _1FDailyMultiFactorParams, NumSims, RandomSeed, RegressMaxDegree, RegressCrossProducts);
+            Assert.True(lsmcResults.Deltas.IsEmpty);
+        }
+
+        // TODO same unit test as above, but testing the other output data, decision, simulated prices etc.
 
         [Fact]
         public void Calculate_CurrentPeriodEqualToStorageEndAndInventoryHasTerminalValue_NpvEqualsTerminalValue()
@@ -180,6 +199,7 @@ namespace Cmdty.Storage.Test
             double expectedNpv = _terminalInventoryValue(valDateSpotPrice, inventory);
             Assert.Equal(expectedNpv, lsmcResults.Npv);
         }
+
         // TODO same unit test as above, but testing the other output data, delta, decision, simulated prices etc.
 
         [Fact]
@@ -197,7 +217,20 @@ namespace Cmdty.Storage.Test
             double expectedNpv = inventory * valDateSpotPrice * discountFactor - constantWithdrawalCost * inventory;
             Assert.Equal(expectedNpv, lsmcResults.Npv, 8);
         }
-        // TODO same unit test as above, but testing the other output data, delta, decision, simulated prices etc.
+
+        [Fact]
+        public void Calculate_CurrentPeriodDayBeforeStorageEndAndStorageMustBeEmptyAtEnd_DeltaEqualsInventory()
+        {
+            Day valDate = _simpleDailyStorage.EndPeriod - 1;
+            const double inventory = 352.14;
+            LsmcStorageValuationResults<Day> lsmcResults = LsmcStorageValuation.Calculate(valDate, inventory,
+                _forwardCurve, _simpleDailyStorage, _settleDateRule, _flatInterestRateDiscounter, _gridCalc, NumTolerance,
+                _1FDailyMultiFactorParams, NumSims, RandomSeed, RegressMaxDegree, RegressCrossProducts);
+
+            Assert.Equal(inventory, lsmcResults.Deltas[valDate], 10);
+        }
+
+        // TODO same unit test as above, but testing the other output data, decision, simulated prices etc.
 
         // TODO terminal value looks like call option payoff, value day before equals call value
 
@@ -226,7 +259,6 @@ namespace Cmdty.Storage.Test
             IDoubleStateSpaceGridCalc gridSpace = 
                 FixedSpacingStateSpaceGridCalc.CreateForFixedNumberOfPointsOnGlobalInventoryRange(testData.Storage, numInventorySpacePoints);
 
-            Control.UseNativeMKL();
             LsmcStorageValuationResults<Day> results = LsmcStorageValuation.Calculate(valDate, testData.Inventory,
                 forwardCurve,
                 testData.Storage, SettleDateRule, discounter, gridSpace, numTolerance,
@@ -244,13 +276,64 @@ namespace Cmdty.Storage.Test
                 expectStorageValue += black76Value;
             }
 
-            _testOutputHelper.WriteLine(results.Npv.ToString(CultureInfo.InvariantCulture));
-
             double percentError = (results.Npv - expectStorageValue) / expectStorageValue;
             const double percentErrorLowerBound = -0.02; // Calculated value cannot be more than 2% lower than call options
             const double percentErrorUpperBound = 0.0; // Calculate value will not be higher than call options as LSMC is a lower bound approximation
 
             Assert.InRange(percentError, percentErrorLowerBound, percentErrorUpperBound);
+        }
+
+        [Fact]
+        public void Calculate_StorageLikeCallOptionsOneFactor_DeltaEqualsBlack76DeltaUndiscounted()
+        {
+            var valDate = new Day(2019, 8, 29);
+            const int numInventorySpacePoints = 100;
+            const int numSims = 2_000;
+            const int seed = 8;
+
+            (DoubleTimeSeries<Day> forwardCurve, DoubleTimeSeries<Day> spotVolCurve) =
+                TestHelper.CreateDailyTestForwardAndSpotVolCurves(valDate, new Day(2020, 4, 1));
+            const double meanReversion = 16.5;
+            const double interestRate = 0.09;
+            const double numTolerance = 1E-10;
+            const int regressMaxDegree = 3;
+            const bool regressCrossProducts = false;
+
+            TestHelper.CallOptionLikeTestData testData = TestHelper.CreateThreeCallsLikeStorageTestData(forwardCurve);
+
+            var multiFactorParams = MultiFactorParameters.For1Factor(meanReversion, spotVolCurve);
+
+            Day SettleDateRule(Day settleDate) => testData.SettleDates[Month.FromDateTime(settleDate.Start)];
+            Func<Day, Day, double> discounter = StorageHelper.CreateAct65ContCompDiscounter(interestRate);
+            IDoubleStateSpaceGridCalc gridSpace =
+                FixedSpacingStateSpaceGridCalc.CreateForFixedNumberOfPointsOnGlobalInventoryRange(testData.Storage,
+                    numInventorySpacePoints);
+
+            LsmcStorageValuationResults<Day> results = LsmcStorageValuation.Calculate(valDate, testData.Inventory,
+                forwardCurve,
+                testData.Storage, SettleDateRule, discounter, gridSpace, numTolerance,
+                multiFactorParams, numSims, seed, regressMaxDegree, regressCrossProducts);
+
+            const double tol = 0.04; // 4% tolerance
+
+            foreach ((Day day, double delta) in results.Deltas)
+            {
+                if (testData.CallOptions.Any(option => option.ExpiryDate == day))
+                {
+                    TestHelper.CallOption option = testData.CallOptions.Single(call => call.ExpiryDate == day);
+                    double impliedVol =
+                        TestHelper.OneFactorImpliedVol(valDate, option.ExpiryDate, spotVolCurve, meanReversion);
+                    double forwardPrice = forwardCurve[option.ExpiryDate];
+                    double black76DeltaUndiscounted = TestHelper.Black76CallOptionDeltaUndiscounted(valDate, forwardPrice,
+                                                          impliedVol, option.StrikePrice, option.ExpiryDate) * option.NotionalVolume;
+                    double storageDelta = results.Deltas[option.ExpiryDate];
+                    // Storage delta should 
+                    TestHelper.AssertWithinPercentTol(storageDelta, black76DeltaUndiscounted, tol);
+                }
+                else
+                    Assert.Equal(0.0, delta);
+            }
+
         }
 
         [Fact]
@@ -578,5 +661,22 @@ namespace Cmdty.Storage.Test
             }
         }
 
+        [Fact]
+        public void Calculate_CancelCalls_ThrowsOperationCanceledException()
+        {
+            const int numSims = 10_000; // Large number of sims to ensure valuation doesn't finish cancel called
+            var cancellationTokenSource = new CancellationTokenSource();
+            
+            Assert.Throws<OperationCanceledException>(() =>
+            {
+                cancellationTokenSource.CancelAfter(TimeSpan.FromSeconds(1));
+                // ReSharper disable once UnusedVariable
+                LsmcStorageValuationResults<Day> lsmcResults = LsmcStorageValuation.Calculate(_valDate, Inventory,
+                    _forwardCurve, _simpleDailyStorage, _settleDateRule, _flatInterestRateDiscounter, _gridCalc,
+                    NumTolerance, _1FDailyMultiFactorParams, numSims, RandomSeed, RegressMaxDegree, RegressCrossProducts,
+                    cancellationTokenSource.Token);
+            });
+        }
+        
     }
 }

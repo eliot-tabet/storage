@@ -26,6 +26,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using Cmdty.Core.Simulation;
 using Cmdty.Core.Simulation.MultiFactor;
 using Cmdty.TimePeriodValueTypes;
@@ -50,14 +51,32 @@ namespace Cmdty.Storage
             int numSims,
             int? seed,
             int regressMaxPolyDegree, bool regressCrossProducts,
+            CancellationToken cancellationToken,
             Action<double> onProgressUpdate = null)
             where T : ITimePeriod<T>
         {
-            var normalGenerator = seed == null ? new MersenneTwisterGenerator(true) : 
+            var normalGenerator = seed == null ? new MersenneTwisterGenerator(true) :
                 new MersenneTwisterGenerator(seed.Value, true);
             return Calculate(currentPeriod, startingInventory, forwardCurve, storage, settleDateRule, discountFactors,
                 gridCalc, numericalTolerance, modelParameters, normalGenerator, numSims, regressMaxPolyDegree,
-                regressCrossProducts, onProgressUpdate);
+                regressCrossProducts, cancellationToken, onProgressUpdate);
+        }
+
+        public static LsmcStorageValuationResults<T> Calculate<T>(T currentPeriod, double startingInventory,
+            TimeSeries<T, double> forwardCurve, ICmdtyStorage<T> storage, Func<T, Day> settleDateRule,
+            Func<Day, Day, double> discountFactors,
+            IDoubleStateSpaceGridCalc gridCalc,
+            double numericalTolerance,
+            MultiFactorParameters<T> modelParameters,
+            int numSims,
+            int? seed,
+            int regressMaxPolyDegree, bool regressCrossProducts,
+            Action<double> onProgressUpdate = null)
+            where T : ITimePeriod<T>
+        {
+            return Calculate(currentPeriod, startingInventory, forwardCurve, storage, settleDateRule, discountFactors,
+                gridCalc, numericalTolerance, modelParameters, numSims, seed, regressMaxPolyDegree,
+                regressCrossProducts, CancellationToken.None, onProgressUpdate);
         }
 
         public static LsmcStorageValuationResults<T> Calculate<T>(T currentPeriod, double startingInventory,
@@ -69,6 +88,26 @@ namespace Cmdty.Storage
             IStandardNormalGenerator normalGenerator,
             int numSims,
             int regressMaxPolyDegree, bool regressCrossProducts,
+            Action<double> onProgressUpdate = null)
+            where T : ITimePeriod<T>
+        {
+            return Calculate(currentPeriod, startingInventory, forwardCurve, storage, settleDateRule, discountFactors,
+                gridCalc, numericalTolerance, modelParameters,
+                normalGenerator, numSims, regressMaxPolyDegree, regressCrossProducts, CancellationToken.None,
+                onProgressUpdate);
+        }
+
+
+        public static LsmcStorageValuationResults<T> Calculate<T>(T currentPeriod, double startingInventory,
+            TimeSeries<T, double> forwardCurve, ICmdtyStorage<T> storage, Func<T, Day> settleDateRule,
+            Func<Day, Day, double> discountFactors,
+            IDoubleStateSpaceGridCalc gridCalc,
+            double numericalTolerance,
+            MultiFactorParameters<T> modelParameters,
+            IStandardNormalGenerator normalGenerator,
+            int numSims,
+            int regressMaxPolyDegree, bool regressCrossProducts,
+            CancellationToken cancellationToken,
             Action<double> onProgressUpdate = null)
             where T : ITimePeriod<T>
         {
@@ -96,7 +135,7 @@ namespace Cmdty.Storage
             }
 
             return Calculate(currentPeriod, startingInventory, forwardCurve, storage, settleDateRule, discountFactors,
-                gridCalc, numericalTolerance, spotSims, regressMaxPolyDegree, regressCrossProducts, onProgressUpdate);
+                gridCalc, numericalTolerance, spotSims, regressMaxPolyDegree, regressCrossProducts, cancellationToken, onProgressUpdate);
         }
 
         public static LsmcStorageValuationResults<T> Calculate<T>(T currentPeriod, double startingInventory,
@@ -104,6 +143,23 @@ namespace Cmdty.Storage
             Func<Day, Day, double> discountFactors,
             IDoubleStateSpaceGridCalc gridCalc,
             double numericalTolerance, ISpotSimResults<T> spotSims, int regressMaxPolyDegree, bool regressCrossProducts,
+            Action<double> onProgressUpdate = null)
+            where T : ITimePeriod<T>
+        {
+            return Calculate(currentPeriod, startingInventory,
+                forwardCurve, storage, settleDateRule,
+                discountFactors,
+                gridCalc,
+                numericalTolerance, spotSims, regressMaxPolyDegree, regressCrossProducts,
+                CancellationToken.None, onProgressUpdate);
+        }
+
+        public static LsmcStorageValuationResults<T> Calculate<T>(T currentPeriod, double startingInventory,
+            TimeSeries<T, double> forwardCurve, ICmdtyStorage<T> storage, Func<T, Day> settleDateRule,
+            Func<Day, Day, double> discountFactors,
+            IDoubleStateSpaceGridCalc gridCalc,
+            double numericalTolerance, ISpotSimResults<T> spotSims, int regressMaxPolyDegree, bool regressCrossProducts,
+            CancellationToken cancellationToken,
             Action<double> onProgressUpdate = null)
             where T : ITimePeriod<T>
         {
@@ -375,6 +431,7 @@ namespace Cmdty.Storage
                 backCounter--;
                 progress += backStepProgressPcnt;
                 onProgressUpdate?.Invoke(progress);
+                cancellationToken.ThrowIfCancellationRequested();
             }
             
             var inventories = new double[periodsForResultsTimeSeries.Length + 1][]; // TODO rethink this + 1
@@ -470,8 +527,9 @@ namespace Cmdty.Storage
                 deltas[periodIndex] = periodDelta;
                 progress += forwardStepProgressPcnt;
                 onProgressUpdate?.Invoke(progress);
+                cancellationToken.ThrowIfCancellationRequested();
             }
-            
+
             // TODO calculate PV from forward loop and compare?
             // Calculate NPVs for first active period using current inventory
             // TODO this is unnecessarily introducing floating point error if the val date is during the storage active period and there should not be a Vector of simulated spot prices

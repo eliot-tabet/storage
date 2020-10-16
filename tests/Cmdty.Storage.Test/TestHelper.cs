@@ -38,19 +38,39 @@ namespace Cmdty.Storage.Test
         internal static double Black76CallOptionValue(Day valDate, double forwardPrice, double impliedVol, double interestRate,
             double strikePrice, Day expiryDate, Day settlementDate)
         {
-            double timeToDiscount = (settlementDate - valDate) / 365.0;
-            double discountFactor = Math.Exp(-timeToDiscount * interestRate);
+            double discountFactor = DiscountFactor(valDate, interestRate, settlementDate);
 
             double timeToExpiry = (expiryDate - valDate) / 365.0;
             double volRootTimeToExpiry = impliedVol * Math.Sqrt(timeToExpiry);
 
-            double d1 = (Math.Log(forwardPrice / strikePrice) + impliedVol * impliedVol / 2 * timeToExpiry) / volRootTimeToExpiry;
+            double d1 = D1(forwardPrice, impliedVol, strikePrice, timeToExpiry, volRootTimeToExpiry);
             double d2 = d1 - volRootTimeToExpiry;
 
             double callOptionValue =
                 discountFactor * (forwardPrice * Normal.CDF(0, 1, d1) - strikePrice * Normal.CDF(0, 1, d2));
 
             return callOptionValue;
+        }
+
+        private static double DiscountFactor(Day valDate, double interestRate, Day settlementDate)
+        {
+            double timeToDiscount = (settlementDate - valDate) / 365.0;
+            double discountFactor = Math.Exp(-timeToDiscount * interestRate);
+            return discountFactor;
+        }
+
+        private static double D1(double forwardPrice, double impliedVol, double strikePrice, double timeToExpiry, double volRootTimeToExpiry)
+        {
+            return (Math.Log(forwardPrice / strikePrice) + impliedVol * impliedVol / 2 * timeToExpiry) / volRootTimeToExpiry;
+        }
+
+        internal static double Black76CallOptionDeltaUndiscounted(Day valDate, double forwardPrice, double impliedVol,
+            double strikePrice, Day expiryDate)
+        {
+            double timeToExpiry = (expiryDate - valDate) / 365.0;
+            double volRootTimeToExpiry = impliedVol * Math.Sqrt(timeToExpiry);
+            double d1 = D1(forwardPrice, impliedVol, strikePrice, timeToExpiry, volRootTimeToExpiry);
+            return Normal.CDF(0, 1, d1);
         }
 
         internal static double OneFactorImpliedVol(Day valDate, Day expiryDate, TimeSeries<Day, double> spotVolCurve, double meanReversion)
