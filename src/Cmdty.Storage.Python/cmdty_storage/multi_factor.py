@@ -255,7 +255,6 @@ def three_factor_seasonal_value(cmdty_storage: CmdtyStorage,
                                 regress_cross_products: bool = True,
                                 num_inventory_grid_points: int = 100,
                                 numerical_tolerance: float = 1E-12,
-                                canceller: utils.Canceller = None,
                                 on_progress_update: tp.Optional[tp.Callable[[float], None]] = None,
                                 ) -> MultiFactorValuationResults:
     time_period_type = utils.FREQ_TO_PERIOD_TYPE[cmdty_storage.freq]
@@ -271,7 +270,6 @@ def three_factor_seasonal_value(cmdty_storage: CmdtyStorage,
     net_interest_rate_time_series = utils.series_to_double_time_series(interest_rates, utils.FREQ_TO_PERIOD_TYPE['D'])
     net_discount_func = net_cs.StorageHelper.CreateAct65ContCompDiscounterFromSeries(net_interest_rate_time_series)
     net_on_progress = utils.wrap_on_progress_for_dotnet(on_progress_update)
-    net_cancel_token = utils.Canceller.none_cancel_token() if canceller is None else canceller.net_cancel_token()
 
     net_val_results = net_cs.LsmcStorageValuation.Calculate[time_period_type](net_current_period,
                                                                               inventory, net_forward_curve,
@@ -281,7 +279,6 @@ def three_factor_seasonal_value(cmdty_storage: CmdtyStorage,
                                                                               net_multi_factor_params, num_sims, seed,
                                                                               regress_poly_degree,
                                                                               regress_cross_products,
-                                                                              net_cancel_token,
                                                                               net_on_progress)
     deltas = utils.net_time_series_to_pandas_series(net_val_results.Deltas, cmdty_storage.freq)
     return MultiFactorValuationResults(net_val_results.Npv, deltas)
@@ -301,7 +298,6 @@ def multi_factor_value(cmdty_storage: CmdtyStorage,
                        regress_cross_products: bool = True,
                        num_inventory_grid_points: int = 100,
                        numerical_tolerance: float = 1E-12,
-                       canceller: utils.Canceller = None,
                        on_progress_update: tp.Optional[tp.Callable[[float], None]] = None,
                        ) -> MultiFactorValuationResults:
     factor_corrs = _validate_multi_factor_params(factors, factor_corrs)
@@ -318,7 +314,6 @@ def multi_factor_value(cmdty_storage: CmdtyStorage,
     net_interest_rate_time_series = utils.series_to_double_time_series(interest_rates, utils.FREQ_TO_PERIOD_TYPE['D'])
     net_discount_func = net_cs.StorageHelper.CreateAct65ContCompDiscounterFromSeries(net_interest_rate_time_series)
     net_on_progress = utils.wrap_on_progress_for_dotnet(on_progress_update)
-    net_cancel_token = utils.Canceller.none_cancel_token() if canceller is None else canceller.net_cancel_token()
 
     net_val_results = net_cs.LsmcStorageValuation.Calculate[time_period_type](net_current_period,
                                                                               inventory, net_forward_curve,
@@ -328,7 +323,6 @@ def multi_factor_value(cmdty_storage: CmdtyStorage,
                                                                               net_multi_factor_params, num_sims, seed,
                                                                               regress_poly_degree,
                                                                               regress_cross_products,
-                                                                              net_cancel_token,
                                                                               net_on_progress)
     deltas = utils.net_time_series_to_pandas_series(net_val_results.Deltas, cmdty_storage.freq)
     return MultiFactorValuationResults(net_val_results.Npv, deltas)

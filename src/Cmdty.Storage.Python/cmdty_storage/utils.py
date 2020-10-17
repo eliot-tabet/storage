@@ -151,22 +151,6 @@ def wrap_on_progress_for_dotnet(py_on_progress):
     return dotnet.Action[dotnet.Double](py_on_progress)
 
 
-class Canceller:
-
-    def __init__(self):
-        self._net_cancel_source = dotnet.Threading.CancellationTokenSource()
-
-    def cancel(self):
-        self._net_cancel_source.Cancel()
-
-    def net_cancel_token(self):
-        return self._net_cancel_source.Token
-
-    @staticmethod
-    def none_cancel_token():
-        return dotnet.Threading.CancellationTokenSource().Token
-
-
 # TODO get rid of TimePeriodSpecType or ForwardPointType?
 # TODO check that each type definition is correct still
 TimePeriodSpecType = tp.Union[str, datetime, date, pd.Period]

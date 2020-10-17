@@ -42,6 +42,24 @@ namespace Cmdty.Storage
         // This has been very roughly estimated. Probably there is a better way of splitting up progress by estimating the order of the backward and forward components.
         private const double BackwardPcntTime = 0.96;
 
+
+        public static LsmcStorageValuationResults<T> Calculate<T>(T currentPeriod, double startingInventory,
+            TimeSeries<T, double> forwardCurve, ICmdtyStorage<T> storage, Func<T, Day> settleDateRule,
+            Func<Day, Day, double> discountFactors,
+            IDoubleStateSpaceGridCalc gridCalc,
+            double numericalTolerance,
+            MultiFactorParameters<T> modelParameters,
+            int numSims,
+            int? seed,
+            int regressMaxPolyDegree, bool regressCrossProducts,
+            Action<double> onProgressUpdate = null)
+            where T : ITimePeriod<T>
+        {
+            return Calculate(currentPeriod, startingInventory, forwardCurve, storage, settleDateRule, discountFactors,
+                gridCalc, numericalTolerance, modelParameters, numSims, seed, regressMaxPolyDegree,
+                regressCrossProducts, CancellationToken.None, onProgressUpdate);
+        }
+        
         public static LsmcStorageValuationResults<T> Calculate<T>(T currentPeriod, double startingInventory,
             TimeSeries<T, double> forwardCurve, ICmdtyStorage<T> storage, Func<T, Day> settleDateRule,
             Func<Day, Day, double> discountFactors,
@@ -60,23 +78,6 @@ namespace Cmdty.Storage
             return Calculate(currentPeriod, startingInventory, forwardCurve, storage, settleDateRule, discountFactors,
                 gridCalc, numericalTolerance, modelParameters, normalGenerator, numSims, regressMaxPolyDegree,
                 regressCrossProducts, cancellationToken, onProgressUpdate);
-        }
-
-        public static LsmcStorageValuationResults<T> Calculate<T>(T currentPeriod, double startingInventory,
-            TimeSeries<T, double> forwardCurve, ICmdtyStorage<T> storage, Func<T, Day> settleDateRule,
-            Func<Day, Day, double> discountFactors,
-            IDoubleStateSpaceGridCalc gridCalc,
-            double numericalTolerance,
-            MultiFactorParameters<T> modelParameters,
-            int numSims,
-            int? seed,
-            int regressMaxPolyDegree, bool regressCrossProducts,
-            Action<double> onProgressUpdate = null)
-            where T : ITimePeriod<T>
-        {
-            return Calculate(currentPeriod, startingInventory, forwardCurve, storage, settleDateRule, discountFactors,
-                gridCalc, numericalTolerance, modelParameters, numSims, seed, regressMaxPolyDegree,
-                regressCrossProducts, CancellationToken.None, onProgressUpdate);
         }
 
         public static LsmcStorageValuationResults<T> Calculate<T>(T currentPeriod, double startingInventory,

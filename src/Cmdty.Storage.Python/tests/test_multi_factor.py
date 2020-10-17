@@ -24,13 +24,10 @@
 import unittest
 import pandas as pd
 import numpy as np
-from cmdty_storage import multi_factor as mf, multi_factor_value, CmdtyStorage, three_factor_seasonal_value, Canceller
+from cmdty_storage import multi_factor as mf, multi_factor_value, CmdtyStorage, three_factor_seasonal_value
 from datetime import date
 import itertools
 from tests import utils
-import threading
-import clr
-import System as dotnet
 
 
 # TODO regression with antithetic
@@ -222,69 +219,6 @@ class TestMultiFactorValue(unittest.TestCase):
         self.assertEqual(progresses[-1], 1.0)
         self.assertEqual(245, len(progresses))
 
-    def test_multi_factor_value_cancellation(self):  # TODO reuse common code
-        storage_start = '2019-12-01'
-        storage_end = '2020-04-01'
-        constant_injection_rate = 700.0
-        constant_withdrawal_rate = 700.0
-        constant_injection_cost = 1.23
-        constant_withdrawal_cost = 0.98
-        min_inventory = 0.0
-        max_inventory = 100000.0
-
-        cmdty_storage = CmdtyStorage('D', storage_start, storage_end, constant_injection_cost,
-                                     constant_withdrawal_cost, min_inventory=min_inventory,
-                                     max_inventory=max_inventory,
-                                     max_injection_rate=constant_injection_rate,
-                                     max_withdrawal_rate=constant_withdrawal_rate)
-        inventory = 0.0
-        val_date = '2019-08-29'
-        low_price = 23.87
-        high_price = 150.32
-        date_switch_high_price = '2020-03-12'
-        forward_curve = utils.create_piecewise_flat_series([low_price, high_price, high_price],
-                                                           [val_date, date_switch_high_price,
-                                                            storage_end], freq='D')
-
-        flat_interest_rate = 0.03
-        interest_rate_curve = pd.Series(index=pd.period_range(val_date, '2020-06-01', freq='D'))
-        interest_rate_curve[:] = flat_interest_rate
-
-        # Multi-Factor parameters
-        mean_reversion = 16.2
-        spot_volatility = pd.Series(index=pd.period_range(val_date, '2020-06-01', freq='D'))
-        spot_volatility[:] = 1.15
-
-        def twentieth_of_next_month(period): return period.asfreq('M').asfreq('D', 'end') + 20
-
-        long_term_vol = pd.Series(index=pd.period_range(val_date, '2020-06-01', freq='D'))
-        long_term_vol[:] = 0.14
-
-        factors = [(0.0, long_term_vol),
-                   (mean_reversion, spot_volatility)]
-        factor_corrs = 0.64
-
-        # Simulation parameter
-        num_sims = 10000
-        seed = 11
-        canceller = Canceller()
-        exceptions = []
-
-        def run_val():
-            try:
-                return multi_factor_value(cmdty_storage, val_date, inventory, forward_curve,
-                                          interest_rate_curve, twentieth_of_next_month,
-                                          factors, factor_corrs, num_sims, seed, regress_cross_products=False,
-                                          canceller=canceller)
-            except Exception as e:
-                exceptions.append(e)
-
-        thread = threading.Thread(target=run_val)  # Run in different thread to allow cancellation
-        thread.start()
-        canceller.cancel()
-        thread.join()
-        self.assertEqual(1, len(exceptions))
-
     def test_three_factor_seasonal_regression(self):
         storage_start = '2019-12-01'
         storage_end = '2020-04-01'
@@ -339,72 +273,6 @@ class TestMultiFactorValue(unittest.TestCase):
         self.assertAlmostEqual(multi_factor_val.npv, 1766157.090481408, places=6)
         self.assertEqual(progresses[-1], 1.0)
         self.assertEqual(245, len(progresses))
-
-    def test_three_factor_seasonal_cancellation(self):
-        storage_start = '2019-12-01'
-        storage_end = '2020-04-01'
-        constant_injection_rate = 700.0
-        constant_withdrawal_rate = 700.0
-        constant_injection_cost = 1.23
-        constant_withdrawal_cost = 0.98
-        min_inventory = 0.0
-        max_inventory = 100000.0
-
-        cmdty_storage = CmdtyStorage('D', storage_start, storage_end, constant_injection_cost,
-                                     constant_withdrawal_cost, min_inventory=min_inventory,
-                                     max_inventory=max_inventory,
-                                     max_injection_rate=constant_injection_rate,
-                                     max_withdrawal_rate=constant_withdrawal_rate)
-        inventory = 0.0
-        val_date = '2019-08-29'
-        low_price = 23.87
-        high_price = 150.32
-        date_switch_high_price = '2020-03-12'
-        forward_curve = utils.create_piecewise_flat_series([low_price, high_price, high_price],
-                                                           [val_date, date_switch_high_price,
-                                                            storage_end], freq='D')
-
-        flat_interest_rate = 0.03
-        interest_rate_curve = pd.Series(index=pd.period_range(val_date, '2020-06-01', freq='D'))
-        interest_rate_curve[:] = flat_interest_rate
-
-        # Multi-Factor parameters
-        spot_mean_reversion = 16.2
-        spot_volatility = 1.15
-        seasonal_volatility = 0.18
-        long_term_vol = 0.14
-
-        def twentieth_of_next_month(period): return period.asfreq('M').asfreq('D', 'end') + 20
-
-        progresses = []
-
-        def on_progress(progress): progresses.append(progress)
-
-        # Simulation parameter
-        num_sims = 500
-        seed = 11
-        regress_cross_products = False
-        canceller = Canceller()
-        exceptions = []
-
-        def run_val():
-            try:
-                return three_factor_seasonal_value(cmdty_storage, val_date, inventory, forward_curve,
-                                                       interest_rate_curve, twentieth_of_next_month,
-                                                       spot_mean_reversion, spot_volatility, long_term_vol,
-                                                       seasonal_volatility,
-                                                       num_sims, seed,
-                                                       regress_cross_products=regress_cross_products,
-                                                        canceller=canceller,
-                                                       on_progress_update=on_progress)
-            except Exception as e:
-                exceptions.append(e)
-
-        thread = threading.Thread(target=run_val)  # Run in different thread to allow cancellation
-        thread.start()
-        canceller.cancel()
-        thread.join()
-        self.assertEqual(1, len(exceptions))
 
 
 if __name__ == '__main__':
