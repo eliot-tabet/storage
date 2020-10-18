@@ -93,17 +93,17 @@ def intrinsic_value(cmdty_storage: CmdtyStorage,
     inject_withdraw_volumes = [None] * net_profile.Count
     cmdty_consumed = [None] * net_profile.Count
     inventory_loss = [None] * net_profile.Count
-    net_position = [None] * net_profile.Count
+    net_volume = [None] * net_profile.Count
 
     for i, profile_data in enumerate(net_profile.Data):
         inventories[i] = profile_data.Inventory
         inject_withdraw_volumes[i] = profile_data.InjectWithdrawVolume
         cmdty_consumed[i] = profile_data.CmdtyConsumed
         inventory_loss[i] = profile_data.InventoryLoss
-        net_position[i] = profile_data.NetPosition
+        net_volume[i] = profile_data.NetVolume
 
     data_frame_data = {'inventory' : inventories, 'inject_withdraw_volume' : inject_withdraw_volumes,
-                  'cmdty_consumed' : cmdty_consumed, 'inventory_loss' : inventory_loss, 'net_position' : net_position}
+                  'cmdty_consumed' : cmdty_consumed, 'inventory_loss' : inventory_loss, 'net_volume' : net_volume}
     data_frame = pd.DataFrame(data=data_frame_data, index=index)
     
     return IntrinsicValuationResults(net_val_results.NetPresentValue, data_frame)

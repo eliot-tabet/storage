@@ -31,22 +31,22 @@ namespace Cmdty.Storage
         public double InjectWithdrawVolume { get; }
         public double CmdtyConsumed { get; }
         public double InventoryLoss { get; }
-        public double NetPosition { get; }
+        public double NetVolume { get; }
 
         public StorageProfile(double inventory, double injectWithdrawVolume, double cmdtyConsumed, 
-                                double inventoryLoss, double netPosition)
+                                double inventoryLoss, double netVolume)
         {
             Inventory = inventory;
             InjectWithdrawVolume = injectWithdrawVolume;
             CmdtyConsumed = cmdtyConsumed;
             InventoryLoss = inventoryLoss;
-            NetPosition = netPosition;
+            NetVolume = netVolume;
         }
 
         public override string ToString()
         {
             return $"{nameof(Inventory)}: {Inventory}, {nameof(InjectWithdrawVolume)}: {InjectWithdrawVolume}, " +
-                   $"{nameof(CmdtyConsumed)}: {CmdtyConsumed}, {nameof(InventoryLoss)}: {InventoryLoss}, {nameof(NetPosition)}: {NetPosition}";
+                   $"{nameof(CmdtyConsumed)}: {CmdtyConsumed}, {nameof(InventoryLoss)}: {InventoryLoss}, {nameof(NetVolume)}: {NetVolume}";
         }
 
         public void Deconstruct(out double inventory, out double injectWithdrawVolume, out double cmdtyConsumed, out double inventoryLoss, out double netPosition)
@@ -55,7 +55,7 @@ namespace Cmdty.Storage
             injectWithdrawVolume = InjectWithdrawVolume;
             cmdtyConsumed = CmdtyConsumed;
             inventoryLoss = InventoryLoss;
-            netPosition = NetPosition;
+            netPosition = NetVolume;
         }
 
     }

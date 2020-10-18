@@ -455,7 +455,7 @@ namespace Cmdty.Storage.Test
 
             foreach (Day day in intrinsicProfile.Indices)
             {
-                double intrinsicVolume = intrinsicProfile[day].NetPosition;
+                double intrinsicVolume = intrinsicProfile[day].NetVolume;
                 double lsmcDelta = lsmcDeltas[day];
                 Assert.Equal(intrinsicVolume, lsmcDelta, precision);
             }
