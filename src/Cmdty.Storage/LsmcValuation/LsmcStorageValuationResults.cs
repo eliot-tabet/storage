@@ -23,7 +23,7 @@
 // OTHER DEALINGS IN THE SOFTWARE.
 #endregion
 
-using System.Collections.Generic;
+using Cmdty.Core.Common;
 using Cmdty.TimePeriodValueTypes;
 using Cmdty.TimeSeries;
 
@@ -33,31 +33,47 @@ namespace Cmdty.Storage
         where T : ITimePeriod<T>
     {
         public double Npv { get; }
-        public TimeSeries<T, IReadOnlyList<double>> InventorySpaceGrids { get; }
-        public TimeSeries<T, IReadOnlyList<IReadOnlyList<double>>> InjectWithdrawDecisions { get; }
         public DoubleTimeSeries<T> Deltas {get;}
+        public TimeSeries<T, StorageProfile> ExpectedStorageProfile { get; set; }
+        public Panel<T, double> SpotPriceBySim { get; }
+        public Panel<T, double> InventoryBySim { get; }
+        public Panel<T, double> InjectWithdrawVolumeBySim { get; }
+        public Panel<T, double> CmdtyConsumedBySim { get; }
+        public Panel<T, double> InventoryLossBySim { get; }
+        public Panel<T, double> NetVolumeBySim { get; }
 
-        public LsmcStorageValuationResults(double npv,
-            TimeSeries<T, IReadOnlyList<double>> inventorySpaceGrids,
-            TimeSeries<T, IReadOnlyList<IReadOnlyList<double>>> injectWithdrawDecisions,
-            DoubleTimeSeries<T> deltas)
+        public LsmcStorageValuationResults(double npv, DoubleTimeSeries<T> deltas, TimeSeries<T, StorageProfile> expectedStorageProfile, 
+            Panel<T, double> spotPriceBySim, 
+            Panel<T, double> inventoryBySim, Panel<T, double> injectWithdrawVolumeBySim, Panel<T, double> cmdtyConsumedBySim, 
+            Panel<T, double> inventoryLossBySim, Panel<T, double> netVolumeBySim)
         {
             Npv = npv;
-            InventorySpaceGrids = inventorySpaceGrids;
-            InjectWithdrawDecisions = injectWithdrawDecisions;
             Deltas = deltas;
+            ExpectedStorageProfile = expectedStorageProfile;
+            SpotPriceBySim = spotPriceBySim;
+            InventoryBySim = inventoryBySim;
+            InjectWithdrawVolumeBySim = injectWithdrawVolumeBySim;
+            CmdtyConsumedBySim = cmdtyConsumedBySim;
+            InventoryLossBySim = inventoryLossBySim;
+            NetVolumeBySim = netVolumeBySim;
         }
 
         public static LsmcStorageValuationResults<T> CreateExpiredResults()
         {
-            return new LsmcStorageValuationResults<T>(0.0, TimeSeries<T, IReadOnlyList<double>>.Empty, 
-                TimeSeries<T, IReadOnlyList<IReadOnlyList<double>>>.Empty, DoubleTimeSeries<T>.Empty);
+            return new LsmcStorageValuationResults<T>(0.0, DoubleTimeSeries<T>.Empty, TimeSeries<T, StorageProfile>.Empty,
+                Panel<T, double>.CreateEmpty(), Panel<T, double>.CreateEmpty(),
+                Panel<T, double>.CreateEmpty(), 
+                Panel<T, double>.CreateEmpty(), Panel<T, double>.CreateEmpty(),
+                Panel<T, double>.CreateEmpty());
         }
 
         public static LsmcStorageValuationResults<T> CreateEndPeriodResults(double npv)
         {
-            return new LsmcStorageValuationResults<T>(npv, TimeSeries<T, IReadOnlyList<double>>.Empty,
-                TimeSeries<T, IReadOnlyList<IReadOnlyList<double>>>.Empty, DoubleTimeSeries<T>.Empty);
+            return new LsmcStorageValuationResults<T>(npv, DoubleTimeSeries<T>.Empty, TimeSeries<T, StorageProfile>.Empty,
+                Panel<T, double>.CreateEmpty(), Panel<T, double>.CreateEmpty(), 
+                Panel<T, double>.CreateEmpty(),
+                Panel<T, double>.CreateEmpty(), Panel<T, double>.CreateEmpty(),
+                Panel<T, double>.CreateEmpty());
         }
 
     }

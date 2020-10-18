@@ -239,12 +239,10 @@ namespace Cmdty.Storage
 
                 inventoryLoop += optimalInjectWithdraw - inventoryLoss;
                 if (i == 0)
-                {
                     storageNpv = storageNpvLoop;
-                }
 
-                double netPosition = -optimalInjectWithdraw - cmdtyConsumedOnAction;
-                var storageProfile = new StorageProfile(inventoryLoop, optimalInjectWithdraw, cmdtyConsumedOnAction, inventoryLoss, netPosition);
+                double netVolume = -optimalInjectWithdraw - cmdtyConsumedOnAction;
+                var storageProfile = new StorageProfile(inventoryLoop, optimalInjectWithdraw, cmdtyConsumedOnAction, inventoryLoss, netVolume);
                 storageProfiles[i] = storageProfile;
                 periods[i] = periodLoop;
             }

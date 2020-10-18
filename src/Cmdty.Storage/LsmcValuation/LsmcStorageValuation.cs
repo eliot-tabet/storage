@@ -27,6 +27,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
+using Cmdty.Core.Common;
 using Cmdty.Core.Simulation;
 using Cmdty.Core.Simulation.MultiFactor;
 using Cmdty.TimePeriodValueTypes;
@@ -435,20 +436,24 @@ namespace Cmdty.Storage
                 cancellationToken.ThrowIfCancellationRequested();
             }
             
-            var inventories = new double[periodsForResultsTimeSeries.Length + 1][]; // TODO rethink this + 1
+            var inventoryBySim = new Panel<T, double>(periodsForResultsTimeSeries, numSims);
+            var injectWithdrawVolumeBySim = new Panel<T, double>(periodsForResultsTimeSeries, numSims);
+            var cmdtyConsumedBySim = new Panel<T, double>(periodsForResultsTimeSeries, numSims);
+            var inventoryLossBySim = new Panel<T, double>(periodsForResultsTimeSeries, numSims);
+            var netVolumeBySim = new Panel<T, double>(periodsForResultsTimeSeries, numSims);
+            var storageProfiles = new StorageProfile[periodsForResultsTimeSeries.Length];
+
             var deltas = new double[periodsForResultsTimeSeries.Length];
 
-            var startingInventories = new double[numSims];
+            var startingInventories = inventoryBySim[0];
             for (int i = 0; i < numSims; i++)
-                startingInventories[i] = startingInventory; // TODO ch
-            inventories[0] = startingInventories;
+                startingInventories[i] = startingInventory;
 
             double forwardStepProgressPcnt = (1.0 - BackwardPcntTime) / periodsForResultsTimeSeries.Length;
             for (int periodIndex = 0; periodIndex < periodsForResultsTimeSeries.Length - 1; periodIndex++) // TODO more clearly handle this -1
             {
                 T period = periodsForResultsTimeSeries[periodIndex];
-                var nextPeriodInventories = new double[numSims];
-                inventories[periodIndex + 1] = nextPeriodInventories;
+                Span<double> nextPeriodInventories = inventoryBySim[periodIndex + 1];
 
                 Vector<double>[] regressContinuationValues = storageRegressValuesByPeriod[periodIndex + 1];
                 double[] inventoryGridNexPeriod = inventorySpaceGrids[periodIndex + 1];
@@ -467,7 +472,11 @@ namespace Cmdty.Storage
                     simulatedPrices = spotSims.SpotPricesForPeriod(period).Span;
                 
                 (double nextStepInventorySpaceMin, double nextStepInventorySpaceMax) = inventorySpace[period.Offset(1)];
-                double[] thisPeriodInventories = inventories[periodIndex];
+                Span<double> thisPeriodInventories = inventoryBySim[periodIndex];
+                Span<double> thisPeriodInjectWithdrawVolumes = injectWithdrawVolumeBySim[periodIndex];
+                Span<double> thisPeriodCmdtyConsumed = cmdtyConsumedBySim[periodIndex];
+                Span<double> thisPeriodInventoryLoss = inventoryLossBySim[periodIndex];
+                Span<double> thisPeriodNetVolume = netVolumeBySim[periodIndex];
                 for (int simIndex = 0; simIndex < numSims; simIndex++)
                 {
                     double simulatedSpotPrice = simulatedPrices[simIndex];
@@ -489,7 +498,6 @@ namespace Cmdty.Storage
                     {
                         double decisionVolume = decisionSet[decisionIndex];
                         double inventoryAfterDecision = inventory + decisionVolume - inventoryLoss;
-
 
                         double cmdtyUsedForInjectWithdrawVolume = decisionVolume > 0.0
                             ? storage.CmdtyVolumeConsumedOnInject(period, inventory, decisionVolume)
@@ -521,8 +529,15 @@ namespace Cmdty.Storage
                     double optimalCmdtyUsedForInjectWithdrawVolume = cmdtyUsedForInjectWithdrawVolumes[indexOfOptimalDecision];
 
                     sumSpotPriceTimesVolume += -(optimalDecisionVolume + optimalCmdtyUsedForInjectWithdrawVolume) * simulatedSpotPrice;
+
+                    thisPeriodInjectWithdrawVolumes[simIndex] = optimalDecisionVolume;
+                    thisPeriodCmdtyConsumed[simIndex] = optimalCmdtyUsedForInjectWithdrawVolume;
+                    thisPeriodInventoryLoss[simIndex] = inventoryLoss;
+                    thisPeriodNetVolume[simIndex] = -optimalDecisionVolume - optimalCmdtyUsedForInjectWithdrawVolume;
                 }
 
+                storageProfiles[periodIndex] = new StorageProfile(Average(thisPeriodInventories), Average(thisPeriodInjectWithdrawVolumes),
+                    Average(thisPeriodCmdtyConsumed), Average(thisPeriodInventoryLoss), Average(thisPeriodNetVolume));
                 double forwardPrice = forwardCurve[period];
                 double periodDelta = sumSpotPriceTimesVolume / forwardPrice / numSims;
                 deltas[periodIndex] = periodDelta;
@@ -534,11 +549,24 @@ namespace Cmdty.Storage
             // TODO calculate PV from forward loop and compare?
             // Calculate NPVs for first active period using current inventory
             // TODO this is unnecessarily introducing floating point error if the val date is during the storage active period and there should not be a Vector of simulated spot prices
-            double storageNpv = storageActualValuesNextPeriod[0].Average(); // TODO use non-linq average?
+            double storageNpv = storageActualValuesNextPeriod[0].Average();
 
             var deltasSeries = new DoubleTimeSeries<T>(periodsForResultsTimeSeries[0], deltas);
+            var storageProfileSeries = new TimeSeries<T, StorageProfile>(periodsForResultsTimeSeries[0], storageProfiles);
             onProgressUpdate?.Invoke(1.0); // Progress with approximately 1.0 should have occured already, but might have been a bit off because of floating-point error.
-            return new LsmcStorageValuationResults<T>(storageNpv, null, null, deltasSeries);
+
+            var spotPricePanel = Panel.UseRawDataArray(spotSims.SpotPrices, spotSims.SimulatedPeriods, numSims);
+            return new LsmcStorageValuationResults<T>(storageNpv, deltasSeries, storageProfileSeries, spotPricePanel, 
+                inventoryBySim, injectWithdrawVolumeBySim, cmdtyConsumedBySim, inventoryLossBySim, netVolumeBySim);
+        }
+
+        private static double Average(Span<double> span)
+        {
+            double sum = 0.0;
+            // ReSharper disable once ForCanBeConvertedToForeach
+            for (int i = 0; i < span.Length; i++)
+                sum += span[i];
+            return sum;
         }
 
         private static double InterpolateContinuationValue(double inventoryAfterDecision, double[] inventoryGrid, 
