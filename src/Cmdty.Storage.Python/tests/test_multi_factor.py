@@ -223,6 +223,12 @@ class TestMultiFactorValue(unittest.TestCase):
         self.assertEqual(245, len(progresses))
         self.assertEqual(1704932.469750808, multi_factor_val.intrinsic_npv)
         self.assertEqual(122, len(multi_factor_val.intrinsic_profile))
+        self.assertEqual((123, num_sims), multi_factor_val.sim_spot.shape)
+        self.assertEqual((123, num_sims), multi_factor_val.sim_inventory.shape)
+        self.assertEqual((123, num_sims), multi_factor_val.sim_inject_withdraw.shape)
+        self.assertEqual((123, num_sims), multi_factor_val.sim_cmdty_consumed.shape)
+        self.assertEqual((123, num_sims), multi_factor_val.sim_inventory_loss.shape)
+        self.assertEqual((123, num_sims), multi_factor_val.sim_net_volume.shape)
 
     def test_three_factor_seasonal_regression(self):
         storage_start = '2019-12-01'
@@ -282,6 +288,12 @@ class TestMultiFactorValue(unittest.TestCase):
         self.assertEqual(245, len(progresses))
         self.assertEqual(1704932.469750808, multi_factor_val.intrinsic_npv)
         self.assertEqual(122, len(multi_factor_val.intrinsic_profile))
+        self.assertEqual((123, num_sims), multi_factor_val.sim_spot.shape)
+        self.assertEqual((123, num_sims), multi_factor_val.sim_inventory.shape)
+        self.assertEqual((123, num_sims), multi_factor_val.sim_inject_withdraw.shape)
+        self.assertEqual((123, num_sims), multi_factor_val.sim_cmdty_consumed.shape)
+        self.assertEqual((123, num_sims), multi_factor_val.sim_inventory_loss.shape)
+        self.assertEqual((123, num_sims), multi_factor_val.sim_net_volume.shape)
 
 
 if __name__ == '__main__':

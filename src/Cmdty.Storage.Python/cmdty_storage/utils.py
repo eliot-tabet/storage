@@ -308,3 +308,11 @@ def _last_period(period: pd.Period, freq: str) -> pd.Period:
 
 def numerics_provider() -> str:
     return net_cs.StorageHelper.LinearAlgebraProvider()
+
+
+def net_panel_to_data_frame(net_panel, freq: str) -> pd.DataFrame:
+    np_array = as_numpy_array(net_panel.RawData)
+    np_array.resize((net_panel.NumRows, net_panel.NumCols))
+    sim_periods = [net_time_period_to_pandas_period(p, freq) for p in net_panel.RowKeys]
+    period_index = pd.PeriodIndex(data=sim_periods, freq=freq)
+    return pd.DataFrame(data=np_array, index=period_index)

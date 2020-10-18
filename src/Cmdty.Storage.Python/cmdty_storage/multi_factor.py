@@ -241,6 +241,12 @@ class MultiFactorValuationResults(tp.NamedTuple):
     expected_profile: pd.DataFrame
     intrinsic_npv: float
     intrinsic_profile: pd.DataFrame
+    sim_spot: pd.DataFrame
+    sim_inventory: pd.DataFrame
+    sim_inject_withdraw: pd.DataFrame
+    sim_cmdty_consumed: pd.DataFrame
+    sim_inventory_loss: pd.DataFrame
+    sim_net_volume: pd.DataFrame
 
     @property
     def extrinsic_npv(self):
@@ -334,5 +340,14 @@ def net_multi_factor_calc(cmdty_storage, fwd_curve, interest_rates, inventory, n
                                                                               net_on_progress)
     deltas = utils.net_time_series_to_pandas_series(net_val_results.Deltas, cmdty_storage.freq)
     expected_profile = cs_intrinsic.profile_to_data_frame(cmdty_storage.freq, net_val_results.ExpectedStorageProfile)
+    sim_spot = utils.net_panel_to_data_frame(net_val_results.SpotPriceBySim, cmdty_storage.freq)
+
+    sim_inventory = utils.net_panel_to_data_frame(net_val_results.InventoryBySim, cmdty_storage.freq)
+    sim_inject_withdraw = utils.net_panel_to_data_frame(net_val_results.InjectWithdrawVolumeBySim, cmdty_storage.freq)
+    sim_cmdty_consumed = utils.net_panel_to_data_frame(net_val_results.CmdtyConsumedBySim, cmdty_storage.freq)
+    sim_inventory_loss = utils.net_panel_to_data_frame(net_val_results.InventoryLossBySim, cmdty_storage.freq)
+    sim_net_volume = utils.net_panel_to_data_frame(net_val_results.NetVolumeBySim, cmdty_storage.freq)
+
     return MultiFactorValuationResults(net_val_results.Npv, deltas, expected_profile, intrinsic_result.npv,
-                                       intrinsic_result.profile)
+                                       intrinsic_result.profile, sim_spot, sim_inventory, sim_inject_withdraw,
+                                       sim_cmdty_consumed, sim_inventory_loss, sim_net_volume)
