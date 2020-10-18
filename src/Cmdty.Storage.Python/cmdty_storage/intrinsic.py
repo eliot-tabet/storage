@@ -80,12 +80,17 @@ def net_intrinsic_calc(cmdty_storage, current_period, interest_rate_time_series,
     net_cs.IntrinsicStorageValuationExtensions.WithLinearInventorySpaceInterpolation[time_period_type](intrinsic_calc)
     net_cs.IIntrinsicAddNumericalTolerance[time_period_type](intrinsic_calc).WithNumericalTolerance(numerical_tolerance)
     net_val_results = net_cs.IIntrinsicCalculate[time_period_type](intrinsic_calc).Calculate()
-    net_profile = net_val_results.StorageProfile
+    data_frame = profile_to_data_frame(cmdty_storage.freq, net_val_results.StorageProfile)
+    results = IntrinsicValuationResults(net_val_results.NetPresentValue, data_frame)
+    return results
+
+
+def profile_to_data_frame(freq, net_profile):
     if net_profile.Count == 0:
-        index = pd.PeriodIndex(data=[], freq=cmdty_storage.freq)
+        index = pd.PeriodIndex(data=[], freq=freq)
     else:
         profile_start = utils.net_datetime_to_py_datetime(net_profile.Indices[0].Start)
-        index = pd.period_range(start=profile_start, freq=cmdty_storage.freq, periods=net_profile.Count)
+        index = pd.period_range(start=profile_start, freq=freq, periods=net_profile.Count)
     inventories = [None] * net_profile.Count
     inject_withdraw_volumes = [None] * net_profile.Count
     cmdty_consumed = [None] * net_profile.Count
@@ -100,5 +105,4 @@ def net_intrinsic_calc(cmdty_storage, current_period, interest_rate_time_series,
     data_frame_data = {'inventory': inventories, 'inject_withdraw_volume': inject_withdraw_volumes,
                        'cmdty_consumed': cmdty_consumed, 'inventory_loss': inventory_loss, 'net_volume': net_volume}
     data_frame = pd.DataFrame(data=data_frame_data, index=index)
-    results = IntrinsicValuationResults(net_val_results.NetPresentValue, data_frame)
-    return results
+    return data_frame

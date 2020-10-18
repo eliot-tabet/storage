@@ -217,6 +217,8 @@ class TestMultiFactorValue(unittest.TestCase):
                                               regress_cross_products=regress_cross_products,
                                               on_progress_update=on_progress)
         self.assertAlmostEqual(multi_factor_val.npv, 1779708.1119639324, places=6)
+        self.assertEqual(123, len(multi_factor_val.deltas)) # TODO look into why deltas is longer the intrinsic profile
+        self.assertEqual(123, len(multi_factor_val.expected_profile))
         self.assertEqual(progresses[-1], 1.0)
         self.assertEqual(245, len(progresses))
         self.assertEqual(1704932.469750808, multi_factor_val.intrinsic_npv)
@@ -274,6 +276,8 @@ class TestMultiFactorValue(unittest.TestCase):
                                                        regress_cross_products=regress_cross_products,
                                                        on_progress_update=on_progress)
         self.assertAlmostEqual(multi_factor_val.npv, 1766157.090481408, places=6)
+        self.assertEqual(123, len(multi_factor_val.deltas))  # TODO look into why deltas is longer the intrinsic profile
+        self.assertEqual(123, len(multi_factor_val.expected_profile))
         self.assertEqual(progresses[-1], 1.0)
         self.assertEqual(245, len(progresses))
         self.assertEqual(1704932.469750808, multi_factor_val.intrinsic_npv)

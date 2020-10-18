@@ -40,7 +40,6 @@ from cmdty_storage import time_func as tf
 import math
 import cmdty_storage.intrinsic as cs_intrinsic
 
-
 FactorCorrsType = tp.Optional[tp.Union[float, np.ndarray]]
 
 
@@ -239,6 +238,7 @@ class MultiFactorModel:
 class MultiFactorValuationResults(tp.NamedTuple):
     npv: float
     deltas: pd.Series
+    expected_profile: pd.DataFrame
     intrinsic_npv: float
     intrinsic_profile: pd.DataFrame
 
@@ -271,9 +271,9 @@ def three_factor_seasonal_value(cmdty_storage: CmdtyStorage,
         spot_mean_reversion, spot_vol, long_term_vol, seasonal_vol, net_current_period,
         cmdty_storage.net_storage.EndPeriod)
     return net_multi_factor_calc(cmdty_storage, fwd_curve, interest_rates, inventory, net_multi_factor_params,
-                                num_inventory_grid_points, num_sims, numerical_tolerance, on_progress_update,
-                                regress_cross_products, regress_poly_degree, seed, settlement_rule, time_period_type,
-                                val_date)
+                                 num_inventory_grid_points, num_sims, numerical_tolerance, on_progress_update,
+                                 regress_cross_products, regress_poly_degree, seed, settlement_rule, time_period_type,
+                                 val_date)
 
 
 def multi_factor_value(cmdty_storage: CmdtyStorage,
@@ -298,15 +298,15 @@ def multi_factor_value(cmdty_storage: CmdtyStorage,
     time_period_type = utils.FREQ_TO_PERIOD_TYPE[cmdty_storage.freq]
     net_multi_factor_params = _create_net_multi_factor_params(factor_corrs, factors, time_period_type)
     return net_multi_factor_calc(cmdty_storage, fwd_curve, interest_rates, inventory, net_multi_factor_params,
-                                num_inventory_grid_points, num_sims, numerical_tolerance, on_progress_update,
-                                regress_cross_products, regress_poly_degree, seed, settlement_rule, time_period_type,
-                                val_date)
+                                 num_inventory_grid_points, num_sims, numerical_tolerance, on_progress_update,
+                                 regress_cross_products, regress_poly_degree, seed, settlement_rule, time_period_type,
+                                 val_date)
 
 
 def net_multi_factor_calc(cmdty_storage, fwd_curve, interest_rates, inventory, net_multi_factor_params,
-                         num_inventory_grid_points, num_sims, numerical_tolerance, on_progress_update,
-                         regress_cross_products, regress_poly_degree, seed, settlement_rule, time_period_type,
-                         val_date):
+                          num_inventory_grid_points, num_sims, numerical_tolerance, on_progress_update,
+                          regress_cross_products, regress_poly_degree, seed, settlement_rule, time_period_type,
+                          val_date):
     # Convert inputs to .NET types
     net_forward_curve = utils.series_to_double_time_series(fwd_curve, time_period_type)
     net_current_period = utils.from_datetime_like(val_date, time_period_type)
@@ -318,8 +318,9 @@ def net_multi_factor_calc(cmdty_storage, fwd_curve, interest_rates, inventory, n
     net_on_progress = utils.wrap_on_progress_for_dotnet(on_progress_update)
     # Intrinsic calc
     intrinsic_result = cs_intrinsic.net_intrinsic_calc(cmdty_storage, net_current_period, net_interest_rate_time_series,
-                           inventory, net_forward_curve, net_settlement_rule, num_inventory_grid_points,
-                           numerical_tolerance, time_period_type)
+                                                       inventory, net_forward_curve, net_settlement_rule,
+                                                       num_inventory_grid_points,
+                                                       numerical_tolerance, time_period_type)
 
     # Multi-factor calc
     net_val_results = net_cs.LsmcStorageValuation.Calculate[time_period_type](net_current_period,
@@ -332,4 +333,6 @@ def net_multi_factor_calc(cmdty_storage, fwd_curve, interest_rates, inventory, n
                                                                               regress_cross_products,
                                                                               net_on_progress)
     deltas = utils.net_time_series_to_pandas_series(net_val_results.Deltas, cmdty_storage.freq)
-    return MultiFactorValuationResults(net_val_results.Npv, deltas, intrinsic_result.npv, intrinsic_result.profile)
+    expected_profile = cs_intrinsic.profile_to_data_frame(cmdty_storage.freq, net_val_results.ExpectedStorageProfile)
+    return MultiFactorValuationResults(net_val_results.Npv, deltas, expected_profile, intrinsic_result.npv,
+                                       intrinsic_result.profile)

@@ -546,6 +546,10 @@ namespace Cmdty.Storage
                 cancellationToken.ThrowIfCancellationRequested();
             }
 
+            double expectedFinalInventory = Average(inventoryBySim[inventoryBySim.NumRows - 1]);
+            // Profile at storage end when no decisions can happen
+            storageProfiles[storageProfiles.Length - 1] = new StorageProfile(expectedFinalInventory, 0.0, 0.0, 0.0, 0.0);
+
             // TODO calculate PV from forward loop and compare?
             // Calculate NPVs for first active period using current inventory
             // TODO this is unnecessarily introducing floating point error if the val date is during the storage active period and there should not be a Vector of simulated spot prices
