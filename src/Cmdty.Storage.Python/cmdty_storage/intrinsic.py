@@ -57,53 +57,48 @@ def intrinsic_value(cmdty_storage: CmdtyStorage,
     if cmdty_storage.freq != forward_curve.index.freqstr:
         raise ValueError("cmdty_storage and forward_curve have different frequencies.")
     time_period_type = utils.FREQ_TO_PERIOD_TYPE[cmdty_storage.freq]
-
-    intrinsic_calc = net_cs.IntrinsicStorageValuation[time_period_type].ForStorage(cmdty_storage.net_storage)
-
-    net_cs.IIntrinsicAddStartingInventory[time_period_type](intrinsic_calc).WithStartingInventory(inventory)
-
     current_period = utils.from_datetime_like(val_date, time_period_type)
-    net_cs.IIntrinsicAddCurrentPeriod[time_period_type](intrinsic_calc).ForCurrentPeriod(current_period)
-
     net_forward_curve = utils.series_to_double_time_series(forward_curve, time_period_type)
-    net_cs.IIntrinsicAddForwardCurve[time_period_type](intrinsic_calc).WithForwardCurve(net_forward_curve)
-
     net_settlement_rule = utils.wrap_settle_for_dotnet(settlement_rule, cmdty_storage.freq)
-    net_cs.IIntrinsicAddCmdtySettlementRule[time_period_type](intrinsic_calc).WithCmdtySettlementRule(net_settlement_rule)
-    
     interest_rate_time_series = utils.series_to_double_time_series(interest_rates, utils.FREQ_TO_PERIOD_TYPE['D'])
-    net_cs.IntrinsicStorageValuationExtensions.WithAct365ContinuouslyCompoundedInterestRateCurve[time_period_type](intrinsic_calc, interest_rate_time_series)
+    return net_intrinsic_calc(cmdty_storage, current_period, interest_rate_time_series, inventory, net_forward_curve,
+                                 net_settlement_rule, num_inventory_grid_points, numerical_tolerance, time_period_type)
 
-    net_cs.IntrinsicStorageValuationExtensions.WithFixedNumberOfPointsOnGlobalInventoryRange[time_period_type](intrinsic_calc, num_inventory_grid_points)
 
+def net_intrinsic_calc(cmdty_storage, current_period, interest_rate_time_series, inventory, net_forward_curve,
+                       net_settlement_rule, num_inventory_grid_points, numerical_tolerance, time_period_type):
+    intrinsic_calc = net_cs.IntrinsicStorageValuation[time_period_type].ForStorage(cmdty_storage.net_storage)
+    net_cs.IIntrinsicAddStartingInventory[time_period_type](intrinsic_calc).WithStartingInventory(inventory)
+    net_cs.IIntrinsicAddCurrentPeriod[time_period_type](intrinsic_calc).ForCurrentPeriod(current_period)
+    net_cs.IIntrinsicAddForwardCurve[time_period_type](intrinsic_calc).WithForwardCurve(net_forward_curve)
+    net_cs.IIntrinsicAddCmdtySettlementRule[time_period_type](intrinsic_calc).WithCmdtySettlementRule(
+        net_settlement_rule)
+    net_cs.IntrinsicStorageValuationExtensions.WithAct365ContinuouslyCompoundedInterestRateCurve[time_period_type](
+        intrinsic_calc, interest_rate_time_series)
+    net_cs.IntrinsicStorageValuationExtensions.WithFixedNumberOfPointsOnGlobalInventoryRange[time_period_type](
+        intrinsic_calc, num_inventory_grid_points)
     net_cs.IntrinsicStorageValuationExtensions.WithLinearInventorySpaceInterpolation[time_period_type](intrinsic_calc)
-
     net_cs.IIntrinsicAddNumericalTolerance[time_period_type](intrinsic_calc).WithNumericalTolerance(numerical_tolerance)
-
     net_val_results = net_cs.IIntrinsicCalculate[time_period_type](intrinsic_calc).Calculate()
-
     net_profile = net_val_results.StorageProfile
     if net_profile.Count == 0:
         index = pd.PeriodIndex(data=[], freq=cmdty_storage.freq)
     else:
         profile_start = utils.net_datetime_to_py_datetime(net_profile.Indices[0].Start)
         index = pd.period_range(start=profile_start, freq=cmdty_storage.freq, periods=net_profile.Count)
-
     inventories = [None] * net_profile.Count
     inject_withdraw_volumes = [None] * net_profile.Count
     cmdty_consumed = [None] * net_profile.Count
     inventory_loss = [None] * net_profile.Count
     net_volume = [None] * net_profile.Count
-
     for i, profile_data in enumerate(net_profile.Data):
         inventories[i] = profile_data.Inventory
         inject_withdraw_volumes[i] = profile_data.InjectWithdrawVolume
         cmdty_consumed[i] = profile_data.CmdtyConsumed
         inventory_loss[i] = profile_data.InventoryLoss
         net_volume[i] = profile_data.NetVolume
-
-    data_frame_data = {'inventory' : inventories, 'inject_withdraw_volume' : inject_withdraw_volumes,
-                  'cmdty_consumed' : cmdty_consumed, 'inventory_loss' : inventory_loss, 'net_volume' : net_volume}
+    data_frame_data = {'inventory': inventories, 'inject_withdraw_volume': inject_withdraw_volumes,
+                       'cmdty_consumed': cmdty_consumed, 'inventory_loss': inventory_loss, 'net_volume': net_volume}
     data_frame = pd.DataFrame(data=data_frame_data, index=index)
-    
-    return IntrinsicValuationResults(net_val_results.NetPresentValue, data_frame)
+    results = IntrinsicValuationResults(net_val_results.NetPresentValue, data_frame)
+    return results

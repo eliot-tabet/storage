@@ -213,11 +213,14 @@ class TestMultiFactorValue(unittest.TestCase):
         regress_cross_products = False
         multi_factor_val = multi_factor_value(cmdty_storage, val_date, inventory, forward_curve,
                                               interest_rate_curve, twentieth_of_next_month,
-                                              factors, factor_corrs, num_sims, seed, regress_cross_products=False,
+                                              factors, factor_corrs, num_sims, seed,
+                                              regress_cross_products=regress_cross_products,
                                               on_progress_update=on_progress)
         self.assertAlmostEqual(multi_factor_val.npv, 1779708.1119639324, places=6)
         self.assertEqual(progresses[-1], 1.0)
         self.assertEqual(245, len(progresses))
+        self.assertEqual(1704932.469750808, multi_factor_val.intrinsic_npv)
+        self.assertEqual(122, len(multi_factor_val.intrinsic_profile))
 
     def test_three_factor_seasonal_regression(self):
         storage_start = '2019-12-01'
@@ -273,6 +276,8 @@ class TestMultiFactorValue(unittest.TestCase):
         self.assertAlmostEqual(multi_factor_val.npv, 1766157.090481408, places=6)
         self.assertEqual(progresses[-1], 1.0)
         self.assertEqual(245, len(progresses))
+        self.assertEqual(1704932.469750808, multi_factor_val.intrinsic_npv)
+        self.assertEqual(122, len(multi_factor_val.intrinsic_profile))
 
 
 if __name__ == '__main__':
