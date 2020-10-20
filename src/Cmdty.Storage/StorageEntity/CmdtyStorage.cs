@@ -87,11 +87,11 @@ namespace Cmdty.Storage
         {
             double minInventory = _minInventory(date);
             if (inventory < minInventory)
-                throw new ArgumentException($"Inventory is below minimum allowed value of {minInventory} during period {date}.", nameof(inventory));
+                throw new ArgumentException($"Inventory of {inventory} is below minimum allowed value of {minInventory} during period {date}.", nameof(inventory));
 
             double maxInventory = _maxInventory(date);
             if (inventory > maxInventory)
-                throw new ArgumentException($"Inventory is above maximum allowed value of {maxInventory} during period {date}.", nameof(inventory));
+                throw new ArgumentException($"Inventory of {inventory} above maximum allowed value of {maxInventory} during period {date}.", nameof(inventory));
 
             if (date.CompareTo(EndPeriod) >= 0)
                 return new InjectWithdrawRange(0.0, 0.0);

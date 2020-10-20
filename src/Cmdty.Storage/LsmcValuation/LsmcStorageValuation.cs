@@ -523,7 +523,7 @@ namespace Cmdty.Storage
                     }
                     (double optimalRegressDecisionNpv, int indexOfOptimalDecision) = StorageHelper.MaxValueAndIndex(decisionNpvsRegress);
                     double optimalDecisionVolume = decisionSet[indexOfOptimalDecision];
-                    double optimalNextStepInventory = inventory + optimalDecisionVolume - indexOfOptimalDecision;
+                    double optimalNextStepInventory = inventory + optimalDecisionVolume - inventoryLoss;
                     nextPeriodInventories[simIndex] = optimalNextStepInventory;
 
                     double optimalCmdtyUsedForInjectWithdrawVolume = cmdtyUsedForInjectWithdrawVolumes[indexOfOptimalDecision];
