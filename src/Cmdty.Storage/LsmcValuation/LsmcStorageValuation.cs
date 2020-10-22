@@ -52,13 +52,12 @@ namespace Cmdty.Storage
             MultiFactorParameters<T> modelParameters,
             int numSims,
             int? seed,
-            int regressMaxPolyDegree, bool regressCrossProducts,
+            IEnumerable<BasisFunction> basisFunctions,
             Action<double> onProgressUpdate = null)
             where T : ITimePeriod<T>
         {
             return Calculate(currentPeriod, startingInventory, forwardCurve, storage, settleDateRule, discountFactors,
-                gridCalc, numericalTolerance, modelParameters, numSims, seed, regressMaxPolyDegree,
-                regressCrossProducts, CancellationToken.None, onProgressUpdate);
+                gridCalc, numericalTolerance, modelParameters, numSims, seed, basisFunctions, CancellationToken.None, onProgressUpdate);
         }
         
         public static LsmcStorageValuationResults<T> Calculate<T>(T currentPeriod, double startingInventory,
@@ -69,7 +68,7 @@ namespace Cmdty.Storage
             MultiFactorParameters<T> modelParameters,
             int numSims,
             int? seed,
-            int regressMaxPolyDegree, bool regressCrossProducts,
+            IEnumerable<BasisFunction> basisFunctions,
             CancellationToken cancellationToken,
             Action<double> onProgressUpdate = null)
             where T : ITimePeriod<T>
@@ -77,8 +76,8 @@ namespace Cmdty.Storage
             var normalGenerator = seed == null ? new MersenneTwisterGenerator(true) :
                 new MersenneTwisterGenerator(seed.Value, true);
             return Calculate(currentPeriod, startingInventory, forwardCurve, storage, settleDateRule, discountFactors,
-                gridCalc, numericalTolerance, modelParameters, normalGenerator, numSims, regressMaxPolyDegree,
-                regressCrossProducts, cancellationToken, onProgressUpdate);
+                gridCalc, numericalTolerance, modelParameters, normalGenerator, numSims, basisFunctions, 
+                cancellationToken, onProgressUpdate);
         }
 
         public static LsmcStorageValuationResults<T> Calculate<T>(T currentPeriod, double startingInventory,
@@ -89,13 +88,13 @@ namespace Cmdty.Storage
             MultiFactorParameters<T> modelParameters,
             IStandardNormalGenerator normalGenerator,
             int numSims,
-            int regressMaxPolyDegree, bool regressCrossProducts,
+            IEnumerable<BasisFunction> basisFunctions,
             Action<double> onProgressUpdate = null)
             where T : ITimePeriod<T>
         {
             return Calculate(currentPeriod, startingInventory, forwardCurve, storage, settleDateRule, discountFactors,
                 gridCalc, numericalTolerance, modelParameters,
-                normalGenerator, numSims, regressMaxPolyDegree, regressCrossProducts, CancellationToken.None,
+                normalGenerator, numSims, basisFunctions, CancellationToken.None,
                 onProgressUpdate);
         }
 
@@ -108,7 +107,7 @@ namespace Cmdty.Storage
             MultiFactorParameters<T> modelParameters,
             IStandardNormalGenerator normalGenerator,
             int numSims,
-            int regressMaxPolyDegree, bool regressCrossProducts,
+            IEnumerable<BasisFunction> basisFunctions,
             CancellationToken cancellationToken,
             Action<double> onProgressUpdate = null)
             where T : ITimePeriod<T>
@@ -137,14 +136,15 @@ namespace Cmdty.Storage
             }
 
             return Calculate(currentPeriod, startingInventory, forwardCurve, storage, settleDateRule, discountFactors,
-                gridCalc, numericalTolerance, spotSims, regressMaxPolyDegree, regressCrossProducts, cancellationToken, onProgressUpdate);
+                gridCalc, numericalTolerance, spotSims, basisFunctions, cancellationToken, onProgressUpdate);
         }
 
         public static LsmcStorageValuationResults<T> Calculate<T>(T currentPeriod, double startingInventory,
             TimeSeries<T, double> forwardCurve, ICmdtyStorage<T> storage, Func<T, Day> settleDateRule,
             Func<Day, Day, double> discountFactors,
             IDoubleStateSpaceGridCalc gridCalc,
-            double numericalTolerance, ISpotSimResults<T> spotSims, int regressMaxPolyDegree, bool regressCrossProducts,
+            double numericalTolerance, ISpotSimResults<T> spotSims,
+            IEnumerable<BasisFunction> basisFunctions,
             Action<double> onProgressUpdate = null)
             where T : ITimePeriod<T>
         {
@@ -152,7 +152,7 @@ namespace Cmdty.Storage
                 forwardCurve, storage, settleDateRule,
                 discountFactors,
                 gridCalc,
-                numericalTolerance, spotSims, regressMaxPolyDegree, regressCrossProducts,
+                numericalTolerance, spotSims, basisFunctions,
                 CancellationToken.None, onProgressUpdate);
         }
 
@@ -160,7 +160,8 @@ namespace Cmdty.Storage
             TimeSeries<T, double> forwardCurve, ICmdtyStorage<T> storage, Func<T, Day> settleDateRule,
             Func<Day, Day, double> discountFactors,
             IDoubleStateSpaceGridCalc gridCalc,
-            double numericalTolerance, ISpotSimResults<T> spotSims, int regressMaxPolyDegree, bool regressCrossProducts,
+            double numericalTolerance, ISpotSimResults<T> spotSims,
+            IEnumerable<BasisFunction> basisFunctions,
             CancellationToken cancellationToken,
             Action<double> onProgressUpdate = null)
             where T : ITimePeriod<T>
@@ -190,7 +191,9 @@ namespace Cmdty.Storage
                 onProgressUpdate?.Invoke(1.0);
                 return LsmcStorageValuationResults<T>.CreateEndPeriodResults(npv);
             }
-            
+
+            var basisFunctionList = basisFunctions.ToList();
+
             TimeSeries<T, InventoryRange> inventorySpace = StorageHelper.CalculateInventorySpace(storage, startingInventory, currentPeriod);
 
             if (forwardCurve.Start.CompareTo(currentPeriod) > 0)
@@ -242,12 +245,7 @@ namespace Cmdty.Storage
                 return discountFactor;
             }
 
-            int numFactors = spotSims.NumFactors;
-            int numNonCrossMonomials = regressMaxPolyDegree * numFactors;
-            int numCrossMonomials = regressCrossProducts ? numNonCrossMonomials * (numNonCrossMonomials - 1) / 2 : 0;
-            int numMonomials = 1 /*constant independent variable*/ + numNonCrossMonomials + numCrossMonomials;
-
-            Matrix<double> designMatrix = Matrix<double>.Build.Dense(numSims, numMonomials);
+            Matrix<double> designMatrix = Matrix<double>.Build.Dense(numSims, basisFunctionList.Count);
             for (int i = 0; i < numSims; i++) // TODO see if Math.Net has simpler way of setting whole column to constant
                 designMatrix[i, 0] = 1.0;
             
@@ -277,7 +275,7 @@ namespace Cmdty.Storage
                 }
                 else
                 {
-                    PopulateDesignMatrix(designMatrix, period, spotSims, regressMaxPolyDegree, regressCrossProducts);
+                    PopulateDesignMatrix(designMatrix, period, spotSims, basisFunctionList);
                     Matrix<double> pseudoInverse = designMatrix.PseudoInverse();
 
                     // TODO doing the regressions for all next inventory could be inefficient as they might not all be needed
@@ -610,29 +608,22 @@ namespace Cmdty.Storage
             return interpolatedRegressContinuationValue;
         }
 
-        private static void PopulateDesignMatrix<T>(Matrix<double> designMatrix, T period, ISpotSimResults<T> spotSims, 
-            int regressMaxPolyDegree, bool regressCrossProducts)
+        public static void PopulateDesignMatrix<T>(Matrix<double> designMatrix, T period, ISpotSimResults<T> spotSims,
+            IReadOnlyList<BasisFunction> basisFunctions)
             where T : ITimePeriod<T>
         {
-            // TODO think about if rearranging loop orders could minimize cache misses
-            for (int factorIndex = 0; factorIndex < spotSims.NumFactors; factorIndex++)
-            {
-                ReadOnlySpan<double> factorSims = spotSims.MarkovFactorsForPeriod(period, factorIndex).Span;
-                for (int simIndex = 0; simIndex < spotSims.NumSims; simIndex++)
-                {
-                    double factorSim = factorSims[simIndex];
-                    for (int polyDegree = 1; polyDegree <= regressMaxPolyDegree; polyDegree++)
-                    {
-                        double monomial = Math.Pow(factorSim, polyDegree);
-                        int colIndex = factorIndex * regressMaxPolyDegree + polyDegree;
-                        designMatrix[simIndex, colIndex] = monomial;
-                    }
-                }
-            }
+            ReadOnlySpan<double> spotPrices = spotSims.SpotPricesForPeriod(period).Span;
+            int numSims = spotSims.NumSims;
+            int numFactors = spotSims.NumFactors;
+            ReadOnlyMemory<double>[] markovFactors = new ReadOnlyMemory<double>[numFactors];
+            for (int i = 0; i < numFactors; i++)
+                markovFactors[i] = spotSims.MarkovFactorsForPeriod(period, i);
 
-            if (regressCrossProducts)
+            for (int basisIndex = 0; basisIndex < basisFunctions.Count; basisIndex++)
             {
-                throw new NotImplementedException(); // TODO
+                Span<double> designMatrixColumn = new Span<double>(designMatrix.AsColumnMajorArray(), basisIndex * numSims, numSims);
+                BasisFunction basisFunction = basisFunctions[basisIndex];
+                basisFunction(markovFactors, spotPrices, designMatrixColumn);
             }
         }
 

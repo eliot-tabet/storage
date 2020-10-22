@@ -49,6 +49,7 @@ namespace Cmdty.Storage.Benchmarks
         private readonly MultiFactorParameters<Day> _1FDailyMultiFactorParams;
         private readonly Func<Day, Day> _settleDateRule;
         private readonly TimeSeries<Day, double> _forwardCurve;
+        private readonly BasisFunction[] _oneFactorBasisFunctions;
         public LsmcBenchmarks()
         {
             _valDate = new Day(2019, 8, 29);
@@ -97,6 +98,8 @@ namespace Cmdty.Storage.Benchmarks
                 int daysForward = day.OffsetFrom(_valDate);
                 return baseForwardPrice + Math.Sin(2.0 * Math.PI / 365.0 * daysForward) * forwardSeasonalFactor;
             });
+            _oneFactorBasisFunctions = BasisFunctionsBuilder.Ones +
+                                       BasisFunctionsBuilder.AllMarkovFactorAllPositiveIntegerPowersUpTo(RegressMaxDegree, 1);
         }
 
         //[Benchmark]
@@ -105,7 +108,7 @@ namespace Cmdty.Storage.Benchmarks
             Control.UseManaged();
             LsmcStorageValuationResults<Day> results = LsmcStorageValuation.Calculate(_valDate, Inventory,
                 _forwardCurve, _simpleDailyStorage, _settleDateRule, _flatInterestRateDiscounter, _gridCalc, NumTolerance,
-                _1FDailyMultiFactorParams, NumSims, RandomSeed, RegressMaxDegree, RegressCrossProducts);
+                _1FDailyMultiFactorParams, NumSims, RandomSeed, _oneFactorBasisFunctions);
             return results.Npv;
         }
 
@@ -115,7 +118,7 @@ namespace Cmdty.Storage.Benchmarks
             Control.UseNativeMKL();
             LsmcStorageValuationResults<Day> results = LsmcStorageValuation.Calculate(_valDate, Inventory,
                 _forwardCurve, _simpleDailyStorage, _settleDateRule, _flatInterestRateDiscounter, _gridCalc, NumTolerance,
-                _1FDailyMultiFactorParams, NumSims, RandomSeed, RegressMaxDegree, RegressCrossProducts);
+                _1FDailyMultiFactorParams, NumSims, RandomSeed, _oneFactorBasisFunctions);
             return results.Npv;
         }
 

@@ -322,6 +322,10 @@ def net_multi_factor_calc(cmdty_storage, fwd_curve, interest_rates, inventory, n
     net_interest_rate_time_series = utils.series_to_double_time_series(interest_rates, utils.FREQ_TO_PERIOD_TYPE['D'])
     net_discount_func = net_cs.StorageHelper.CreateAct65ContCompDiscounterFromSeries(net_interest_rate_time_series)
     net_on_progress = utils.wrap_on_progress_for_dotnet(on_progress_update)
+    net_basis_functions = net_cs.BasisFunctionsBuilder.Combine(
+                        net_cs.BasisFunctionsBuilder.Ones,
+                        net_cs.BasisFunctionsBuilder.AllMarkovFactorAllPositiveIntegerPowersUpTo(regress_poly_degree,
+                                                                               net_multi_factor_params.NumFactors))
     # Intrinsic calc
     intrinsic_result = cs_intrinsic.net_intrinsic_calc(cmdty_storage, net_current_period, net_interest_rate_time_series,
                                                        inventory, net_forward_curve, net_settlement_rule,
@@ -335,8 +339,7 @@ def net_multi_factor_calc(cmdty_storage, fwd_curve, interest_rates, inventory, n
                                                                               net_settlement_rule, net_discount_func,
                                                                               net_grid_calc, numerical_tolerance,
                                                                               net_multi_factor_params, num_sims, seed,
-                                                                              regress_poly_degree,
-                                                                              regress_cross_products,
+                                                                              net_basis_functions.Functions,
                                                                               net_on_progress)
     deltas = utils.net_time_series_to_pandas_series(net_val_results.Deltas, cmdty_storage.freq)
     expected_profile = cs_intrinsic.profile_to_data_frame(cmdty_storage.freq, net_val_results.ExpectedStorageProfile)

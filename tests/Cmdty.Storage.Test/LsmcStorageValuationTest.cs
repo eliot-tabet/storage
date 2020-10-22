@@ -48,7 +48,6 @@ namespace Cmdty.Storage.Test
         private const double Inventory = 5_685;
         private const int RandomSeed = 11;
         private const int RegressMaxDegree = 2;
-        private const bool RegressCrossProducts = false;
         private const double NumTolerance = 1E-10;
         private const double OneFactorMeanReversion = 12.5;
         private const double TrinomialTimeDelta = 1.0 / 365.0;
@@ -70,6 +69,8 @@ namespace Cmdty.Storage.Test
         private readonly MultiFactorParameters<Day> _2FVeryLowVolDailyMultiFactorParams;
         private readonly Func<Day, Day> _settleDateRule;
         private readonly TimeSeries<Day, double> _forwardCurve;
+        private readonly BasisFunction[] _oneFactorBasisFunctions;
+        private readonly BasisFunction[] _twoFactorBasisFunctions;
 
         public LsmcStorageValuationTest(ITestOutputHelper testOutputHelper)
         {
@@ -170,6 +171,12 @@ namespace Cmdty.Storage.Test
                 int daysForward = day.OffsetFrom(_valDate);
                 return baseForwardPrice + Math.Sin(2.0 * Math.PI / 365.0 * daysForward) * forwardSeasonalFactor;
             });
+
+            _oneFactorBasisFunctions = BasisFunctionsBuilder.Ones + 
+                            BasisFunctionsBuilder.AllMarkovFactorAllPositiveIntegerPowersUpTo(RegressMaxDegree, 1);
+
+            _twoFactorBasisFunctions = BasisFunctionsBuilder.Ones +
+                                BasisFunctionsBuilder.AllMarkovFactorAllPositiveIntegerPowersUpTo(RegressMaxDegree, 2);
         }
 
         [Fact]
@@ -178,7 +185,7 @@ namespace Cmdty.Storage.Test
             Day valDate = _simpleDailyStorage.EndPeriod + 1;
             LsmcStorageValuationResults<Day> lsmcResults = LsmcStorageValuation.Calculate(valDate, Inventory,
                 _forwardCurve, _simpleDailyStorage, _settleDateRule, _flatInterestRateDiscounter, _gridCalc, NumTolerance,
-                _1FDailyMultiFactorParams, NumSims, RandomSeed, RegressMaxDegree, RegressCrossProducts);
+                _1FDailyMultiFactorParams, NumSims, RandomSeed, _oneFactorBasisFunctions);
             Assert.Equal(0.0, lsmcResults.Npv);
         }
 
@@ -188,7 +195,7 @@ namespace Cmdty.Storage.Test
             Day valDate = _simpleDailyStorage.EndPeriod + 1;
             LsmcStorageValuationResults<Day> lsmcResults = LsmcStorageValuation.Calculate(valDate, Inventory,
                 _forwardCurve, _simpleDailyStorage, _settleDateRule, _flatInterestRateDiscounter, _gridCalc, NumTolerance,
-                _1FDailyMultiFactorParams, NumSims, RandomSeed, RegressMaxDegree, RegressCrossProducts);
+                _1FDailyMultiFactorParams, NumSims, RandomSeed, _oneFactorBasisFunctions);
             Assert.True(lsmcResults.Deltas.IsEmpty);
         }
         // TODO same unit test as above, but testing the other output data, decision, simulated prices etc.
@@ -200,7 +207,7 @@ namespace Cmdty.Storage.Test
             const double inventory = 0.0;
             LsmcStorageValuationResults<Day> lsmcResults = LsmcStorageValuation.Calculate(valDate, inventory,
                 _forwardCurve, _simpleDailyStorage, _settleDateRule, _flatInterestRateDiscounter, _gridCalc, NumTolerance,
-                _1FDailyMultiFactorParams, NumSims, RandomSeed, RegressMaxDegree, RegressCrossProducts);
+                _1FDailyMultiFactorParams, NumSims, RandomSeed, _oneFactorBasisFunctions);
             Assert.Equal(0.0, lsmcResults.Npv);
         }
 
@@ -211,7 +218,7 @@ namespace Cmdty.Storage.Test
             const double inventory = 0.0;
             LsmcStorageValuationResults<Day> lsmcResults = LsmcStorageValuation.Calculate(valDate, inventory,
                 _forwardCurve, _simpleDailyStorage, _settleDateRule, _flatInterestRateDiscounter, _gridCalc, NumTolerance,
-                _1FDailyMultiFactorParams, NumSims, RandomSeed, RegressMaxDegree, RegressCrossProducts);
+                _1FDailyMultiFactorParams, NumSims, RandomSeed, _oneFactorBasisFunctions);
             Assert.True(lsmcResults.Deltas.IsEmpty);
         }
 
@@ -225,7 +232,7 @@ namespace Cmdty.Storage.Test
             double valDateSpotPrice = _forwardCurve[valDate];
             LsmcStorageValuationResults<Day> lsmcResults = LsmcStorageValuation.Calculate(valDate, inventory,
                 _forwardCurve, _simpleDailyStorageTerminalInventoryValue, _settleDateRule, _flatInterestRateDiscounter, _gridCalc, NumTolerance,
-                _1FDailyMultiFactorParams, NumSims, RandomSeed, RegressMaxDegree, RegressCrossProducts);
+                _1FDailyMultiFactorParams, NumSims, RandomSeed, _oneFactorBasisFunctions);
 
             double expectedNpv = _terminalInventoryValue(valDateSpotPrice, inventory);
             Assert.Equal(expectedNpv, lsmcResults.Npv);
@@ -241,7 +248,7 @@ namespace Cmdty.Storage.Test
             double valDateSpotPrice = _forwardCurve[valDate];
             LsmcStorageValuationResults<Day> lsmcResults = LsmcStorageValuation.Calculate(valDate, inventory,
                 _forwardCurve, _simpleDailyStorage, _settleDateRule, _flatInterestRateDiscounter, _gridCalc, NumTolerance,
-                _1FDailyMultiFactorParams, NumSims, RandomSeed, RegressMaxDegree, RegressCrossProducts);
+                _1FDailyMultiFactorParams, NumSims, RandomSeed, _oneFactorBasisFunctions);
             const double constantWithdrawalCost = 0.93;
 
             double discountFactor = _flatInterestRateDiscounter(valDate, _settleDateRule(valDate));
@@ -256,7 +263,7 @@ namespace Cmdty.Storage.Test
             const double inventory = 352.14;
             LsmcStorageValuationResults<Day> lsmcResults = LsmcStorageValuation.Calculate(valDate, inventory,
                 _forwardCurve, _simpleDailyStorage, _settleDateRule, _flatInterestRateDiscounter, _gridCalc, NumTolerance,
-                _1FDailyMultiFactorParams, NumSims, RandomSeed, RegressMaxDegree, RegressCrossProducts);
+                _1FDailyMultiFactorParams, NumSims, RandomSeed, _oneFactorBasisFunctions);
 
             Assert.Equal(inventory, lsmcResults.Deltas[valDate], 10);
         }
@@ -278,8 +285,6 @@ namespace Cmdty.Storage.Test
             const double meanReversion = 16.5;
             const double interestRate = 0.09;
             const double numTolerance = 1E-10;
-            const int regressMaxDegree = 3;
-            const bool regressCrossProducts = false;
 
             TestHelper.CallOptionLikeTestData testData = TestHelper.CreateThreeCallsLikeStorageTestData(forwardCurve);
 
@@ -293,7 +298,7 @@ namespace Cmdty.Storage.Test
             LsmcStorageValuationResults<Day> results = LsmcStorageValuation.Calculate(valDate, testData.Inventory,
                 forwardCurve,
                 testData.Storage, SettleDateRule, discounter, gridSpace, numTolerance,
-                multiFactorParams, numSims, seed, regressMaxDegree, regressCrossProducts);
+                multiFactorParams, numSims, seed, _oneFactorBasisFunctions);
 
             // Calculate value of equivalent call options
             double expectStorageValue = 0.0;
@@ -327,8 +332,6 @@ namespace Cmdty.Storage.Test
             const double meanReversion = 16.5;
             const double interestRate = 0.09;
             const double numTolerance = 1E-10;
-            const int regressMaxDegree = 3;
-            const bool regressCrossProducts = false;
 
             TestHelper.CallOptionLikeTestData testData = TestHelper.CreateThreeCallsLikeStorageTestData(forwardCurve);
 
@@ -343,7 +346,7 @@ namespace Cmdty.Storage.Test
             LsmcStorageValuationResults<Day> results = LsmcStorageValuation.Calculate(valDate, testData.Inventory,
                 forwardCurve,
                 testData.Storage, SettleDateRule, discounter, gridSpace, numTolerance,
-                multiFactorParams, numSims, seed, regressMaxDegree, regressCrossProducts);
+                multiFactorParams, numSims, seed, _oneFactorBasisFunctions);
 
             const double tol = 0.04; // 4% tolerance
 
@@ -372,7 +375,7 @@ namespace Cmdty.Storage.Test
         {
             LsmcStorageValuationResults<Day> lsmcResults = LsmcStorageValuation.Calculate(_valDate, Inventory,
                 _forwardCurve, _simpleDailyStorage, _settleDateRule, _flatInterestRateDiscounter, _gridCalc, NumTolerance,
-                _1FDailyMultiFactorParams, NumSims, RandomSeed, RegressMaxDegree, RegressCrossProducts);
+                _1FDailyMultiFactorParams, NumSims, RandomSeed, _oneFactorBasisFunctions);
 
             TreeStorageValuationResults<Day> treeResults = TreeStorageValuation<Day>.ForStorage(_simpleDailyStorage)
                 .WithStartingInventory(Inventory)
@@ -399,7 +402,7 @@ namespace Cmdty.Storage.Test
         {
             LsmcStorageValuationResults<Day> lsmcResults = LsmcStorageValuation.Calculate(_valDate, Inventory,
                 _forwardCurve, _dailyStorageWithRatchets, _settleDateRule, _flatInterestRateDiscounter, _gridCalc, NumTolerance,
-                _1FDailyMultiFactorParams, NumSims, RandomSeed, RegressMaxDegree, RegressCrossProducts);
+                _1FDailyMultiFactorParams, NumSims, RandomSeed, _oneFactorBasisFunctions);
 
             TreeStorageValuationResults<Day> treeResults = TreeStorageValuation<Day>.ForStorage(_dailyStorageWithRatchets)
                 .WithStartingInventory(Inventory)
@@ -428,7 +431,7 @@ namespace Cmdty.Storage.Test
             Day valDate = _simpleDailyStorage.StartPeriod + 10;
             LsmcStorageValuationResults<Day> lsmcResults = LsmcStorageValuation.Calculate(valDate, Inventory,
                 _forwardCurve, _simpleDailyStorage, _settleDateRule, _flatInterestRateDiscounter, _gridCalc, NumTolerance,
-                _1FDailyMultiFactorParams, NumSims, RandomSeed, RegressMaxDegree, RegressCrossProducts);
+                _1FDailyMultiFactorParams, NumSims, RandomSeed, _oneFactorBasisFunctions);
 
             TreeStorageValuationResults<Day> treeResults = TreeStorageValuation<Day>.ForStorage(_simpleDailyStorage)
                 .WithStartingInventory(Inventory)
@@ -468,9 +471,11 @@ namespace Cmdty.Storage.Test
         public void Calculate_OneFactorZeroMeanReversionSimpleStorage_NpvApproximatelyEqualsIntrinsicNpv()
         {
             const int regressPolyDegree = 5;  // Test requires a higher poly degree than the others
+            BasisFunction[] basisFunctions = BasisFunctionsBuilder.Ones +
+                            BasisFunctionsBuilder.AllMarkovFactorAllPositiveIntegerPowersUpTo(regressPolyDegree, 1);
             LsmcStorageValuationResults<Day> lsmcResults = LsmcStorageValuation.Calculate(_valDate, Inventory,
                 _forwardCurve, _simpleDailyStorage, _settleDateRule, _flatInterestRateDiscounter, _gridCalc, NumTolerance,
-                _1FZeroMeanReversionDailyMultiFactorParams, NumSims, RandomSeed, regressPolyDegree, RegressCrossProducts);
+                _1FZeroMeanReversionDailyMultiFactorParams, NumSims, RandomSeed, basisFunctions);
 
             IntrinsicStorageValuationResults<Day> intrinsicResults = CalcIntrinsic(_simpleDailyStorage);
             
@@ -484,9 +489,11 @@ namespace Cmdty.Storage.Test
         public void Calculate_OneFactorZeroMeanReversionStorageWithRatchets_NpvApproximatelyEqualsIntrinsicNpv()
         {
             const int regressPolyDegree = 5;  // Test requires a higher poly degree than the others
+            BasisFunction[] basisFunctions = BasisFunctionsBuilder.Ones +
+                                BasisFunctionsBuilder.AllMarkovFactorAllPositiveIntegerPowersUpTo(regressPolyDegree, 1);
             LsmcStorageValuationResults<Day> lsmcResults = LsmcStorageValuation.Calculate(_valDate, Inventory,
                 _forwardCurve, _dailyStorageWithRatchets, _settleDateRule, _flatInterestRateDiscounter, _gridCalc, NumTolerance,
-                _1FZeroMeanReversionDailyMultiFactorParams, NumSims, RandomSeed, regressPolyDegree, RegressCrossProducts);
+                _1FZeroMeanReversionDailyMultiFactorParams, NumSims, RandomSeed, basisFunctions);
 
             IntrinsicStorageValuationResults<Day> intrinsicResults = CalcIntrinsic(_dailyStorageWithRatchets);
 
@@ -502,7 +509,7 @@ namespace Cmdty.Storage.Test
         {
             LsmcStorageValuationResults<Day> lsmcResults = LsmcStorageValuation.Calculate(_valDate, Inventory,
                 _forwardCurve, _simpleDailyStorage, _settleDateRule, _flatInterestRateDiscounter, _gridCalc, NumTolerance,
-                _1FVeryLowVolDailyMultiFactorParams, NumSims, RandomSeed, RegressMaxDegree, RegressCrossProducts);
+                _1FVeryLowVolDailyMultiFactorParams, NumSims, RandomSeed, _oneFactorBasisFunctions);
 
             IntrinsicStorageValuationResults<Day> intrinsicResults = CalcIntrinsic(_simpleDailyStorage);
 
@@ -515,7 +522,7 @@ namespace Cmdty.Storage.Test
         {
             LsmcStorageValuationResults<Day> lsmcResults = LsmcStorageValuation.Calculate(_valDate, Inventory,
                 _forwardCurve, _dailyStorageWithRatchets, _settleDateRule, _flatInterestRateDiscounter, _gridCalc, NumTolerance,
-                _1FVeryLowVolDailyMultiFactorParams, NumSims, RandomSeed, RegressMaxDegree, RegressCrossProducts);
+                _1FVeryLowVolDailyMultiFactorParams, NumSims, RandomSeed, _oneFactorBasisFunctions);
 
             IntrinsicStorageValuationResults<Day> intrinsicResults = CalcIntrinsic(_dailyStorageWithRatchets);
 
@@ -539,7 +546,7 @@ namespace Cmdty.Storage.Test
         {
             LsmcStorageValuationResults<Day> lsmcResults = LsmcStorageValuation.Calculate(_valDate, Inventory,
                 _forwardCurve, simpleDailyStorage, _settleDateRule, _flatInterestRateDiscounter, _gridCalc, NumTolerance,
-                _1FVeryLowVolDailyMultiFactorParams, NumSims, RandomSeed, RegressMaxDegree, RegressCrossProducts);
+                _1FVeryLowVolDailyMultiFactorParams, NumSims, RandomSeed, _oneFactorBasisFunctions);
 
             IntrinsicStorageValuationResults<Day> intrinsicResults = CalcIntrinsic(simpleDailyStorage);
 
@@ -565,7 +572,7 @@ namespace Cmdty.Storage.Test
         {
             LsmcStorageValuationResults<Day> lsmcResults = LsmcStorageValuation.Calculate(_valDate, Inventory,
                 _forwardCurve, _simpleDailyStorage, _settleDateRule, _flatInterestRateDiscounter, _gridCalc, NumTolerance,
-                _2FVeryLowVolDailyMultiFactorParams, NumSims, RandomSeed, RegressMaxDegree, RegressCrossProducts);
+                _2FVeryLowVolDailyMultiFactorParams, NumSims, RandomSeed, _twoFactorBasisFunctions);
 
             IntrinsicStorageValuationResults<Day> intrinsicResults = CalcIntrinsic(_simpleDailyStorage);
 
@@ -578,7 +585,7 @@ namespace Cmdty.Storage.Test
         {
             LsmcStorageValuationResults<Day> lsmcResults = LsmcStorageValuation.Calculate(_valDate, Inventory,
                 _forwardCurve, _dailyStorageWithRatchets, _settleDateRule, _flatInterestRateDiscounter, _gridCalc, NumTolerance,
-                _2FVeryLowVolDailyMultiFactorParams, NumSims, RandomSeed, RegressMaxDegree, RegressCrossProducts);
+                _2FVeryLowVolDailyMultiFactorParams, NumSims, RandomSeed, _twoFactorBasisFunctions);
 
             IntrinsicStorageValuationResults<Day> intrinsicResults = CalcIntrinsic(_dailyStorageWithRatchets);
 
@@ -598,8 +605,6 @@ namespace Cmdty.Storage.Test
             const int numInventorySpacePoints = 500;
             const int numSims = 1_000;
             const int seed = 11;
-            const int regressMaxDegree = 2;
-            const bool regressCrossProducts = false;
             const double numTolerance = 1E-10;
 
             var storageStart = new Day(2019, 12, 1);
@@ -693,7 +698,7 @@ namespace Cmdty.Storage.Test
 
             LsmcStorageValuationResults<Day> valuationResults = LsmcStorageValuation.Calculate(currentDate, storageStartingInventory,
                 forwardCurve, storage, SettleDateRule, flatInterestRateDiscounter, gridCalc, numTolerance,
-                multiFactorParams1Factor, numSims, seed, regressMaxDegree, regressCrossProducts);
+                multiFactorParams1Factor, numSims, seed, _oneFactorBasisFunctions);
 
             // Calculate the NPV Manually
 
@@ -760,7 +765,7 @@ namespace Cmdty.Storage.Test
             // ReSharper disable once UnusedVariable
             LsmcStorageValuationResults<Day> lsmcResults = LsmcStorageValuation.Calculate(_valDate, Inventory,
                 _forwardCurve, _simpleDailyStorage, _settleDateRule, _flatInterestRateDiscounter, _gridCalc, NumTolerance,
-                _1FDailyMultiFactorParams, NumSims, RandomSeed, RegressMaxDegree, RegressCrossProducts, OnProgress);
+                _1FDailyMultiFactorParams, NumSims, RandomSeed, _oneFactorBasisFunctions, OnProgress);
 
             Assert.InRange(progresses[0], 0.0, 1.0);
             // ReSharper disable once UseIndexFromEndExpression
@@ -785,7 +790,7 @@ namespace Cmdty.Storage.Test
                 // ReSharper disable once UnusedVariable
                 LsmcStorageValuationResults<Day> lsmcResults = LsmcStorageValuation.Calculate(_valDate, Inventory,
                     _forwardCurve, _simpleDailyStorage, _settleDateRule, _flatInterestRateDiscounter, _gridCalc,
-                    NumTolerance, _1FDailyMultiFactorParams, numSims, RandomSeed, RegressMaxDegree, RegressCrossProducts,
+                    NumTolerance, _1FDailyMultiFactorParams, numSims, RandomSeed, _oneFactorBasisFunctions,
                     cancellationTokenSource.Token);
             });
         }

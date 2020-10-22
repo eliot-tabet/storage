@@ -22,7 +22,8 @@
   </ItemGroup>
   
   <ItemGroup>
-    <None Remove="coverage.cobertura.xml"/>
+    <None Remove="coverage.cobertura.xml" />
+    <None Remove="Cmdty.Storage.Test.csproj.DotSettings" />
   </ItemGroup>
-
+  
 </Project>
