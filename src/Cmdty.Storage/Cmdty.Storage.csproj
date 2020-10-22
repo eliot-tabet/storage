@@ -2,7 +2,8 @@
 
   <PropertyGroup>
     <TargetFrameworks>netstandard2.0</TargetFrameworks>
-    <TargetFrameworks Condition="'$(OS)' == 'Windows_NT'">$(TargetFrameworks);net45</TargetFrameworks>
+    <FullNetVersion>net461</FullNetVersion>
+    <TargetFrameworks Condition="'$(OS)' == 'Windows_NT'">$(TargetFrameworks);$(FullNetVersion)</TargetFrameworks>
     <PackageId>Cmdty.Storage</PackageId>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
     <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
@@ -26,26 +27,26 @@
     </AssemblyAttribute>
   </ItemGroup>
 
-  <Target Name="PostBuild" AfterTargets="PostBuildEvent" Condition="'$(TargetFramework)' == 'net45'">
+  <Target Name="PostBuild" AfterTargets="PostBuildEvent" Condition="'$(TargetFramework)' == '$(FullNetVersion)'">
     <PropertyGroup>
       <PythonLibDir>..\Cmdty.Storage.Python\cmdty_storage\lib</PythonLibDir>
     </PropertyGroup>
     <ItemGroup>
-      <ManagedFilesToCopyForPython Include="$(ProjectDir)bin\$(ConfigurationName)\net45\*.dll" />
-      <ManagedFilesToCopyForPython Include="$(ProjectDir)bin\$(ConfigurationName)\net45\*.pdb" />
+      <ManagedFilesToCopyForPython Include="$(ProjectDir)bin\$(ConfigurationName)\$(FullNetVersion)\*.dll" />
+      <ManagedFilesToCopyForPython Include="$(ProjectDir)bin\$(ConfigurationName)\$(FullNetVersion)\*.pdb" />
     </ItemGroup>
     <MakeDir Directories="$(PythonLibDir)" />
     <Copy SourceFiles="@(ManagedFilesToCopyForPython)" DestinationFolder="..\Cmdty.Storage.Python\cmdty_storage\lib" OverwriteReadOnlyFiles="true" />
     <WriteLinesToFile File="..\Cmdty.Storage.Python\cmdty_storage\__version__.py" Lines="__version__ = '$(PythonVersion)'" Overwrite="true" WriteOnlyWhenDifferent="true" />
 
     <ItemGroup>
-      <NativeX86FilesToCopyForPython Include="$(ProjectDir)bin\$(ConfigurationName)\net45\x86\*.dll" />
+      <NativeX86FilesToCopyForPython Include="$(ProjectDir)bin\$(ConfigurationName)\$(FullNetVersion)\x86\*.dll" />
     </ItemGroup>
     <MakeDir Directories="$(PythonLibDir)\x86" />
     <Copy SourceFiles="@(NativeX86FilesToCopyForPython)" DestinationFolder="..\Cmdty.Storage.Python\cmdty_storage\lib\x86" OverwriteReadOnlyFiles="true" />
 
     <ItemGroup>
-      <NativeX64FileToCopyForPython Include="$(ProjectDir)bin\$(ConfigurationName)\net45\x64\*.dll" />
+      <NativeX64FileToCopyForPython Include="$(ProjectDir)bin\$(ConfigurationName)\$(FullNetVersion)\x64\*.dll" />
     </ItemGroup>
     <MakeDir Directories="$(PythonLibDir)\x64" />
     <Copy SourceFiles="@(NativeX64FileToCopyForPython)" DestinationFolder="..\Cmdty.Storage.Python\cmdty_storage\lib\x64" OverwriteReadOnlyFiles="true" />
