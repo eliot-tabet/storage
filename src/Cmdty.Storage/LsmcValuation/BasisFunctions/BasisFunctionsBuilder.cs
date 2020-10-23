@@ -23,15 +23,22 @@
 // OTHER DEALINGS IN THE SOFTWARE.
 #endregion
 
+using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
+using System.Text.RegularExpressions;
+using JetBrains.Annotations;
+using Microsoft.CodeAnalysis.CSharp.Scripting;
+using Microsoft.CodeAnalysis.Scripting;
 
 namespace Cmdty.Storage
 {
     /// <summary>
     /// Used for combining basis functions.
     /// </summary>
-    public class BasisFunctionsBuilder
+    public sealed class BasisFunctionsBuilder
     {
         public IEnumerable<BasisFunction> Functions { get; }
 
@@ -41,6 +48,15 @@ namespace Cmdty.Storage
         public BasisFunctionsBuilder(IEnumerable<BasisFunction> basisFunctions) =>
             Functions = basisFunctions;
 
+        public static implicit operator BasisFunctionsBuilder(BasisFunction basisFunction) => 
+            new BasisFunctionsBuilder(basisFunction);
+
+        public static implicit operator BasisFunctionsBuilder(BasisFunction[] basisFunctions) =>
+            new BasisFunctionsBuilder(basisFunctions);
+
+        public static implicit operator BasisFunctionsBuilder(List<BasisFunction> basisFunctions) =>
+            new BasisFunctionsBuilder(basisFunctions);
+
         public static implicit operator BasisFunction[](BasisFunctionsBuilder builder) => builder.Functions.ToArray();
 
         public static implicit operator List<BasisFunction>(BasisFunctionsBuilder builder) => builder.Functions.ToList();
@@ -48,6 +64,12 @@ namespace Cmdty.Storage
         public static BasisFunctionsBuilder operator +(BasisFunctionsBuilder builder1, BasisFunctionsBuilder builder2) 
             => Combine(builder1, builder2);
 
+        public static BasisFunctionsBuilder operator +(BasisFunctionsBuilder builder, BasisFunction basisFunction)
+            => new BasisFunctionsBuilder(builder.Functions.Concat(new [] {basisFunction}));
+
+        public static BasisFunctionsBuilder operator +(BasisFunction basisFunction, BasisFunctionsBuilder builder)
+            => new BasisFunctionsBuilder(builder.Functions.Concat(new[] { basisFunction }));
+        
         public static BasisFunctionsBuilder Combine(BasisFunctionsBuilder builder1, BasisFunctionsBuilder builder2)
             => new BasisFunctionsBuilder(builder1.Functions.Concat(builder2.Functions));
 
@@ -63,6 +85,49 @@ namespace Cmdty.Storage
         
         public static BasisFunctionsBuilder AllMarkovFactorAllPositiveIntegerPowersUpTo(int maxPower, int numMarkovFactors)
             => new BasisFunctionsBuilder(BasisFunctions.AllMarkovFactorAllPositiveIntegerPowersUpTo(maxPower, numMarkovFactors));
+
+        public static BasisFunction[] Parse([NotNull] string basisFunctionExpression)
+        {
+            if (basisFunctionExpression == null) throw new ArgumentNullException(nameof(basisFunctionExpression));
+            return BasisFunctionsCache.GetOrAdd(basisFunctionExpression, expression =>
+            {
+                string[] monomials = expression.Split('+').Select(s => s.Trim()).ToArray();
+                if (monomials.Length == 0)
+                    throw new ArgumentException("Basis function expression contains no monomials.", nameof(expression));
+                if (monomials.Distinct().Count() < monomials.Length)
+                    throw new ArgumentException("Basis function expression contains repeated monomials.");
+                return monomials.Select(ParseMonomial).ToArray();
+            });
+        }
+
+        private static readonly ScriptOptions ParserScriptOptions;
+        private static readonly ConcurrentDictionary<string, BasisFunction[]> BasisFunctionsCache;
+        private static readonly ConcurrentDictionary<string, BasisFunction> MonomialsCache;
+
+        static BasisFunctionsBuilder()
+        {
+            ParserScriptOptions = ScriptOptions.Default.WithImports("Cmdty.Storage.Sim")
+                .WithReferences(Assembly.GetExecutingAssembly());
+            BasisFunctionsCache = new ConcurrentDictionary<string, BasisFunction[]>();
+            MonomialsCache = new ConcurrentDictionary<string, BasisFunction>();
+        }
+
+        private static BasisFunction ParseMonomial(string monomialExpression)
+        {
+            return MonomialsCache.GetOrAdd(monomialExpression, expression =>
+            {
+                if (monomialExpression == "1")
+                    return BasisFunctions.Ones;
+                monomialExpression = monomialExpression.Replace('s', 'S');
+                // Replace xi with Factor(i)
+                monomialExpression = Regex.Replace(monomialExpression, @"x(?<FactorNum>\d+)", match =>
+                    $"Factor({match.Groups["FactorNum"].Value})");
+                // Replace i**j with i.Pow(j)
+                monomialExpression = Regex.Replace(monomialExpression, @"\*\*(?<Power>\d+)", match =>
+                    $".Pow({match.Groups["Power"].Value})");
+                return CSharpScript.EvaluateAsync<BasisFunction>(monomialExpression, ParserScriptOptions).Result;
+            });
+        }
 
     }
 }

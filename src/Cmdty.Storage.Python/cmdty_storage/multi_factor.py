@@ -264,9 +264,8 @@ def three_factor_seasonal_value(cmdty_storage: CmdtyStorage,
                                 long_term_vol: float,
                                 seasonal_vol: float,
                                 num_sims: int,
+                                basis_funcs: str,
                                 seed: tp.Optional[int] = None,
-                                regress_poly_degree: int = 2,  # TODO either increase this or make it non-optional
-                                regress_cross_products: bool = True,
                                 num_inventory_grid_points: int = 100,
                                 numerical_tolerance: float = 1E-12,
                                 on_progress_update: tp.Optional[tp.Callable[[float], None]] = None,
@@ -276,10 +275,12 @@ def three_factor_seasonal_value(cmdty_storage: CmdtyStorage,
     net_multi_factor_params = net_mf.MultiFactorParameters.For3FactorSeasonal[time_period_type](
         spot_mean_reversion, spot_vol, long_term_vol, seasonal_vol, net_current_period,
         cmdty_storage.net_storage.EndPeriod)
-    return net_multi_factor_calc(cmdty_storage, fwd_curve, interest_rates, inventory, net_multi_factor_params,
-                                 num_inventory_grid_points, num_sims, numerical_tolerance, on_progress_update,
-                                 regress_cross_products, regress_poly_degree, seed, settlement_rule, time_period_type,
-                                 val_date)
+    # Transform factors x_st -> x0, x_lt -> x1, x_sw -> x2
+    basis_func_transformed = basis_funcs.replace('x_st', 'x0').replace('x_lt', 'x1').replace('x_sw', 'x2')
+    return _net_multi_factor_calc(cmdty_storage, fwd_curve, interest_rates, inventory, net_multi_factor_params,
+                                  num_inventory_grid_points, num_sims, numerical_tolerance, on_progress_update,
+                                  basis_func_transformed, seed, settlement_rule, time_period_type,
+                                  val_date)
 
 
 def multi_factor_value(cmdty_storage: CmdtyStorage,
@@ -291,9 +292,8 @@ def multi_factor_value(cmdty_storage: CmdtyStorage,
                        factors: tp.Iterable[tp.Tuple[float, utils.CurveType]],
                        factor_corrs: FactorCorrsType,
                        num_sims: int,
+                       basis_funcs: str,
                        seed: tp.Optional[int] = None,
-                       regress_poly_degree: int = 2,
-                       regress_cross_products: bool = True,
                        num_inventory_grid_points: int = 100,
                        numerical_tolerance: float = 1E-12,
                        on_progress_update: tp.Optional[tp.Callable[[float], None]] = None,
@@ -303,16 +303,16 @@ def multi_factor_value(cmdty_storage: CmdtyStorage,
         raise ValueError("cmdty_storage and forward_curve have different frequencies.")
     time_period_type = utils.FREQ_TO_PERIOD_TYPE[cmdty_storage.freq]
     net_multi_factor_params = _create_net_multi_factor_params(factor_corrs, factors, time_period_type)
-    return net_multi_factor_calc(cmdty_storage, fwd_curve, interest_rates, inventory, net_multi_factor_params,
-                                 num_inventory_grid_points, num_sims, numerical_tolerance, on_progress_update,
-                                 regress_cross_products, regress_poly_degree, seed, settlement_rule, time_period_type,
-                                 val_date)
+    return _net_multi_factor_calc(cmdty_storage, fwd_curve, interest_rates, inventory, net_multi_factor_params,
+                                  num_inventory_grid_points, num_sims, numerical_tolerance, on_progress_update,
+                                  basis_funcs, seed, settlement_rule, time_period_type,
+                                  val_date)
 
 
-def net_multi_factor_calc(cmdty_storage, fwd_curve, interest_rates, inventory, net_multi_factor_params,
-                          num_inventory_grid_points, num_sims, numerical_tolerance, on_progress_update,
-                          regress_cross_products, regress_poly_degree, seed, settlement_rule, time_period_type,
-                          val_date):
+def _net_multi_factor_calc(cmdty_storage, fwd_curve, interest_rates, inventory, net_multi_factor_params,
+                           num_inventory_grid_points, num_sims, numerical_tolerance, on_progress_update,
+                           basis_funcs, seed, settlement_rule, time_period_type,
+                           val_date):
     # Convert inputs to .NET types
     net_forward_curve = utils.series_to_double_time_series(fwd_curve, time_period_type)
     net_current_period = utils.from_datetime_like(val_date, time_period_type)
@@ -322,10 +322,8 @@ def net_multi_factor_calc(cmdty_storage, fwd_curve, interest_rates, inventory, n
     net_interest_rate_time_series = utils.series_to_double_time_series(interest_rates, utils.FREQ_TO_PERIOD_TYPE['D'])
     net_discount_func = net_cs.StorageHelper.CreateAct65ContCompDiscounterFromSeries(net_interest_rate_time_series)
     net_on_progress = utils.wrap_on_progress_for_dotnet(on_progress_update)
-    net_basis_functions = net_cs.BasisFunctionsBuilder.Combine(
-                        net_cs.BasisFunctionsBuilder.Ones,
-                        net_cs.BasisFunctionsBuilder.AllMarkovFactorAllPositiveIntegerPowersUpTo(regress_poly_degree,
-                                                                               net_multi_factor_params.NumFactors))
+
+    net_basis_functions = net_cs.BasisFunctionsBuilder.Parse(basis_funcs)
     # Intrinsic calc
     intrinsic_result = cs_intrinsic.net_intrinsic_calc(cmdty_storage, net_current_period, net_interest_rate_time_series,
                                                        inventory, net_forward_curve, net_settlement_rule,
@@ -339,7 +337,7 @@ def net_multi_factor_calc(cmdty_storage, fwd_curve, interest_rates, inventory, n
                                                                               net_settlement_rule, net_discount_func,
                                                                               net_grid_calc, numerical_tolerance,
                                                                               net_multi_factor_params, num_sims, seed,
-                                                                              net_basis_functions.Functions,
+                                                                              net_basis_functions,
                                                                               net_on_progress)
     deltas = utils.net_time_series_to_pandas_series(net_val_results.Deltas, cmdty_storage.freq)
     expected_profile = cs_intrinsic.profile_to_data_frame(cmdty_storage.freq, net_val_results.ExpectedStorageProfile)

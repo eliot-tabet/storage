@@ -210,11 +210,11 @@ class TestMultiFactorValue(unittest.TestCase):
         # Simulation parameter
         num_sims = 500
         seed = 11
-        regress_cross_products = False
+        basis_funcs = '1 + x0 + x0**2 + x1 + x1*x1'
         multi_factor_val = multi_factor_value(cmdty_storage, val_date, inventory, forward_curve,
                                               interest_rate_curve, twentieth_of_next_month,
-                                              factors, factor_corrs, num_sims, seed,
-                                              regress_cross_products=regress_cross_products,
+                                              factors, factor_corrs, num_sims,
+                                              basis_funcs, seed,
                                               on_progress_update=on_progress)
         self.assertAlmostEqual(multi_factor_val.npv, 1779708.1119639324, places=6)
         self.assertEqual(123, len(multi_factor_val.deltas)) # TODO look into why deltas is longer the intrinsic profile
@@ -273,13 +273,13 @@ class TestMultiFactorValue(unittest.TestCase):
         # Simulation parameter
         num_sims = 500
         seed = 11
-        regress_cross_products = False
+        basis_funcs = '1 + x_st + x_sw + x_lt + x_st**2 + x_sw**2 + x_lt**2'
         multi_factor_val = three_factor_seasonal_value(cmdty_storage, val_date, inventory, forward_curve,
                                                        interest_rate_curve, twentieth_of_next_month,
                                                        spot_mean_reversion, spot_volatility, long_term_vol,
                                                        seasonal_volatility,
-                                                       num_sims, seed,
-                                                       regress_cross_products=regress_cross_products,
+                                                       num_sims,
+                                                       basis_funcs, seed,
                                                        on_progress_update=on_progress)
         self.assertAlmostEqual(multi_factor_val.npv, 1766157.090481408, places=6)
         self.assertEqual(123, len(multi_factor_val.deltas))  # TODO look into why deltas is longer the intrinsic profile

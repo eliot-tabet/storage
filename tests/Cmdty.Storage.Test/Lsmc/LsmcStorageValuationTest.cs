@@ -781,12 +781,12 @@ namespace Cmdty.Storage.Test
         [Fact]
         public void Calculate_CancelCalls_ThrowsOperationCanceledException()
         {
-            const int numSims = 10_000; // Large number of sims to ensure valuation doesn't finish cancel called
+            const int numSims = 5_000; // Large number of sims to ensure valuation doesn't finish cancel called
             var cancellationTokenSource = new CancellationTokenSource();
             
             Assert.Throws<OperationCanceledException>(() =>
             {
-                cancellationTokenSource.CancelAfter(TimeSpan.FromSeconds(1));
+                cancellationTokenSource.CancelAfter(TimeSpan.FromSeconds(0.5));
                 // ReSharper disable once UnusedVariable
                 LsmcStorageValuationResults<Day> lsmcResults = LsmcStorageValuation.Calculate(_valDate, Inventory,
                     _forwardCurve, _simpleDailyStorage, _settleDateRule, _flatInterestRateDiscounter, _gridCalc,
