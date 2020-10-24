@@ -1,5 +1,14 @@
 ## Overview
-A collection of models for the valuation and optimisation of commodity storage, either virtual or physical. The models can be used for any commodity, although are most suitable for natural gas storage valuation and optimisation.
+Commodity valuation and optimisation model implemented using the Longstaff Schwartz Least Squares 
+Monte Carlo technique.
+[A multi-factor model](https://github.com/cmdty/core/blob/master/docs/multifactor_price_process/multifactor_price_process.pdf) 
+is used to for the commodity price dynamics. This allows for a complex 
+volatility and correlations structure between forward rates as well as calibration to option 
+implied volatilities.
+
+
+The models can be used for any commodity, although are most suitable for natural gas 
+storage valuation and optimisation.
 
 Calculations take into account many of the complex features of physical storage including:
 * Inventory dependent injection and withdrawal rates, otherwise known as ratchets. For physical storage it is often the case that maximum withdrawal rates will increase, and injection rates will decrease as the storage inventory increases. For natural gas, this due to the increased pressure within the storage cavern.
@@ -10,18 +19,6 @@ Calculations take into account many of the complex features of physical storage 
 * Optional time and inventory dependent loss of commodity in storage. For example this assumption is necessary for electricity storage which isn't 100% efficient.
 * Ability to constrain the storage to be empty at the end of it's life, or specify a value of commodity inventory left in storage.
 
-## Models
-### Currently Implemented
-Currently the following models are implemented in this repository:
-* Intrinsic valuation, i.e. optimal value assuming the commodity price remains static.
-* One-factor trinomial tree, with seasonal spot volatility.
-
-Both approaches solve the optimsation problem using backward induction across a discrete inventory grid.
-
-### Planned Implementations
-Implemenations using the following techniques are planned in the near future:
-* Least-Squares Monte Carlo with a multi-factor price process.
-* Rolling Intrinsic.
 
 ## Examples
 ### Creating the Storage Object

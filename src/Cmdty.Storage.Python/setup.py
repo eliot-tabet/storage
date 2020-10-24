@@ -37,7 +37,7 @@ setuptools.setup(
     version=version['__version__'],
     author='Jake Fowler',
     author_email='jake@cmdty.co.uk',
-    description='Valuation and optimisation of commodity storage.',
+    description='Least Squares Monte Carlo storage valuation model.',
     long_description=long_description,
     long_description_content_type='text/markdown',
     url='https://github.com/cmdty/storage',
