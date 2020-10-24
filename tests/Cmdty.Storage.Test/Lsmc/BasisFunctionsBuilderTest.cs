@@ -35,6 +35,7 @@ namespace Cmdty.Storage.Test
     {
 
         [Fact]
+        [Trait("Category", "Lsmc.BasisFunctions")]
         public void Parse_ValidInput_AsExpected()
         {
             const string expression = "1 + s + s*s + s*s**3 + x0 + x1**3 + s*x2**4";
@@ -78,7 +79,8 @@ namespace Cmdty.Storage.Test
 
 
         [Fact]
-        public void SomeTests()
+        [Trait("Category", "Lsmc.BasisFunctions")]
+        public void CombineWithAddOperator_AsExpected()
         {
             BasisFunction[] basisFunctions = BasisFunctionsBuilder.Ones +
                 Spot + Spot * Spot + Spot * Spot.Pow(3) + X0 + X1.Pow(3) + S * X2.Pow(4);

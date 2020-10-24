@@ -180,6 +180,7 @@ namespace Cmdty.Storage.Test
         }
 
         [Fact]
+        [Trait("Category", "Lsmc.AtEndOfStorage")]
         public void Calculate_CurrentPeriodAfterStorageEnd_ResultWithZeroNpv()
         {
             Day valDate = _simpleDailyStorage.EndPeriod + 1;
@@ -190,6 +191,7 @@ namespace Cmdty.Storage.Test
         }
 
         [Fact]
+        [Trait("Category", "Lsmc.AtEndOfStorage")]
         public void Calculate_CurrentPeriodAfterStorageEnd_ResultWithEmptyDeltas()
         {
             Day valDate = _simpleDailyStorage.EndPeriod + 1;
@@ -201,6 +203,7 @@ namespace Cmdty.Storage.Test
         // TODO same unit test as above, but testing the other output data, decision, simulated prices etc.
 
         [Fact]
+        [Trait("Category", "Lsmc.AtEndOfStorage")]
         public void Calculate_CurrentPeriodEqualToStorageEndStorageMustBeEmptyAtEnd_ResultWithZeroNpv()
         {
             Day valDate = _simpleDailyStorage.EndPeriod;
@@ -212,6 +215,7 @@ namespace Cmdty.Storage.Test
         }
 
         [Fact]
+        [Trait("Category", "Lsmc.AtEndOfStorage")]
         public void Calculate_CurrentPeriodEqualToStorageEndStorageMustBeEmptyAtEnd_ResultWithEmptyDeltas()
         {
             Day valDate = _simpleDailyStorage.EndPeriod;
@@ -225,6 +229,7 @@ namespace Cmdty.Storage.Test
         // TODO same unit test as above, but testing the other output data, decision, simulated prices etc.
 
         [Fact]
+        [Trait("Category", "Lsmc.AtEndOfStorage")]
         public void Calculate_CurrentPeriodEqualToStorageEndAndInventoryHasTerminalValue_NpvEqualsTerminalValue()
         {
             Day valDate = _simpleDailyStorageTerminalInventoryValue.EndPeriod;
@@ -241,6 +246,7 @@ namespace Cmdty.Storage.Test
         // TODO same unit test as above, but testing the other output data, delta, decision, simulated prices etc.
 
         [Fact]
+        [Trait("Category", "Lsmc.AtEndOfStorage")]
         public void Calculate_CurrentPeriodDayBeforeStorageEndAndStorageMustBeEmptyAtEnd_NpvEqualsInventoryTimesSpotMinusWithdrawalCost()
         {
             Day valDate = _simpleDailyStorage.EndPeriod - 1;
@@ -257,6 +263,7 @@ namespace Cmdty.Storage.Test
         }
 
         [Fact]
+        [Trait("Category", "Lsmc.AtEndOfStorage")]
         public void Calculate_CurrentPeriodDayBeforeStorageEndAndStorageMustBeEmptyAtEnd_DeltaEqualsInventory()
         {
             Day valDate = _simpleDailyStorage.EndPeriod - 1;
@@ -273,6 +280,7 @@ namespace Cmdty.Storage.Test
         // TODO terminal value looks like call option payoff, value day before equals call value
 
         [Fact]
+        [Trait("Category", "Lsmc.LikeCalls")]
         public void Calculate_StorageLikeCallOptionsOneFactor_NpvEqualsBlack76()
         {
             var valDate = new Day(2019, 8, 29);
@@ -320,6 +328,7 @@ namespace Cmdty.Storage.Test
         }
 
         [Fact]
+        [Trait("Category", "Lsmc.LikeCalls")]
         public void Calculate_StorageLikeCallOptionsOneFactor_DeltaEqualsBlack76DeltaUndiscounted()
         {
             var valDate = new Day(2019, 8, 29);
@@ -371,6 +380,7 @@ namespace Cmdty.Storage.Test
         }
 
         [Fact]
+        [Trait("Category", "Lsmc.LikeTrinomial")]
         public void Calculate_OneFactorSimpleStorage_NpvApproximatelyEqualsTrinomialNpv()
         {
             LsmcStorageValuationResults<Day> lsmcResults = LsmcStorageValuation.Calculate(_valDate, Inventory,
@@ -398,6 +408,7 @@ namespace Cmdty.Storage.Test
         }
 
         [Fact]
+        [Trait("Category", "Lsmc.LikeTrinomial")]
         public void Calculate_OneFactorStorageWithRatchets_NpvApproximatelyEqualsTrinomialNpv()
         {
             LsmcStorageValuationResults<Day> lsmcResults = LsmcStorageValuation.Calculate(_valDate, Inventory,
@@ -425,6 +436,7 @@ namespace Cmdty.Storage.Test
         }
 
         [Fact(Skip = "Still working on this.")]
+        [Trait("Category", "Lsmc.LikeTrinomial")]
         //[Fact]
         public void Calculate_OneFactorValDateAfterStorageStart_NpvApproximatelyEqualsTrinomialNpv()
         {
@@ -468,6 +480,7 @@ namespace Cmdty.Storage.Test
 
         // TODO investigate why the below two test require a high tolerance. I suspect this is due to a high 'foresight' bias caused by using the same simulation for regression and decision
         [Fact]
+        [Trait("Category", "Lsmc.LikeIntrinsic")]
         public void Calculate_OneFactorZeroMeanReversionSimpleStorage_NpvApproximatelyEqualsIntrinsicNpv()
         {
             const int regressPolyDegree = 5;  // Test requires a higher poly degree than the others
@@ -486,6 +499,7 @@ namespace Cmdty.Storage.Test
         }
 
         [Fact]
+        [Trait("Category", "Lsmc.LikeIntrinsic")]
         public void Calculate_OneFactorZeroMeanReversionStorageWithRatchets_NpvApproximatelyEqualsIntrinsicNpv()
         {
             const int regressPolyDegree = 5;  // Test requires a higher poly degree than the others
@@ -503,8 +517,8 @@ namespace Cmdty.Storage.Test
             TestHelper.AssertWithinPercentTol(intrinsicResults.NetPresentValue, lsmcResults.Npv, percentageTol);
         }
 
-        // TODO IMPORTANT why are intrinsic decisions to empty storage ASAP? Forward curve has some contango so should be better to wait or even inject.
         [Fact]
+        [Trait("Category", "Lsmc.LikeIntrinsic")]
         public void Calculate_OneFactorVeryLowVolsSimpleStorage_NpvApproximatelyEqualsIntrinsicNpv()
         {
             LsmcStorageValuationResults<Day> lsmcResults = LsmcStorageValuation.Calculate(_valDate, Inventory,
@@ -518,6 +532,7 @@ namespace Cmdty.Storage.Test
         }
 
         [Fact]
+        [Trait("Category", "Lsmc.LikeIntrinsic")]
         public void Calculate_OneFactorVeryLowVolsStorageWithRatchets_NpvApproximatelyEqualsIntrinsicNpv()
         {
             LsmcStorageValuationResults<Day> lsmcResults = LsmcStorageValuation.Calculate(_valDate, Inventory,
@@ -531,12 +546,14 @@ namespace Cmdty.Storage.Test
         }
 
         [Fact]
+        [Trait("Category", "Lsmc.LikeIntrinsic")]
         public void Calculate_OneFactorVeryLowVolsSimpleStorage_DeltasApproximatelyEqualIntrinsicVolumeProfile()
         {
             AssertDeltasApproximatelyEqualIntrinsicVolumeProfile(_simpleDailyStorage);
         }
         
         [Fact(Skip = "Need to investigate why this is failing.")] // TODO investigate
+        [Trait("Category", "Lsmc.LikeIntrinsic")]
         public void Calculate_OneFactorVeryLowVolsStorageWithRatchets_DeltasApproximatelyEqualIntrinsicVolumeProfile()
         {
             AssertDeltasApproximatelyEqualIntrinsicVolumeProfile(_dailyStorageWithRatchets);
@@ -568,6 +585,7 @@ namespace Cmdty.Storage.Test
         }
 
         [Fact]
+        [Trait("Category", "Lsmc.LikeIntrinsic")]
         public void Calculate_TwoFactorVeryLowVolsSimpleStorage_NpvApproximatelyEqualsIntrinsicNpv()
         {
             LsmcStorageValuationResults<Day> lsmcResults = LsmcStorageValuation.Calculate(_valDate, Inventory,
@@ -581,6 +599,7 @@ namespace Cmdty.Storage.Test
         }
 
         [Fact]
+        [Trait("Category", "Lsmc.LikeIntrinsic")]
         public void Calculate_TwoFactorVeryLowVolsStorageWithRatchets_NpvApproximatelyEqualsIntrinsicNpv()
         {
             LsmcStorageValuationResults<Day> lsmcResults = LsmcStorageValuation.Calculate(_valDate, Inventory,
@@ -595,6 +614,7 @@ namespace Cmdty.Storage.Test
 
         // TODO refactor this to share code with trinomial test
         [Fact]
+        [Trait("Category", "Lsmc.LikeIntrinsic")]
         public void Calculate_StorageWithForcedInjectAndWithdraw_NpvAlmostEqualsTrivialIntrinsicCalc()
         {
             // There will be a small difference between the LSMC NPV and the intrinsic calc because of sampling error
@@ -757,6 +777,7 @@ namespace Cmdty.Storage.Test
         }
 
         [Fact]
+        [Trait("Category", "Lsmc.Ancillary")]
         public void Calculate_OnProgressCalledWithArgumentsInAscendingOrderBetweenZeroAndOne()
         {
             var progresses = new List<double>();
@@ -779,6 +800,7 @@ namespace Cmdty.Storage.Test
         }
 
         [Fact]
+        [Trait("Category", "Lsmc.Ancillary")]
         public void Calculate_CancelCalls_ThrowsOperationCanceledException()
         {
             const int numSims = 5_000; // Large number of sims to ensure valuation doesn't finish cancel called

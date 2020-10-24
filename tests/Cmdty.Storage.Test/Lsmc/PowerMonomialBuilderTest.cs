@@ -32,6 +32,7 @@ namespace Cmdty.Storage.Test
     {
 
         [Fact]
+        [Trait("Category", "Lsmc.BasisFunctions")]
         public void CreateBasisFunctionFromSim_AsExpected()
         {
             BasisFunction basis = Sim.Spot * Sim.Spot * Sim.X1 * Sim.X0.Pow(3);
