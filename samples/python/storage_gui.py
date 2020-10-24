@@ -7,8 +7,7 @@ from IPython.display import display
 from ipywidgets.widgets.interaction import show_inline_matplotlib_plots
 from collections import namedtuple
 
-
-    # Shared properties
+# Shared properties
 freq='D'
 num_fwd_rows = 15
 date_format = 'YYYY-MM-DD'
