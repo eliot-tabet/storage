@@ -34,18 +34,19 @@ namespace Cmdty.Storage
     {
         public double Npv { get; }
         public DoubleTimeSeries<T> Deltas {get;}
-        public TimeSeries<T, StorageProfile> ExpectedStorageProfile { get; set; }
+        public TimeSeries<T, StorageProfile> ExpectedStorageProfile { get; }
         public Panel<T, double> SpotPriceBySim { get; }
         public Panel<T, double> InventoryBySim { get; }
         public Panel<T, double> InjectWithdrawVolumeBySim { get; }
         public Panel<T, double> CmdtyConsumedBySim { get; }
         public Panel<T, double> InventoryLossBySim { get; }
         public Panel<T, double> NetVolumeBySim { get; }
+        public TimeSeries<T, TriggerPricePair> TriggerPrices { get; }
 
         public LsmcStorageValuationResults(double npv, DoubleTimeSeries<T> deltas, TimeSeries<T, StorageProfile> expectedStorageProfile, 
             Panel<T, double> spotPriceBySim, 
             Panel<T, double> inventoryBySim, Panel<T, double> injectWithdrawVolumeBySim, Panel<T, double> cmdtyConsumedBySim, 
-            Panel<T, double> inventoryLossBySim, Panel<T, double> netVolumeBySim)
+            Panel<T, double> inventoryLossBySim, Panel<T, double> netVolumeBySim, TimeSeries<T, TriggerPricePair> triggerPrices)
         {
             Npv = npv;
             Deltas = deltas;
@@ -64,7 +65,7 @@ namespace Cmdty.Storage
                 Panel<T, double>.CreateEmpty(), Panel<T, double>.CreateEmpty(),
                 Panel<T, double>.CreateEmpty(), 
                 Panel<T, double>.CreateEmpty(), Panel<T, double>.CreateEmpty(),
-                Panel<T, double>.CreateEmpty());
+                Panel<T, double>.CreateEmpty(), TimeSeries<T, TriggerPricePair>.Empty);
         }
 
         public static LsmcStorageValuationResults<T> CreateEndPeriodResults(double npv)
@@ -73,7 +74,7 @@ namespace Cmdty.Storage
                 Panel<T, double>.CreateEmpty(), Panel<T, double>.CreateEmpty(), 
                 Panel<T, double>.CreateEmpty(),
                 Panel<T, double>.CreateEmpty(), Panel<T, double>.CreateEmpty(),
-                Panel<T, double>.CreateEmpty());
+                Panel<T, double>.CreateEmpty(), TimeSeries<T, TriggerPricePair>.Empty);
         }
 
     }

@@ -559,7 +559,7 @@ namespace Cmdty.Storage
 
             var spotPricePanel = Panel.UseRawDataArray(spotSims.SpotPrices, spotSims.SimulatedPeriods, numSims);
             return new LsmcStorageValuationResults<T>(storageNpv, deltasSeries, storageProfileSeries, spotPricePanel, 
-                inventoryBySim, injectWithdrawVolumeBySim, cmdtyConsumedBySim, inventoryLossBySim, netVolumeBySim);
+                inventoryBySim, injectWithdrawVolumeBySim, cmdtyConsumedBySim, inventoryLossBySim, netVolumeBySim, null/*TODO*/);
         }
 
         private static double Average(Span<double> span)
