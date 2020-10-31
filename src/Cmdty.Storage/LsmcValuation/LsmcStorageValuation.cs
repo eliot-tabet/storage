@@ -266,7 +266,7 @@ namespace Cmdty.Storage
                 if (period.Equals(currentPeriod))
                 {
                     // Current period, for which the price isn't random so expected storage values are just the average of the values for all sims
-                    for (int i = 0; i < nextPeriodInventorySpaceGrid.Length; i++) // TODO parallelise 
+                    for (int i = 0; i < nextPeriodInventorySpaceGrid.Length; i++) // TODO parallelise?
                     {
                         Vector<double> storageValuesBySimNextPeriod = storageActualValuesNextPeriod[i];
                         double expectedStorageValueNextPeriod = storageValuesBySimNextPeriod.Average();
@@ -287,15 +287,11 @@ namespace Cmdty.Storage
                         storageRegressValuesNextPeriod[i] = estimatedContinuationValues;
                     }
                 }
-
                 storageRegressValuesByPeriod[backCounter + 1] = storageRegressValuesNextPeriod;
-
-
+                
                 double[] inventorySpaceGrid;
                 if (period.Equals(startActiveStorage))
-                {
                     inventorySpaceGrid = new[] { startingInventory };
-                }
                 else
                 {
                     (double inventorySpaceMin, double inventorySpaceMax) = inventorySpace[period];
@@ -338,17 +334,10 @@ namespace Cmdty.Storage
                         double decisionVolume = decisionSet[decisionIndex];
 
                         // Inject/Withdraw cost (same for all price sims)
-                        IReadOnlyList<DomesticCashFlow> injectWithdrawCostCostCashFlows = decisionVolume > 0.0
-                            ? storage.InjectionCost(period, inventory, decisionVolume)
-                            : storage.WithdrawalCost(period, inventory, -decisionVolume);
-
-                        double injectWithdrawCostNpv = injectWithdrawCostCostCashFlows.Sum(cashFlow => cashFlow.Amount * DiscountToCurrentDay(cashFlow.Date));
-                        injectWithdrawCostNpvs[decisionIndex] = injectWithdrawCostNpv;
+                        injectWithdrawCostNpvs[decisionIndex] = InjectWithdrawCostNpv(storage, decisionVolume, period, inventory, DiscountToCurrentDay);
 
                         // Cmdty Used For Inject/Withdraw (same for all price sims)
-                        cmdtyUsedForInjectWithdrawVolume[decisionIndex] = decisionVolume > 0.0
-                            ? storage.CmdtyVolumeConsumedOnInject(period, inventory, decisionVolume)
-                            : storage.CmdtyVolumeConsumedOnWithdraw(period, inventory, -decisionVolume);
+                        cmdtyUsedForInjectWithdrawVolume[decisionIndex] = CmdtyVolumeConsumedOnWithdraw(storage, decisionVolume, period, inventory);
 
                         // Calculate continuation values
                         double inventoryAfterDecision = inventory + decisionVolume - inventoryLoss;
@@ -411,7 +400,6 @@ namespace Cmdty.Storage
 
                             double totalNpv = immediateNpv + continuationValue - inventoryCostNpv; // TODO IMPORTANT check if inventoryCostNpv should be subtracted;
                             decisionNpvsRegress[decisionIndex] = totalNpv;
-
                         }
                         (double optimalRegressDecisionNpv, int indexOfOptimalDecision) = StorageHelper.MaxValueAndIndex(decisionNpvsRegress);
                         
@@ -483,12 +471,10 @@ namespace Cmdty.Storage
                     InjectWithdrawRange injectWithdrawRange = storage.GetInjectWithdrawRange(period, inventory);
                     double inventoryLoss = storage.CmdtyInventoryPercentLoss(period) * inventory;
                     double[] decisionSet = StorageHelper.CalculateBangBangDecisionSet(injectWithdrawRange, inventory,
-                        inventoryLoss,
-                        nextStepInventorySpaceMin, nextStepInventorySpaceMax, numericalTolerance);
+                        inventoryLoss, nextStepInventorySpaceMin, nextStepInventorySpaceMax, numericalTolerance);
                     IReadOnlyList<DomesticCashFlow> inventoryCostCashFlows =
                         storage.CmdtyInventoryCost(period, inventory);
-                    double inventoryCostNpv = inventoryCostCashFlows.Sum(cashFlow =>
-                        cashFlow.Amount * DiscountToCurrentDay(cashFlow.Date));
+                    double inventoryCostNpv = inventoryCostCashFlows.Sum(cashFlow => cashFlow.Amount * DiscountToCurrentDay(cashFlow.Date));
 
                     var decisionNpvsRegress = new double[decisionSet.Length];
                     var cmdtyUsedForInjectWithdrawVolumes = new double[decisionSet.Length];
@@ -497,18 +483,12 @@ namespace Cmdty.Storage
                         double decisionVolume = decisionSet[decisionIndex];
                         double inventoryAfterDecision = inventory + decisionVolume - inventoryLoss;
 
-                        double cmdtyUsedForInjectWithdrawVolume = decisionVolume > 0.0
-                            ? storage.CmdtyVolumeConsumedOnInject(period, inventory, decisionVolume)
-                            : storage.CmdtyVolumeConsumedOnWithdraw(period, inventory, -decisionVolume);
+                        double cmdtyUsedForInjectWithdrawVolume = CmdtyVolumeConsumedOnWithdraw(storage, decisionVolume, period, inventory);
 
                         double injectWithdrawNpv = -decisionVolume * simulatedSpotPrice * discountFactorFromCmdtySettlement;
-                        double cmdtyUsedForInjectWithdrawNpv = -cmdtyUsedForInjectWithdrawVolume * simulatedSpotPrice *
-                                                               discountFactorFromCmdtySettlement;
+                        double cmdtyUsedForInjectWithdrawNpv = -cmdtyUsedForInjectWithdrawVolume * simulatedSpotPrice * discountFactorFromCmdtySettlement;
 
-                        IReadOnlyList<DomesticCashFlow> injectWithdrawCostCostCashFlows = decisionVolume > 0.0
-                            ? storage.InjectionCost(period, inventory, decisionVolume)
-                            : storage.WithdrawalCost(period, inventory, -decisionVolume);
-                        double injectWithdrawCostNpv = injectWithdrawCostCostCashFlows.Sum(cashFlow => cashFlow.Amount * DiscountToCurrentDay(cashFlow.Date));
+                        var injectWithdrawCostNpv = InjectWithdrawCostNpv(storage, decisionVolume, period, inventory, DiscountToCurrentDay);
 
                         double immediateNpv = injectWithdrawNpv - injectWithdrawCostNpv + cmdtyUsedForInjectWithdrawNpv;
 
@@ -519,7 +499,7 @@ namespace Cmdty.Storage
                         decisionNpvsRegress[decisionIndex] = totalNpv;
                         cmdtyUsedForInjectWithdrawVolumes[decisionIndex] = cmdtyUsedForInjectWithdrawVolume;
                     }
-                    (double optimalRegressDecisionNpv, int indexOfOptimalDecision) = StorageHelper.MaxValueAndIndex(decisionNpvsRegress);
+                    (double _, int indexOfOptimalDecision) = StorageHelper.MaxValueAndIndex(decisionNpvsRegress);
                     double optimalDecisionVolume = decisionSet[indexOfOptimalDecision];
                     double optimalNextStepInventory = inventory + optimalDecisionVolume - inventoryLoss;
                     nextPeriodInventories[simIndex] = optimalNextStepInventory;
@@ -556,8 +536,7 @@ namespace Cmdty.Storage
             var deltasSeries = new DoubleTimeSeries<T>(periodsForResultsTimeSeries[0], deltas);
             var storageProfileSeries = new TimeSeries<T, StorageProfile>(periodsForResultsTimeSeries[0], storageProfiles);
             onProgressUpdate?.Invoke(1.0); // Progress with approximately 1.0 should have occured already, but might have been a bit off because of floating-point error.
-
-
+            
             // Calculate trigger prices
             int numTriggerPrices = 3; // TODO move this to the parameters
             int maxPossibleTriggerPrices = storage.EndPeriod.OffsetFrom(startActiveStorage); // Can only calculate trigger prices for period up to (but not including) storage end period
@@ -569,6 +548,9 @@ namespace Cmdty.Storage
                 T period = periodsForResultsTimeSeries[periodIndex];
                 Vector<double>[] regressContinuationValues = storageRegressValuesByPeriod[periodIndex + 1];
                 double[] inventoryGridNexPeriod = inventorySpaceGrids[periodIndex + 1];
+
+                Day cmdtySettlementDate = settleDateRule(period);
+                double discountFactorFromCmdtySettlement = DiscountToCurrentDay(cmdtySettlementDate);
 
                 double expectedInventory = storageProfileSeries[period].Inventory;
                 (double nextStepInventorySpaceMin, double nextStepInventorySpaceMax) = inventorySpace[period.Offset(1)];
@@ -584,6 +566,13 @@ namespace Cmdty.Storage
                     double alternativeVolume = decisionSet.OrderByDescending(d => d).ElementAt(1); // Second highest decision volume, usually will be zero, but might not due to forced injection
                     if (maxInjectVolume > alternativeVolume)
                     {
+                        double inventoryAfterMaxInject = expectedInventory + maxInjectVolume - inventoryLoss;
+                        double maxInjectContinuationValue = AverageContinuationValue(inventoryAfterMaxInject, inventoryGridNexPeriod, regressContinuationValues);
+                        double inventoryAfterAlternative = expectedInventory + alternativeVolume - inventoryLoss;
+                        double alternativeContinuationValue = AverageContinuationValue(inventoryAfterAlternative, inventoryGridNexPeriod, regressContinuationValues);
+                        double maxInjectContinuationValueChange = maxInjectContinuationValue - alternativeContinuationValue;
+
+                        double maxInjectExcessVolume = maxInjectVolume - alternativeVolume;
 
                     }
                 }
@@ -608,6 +597,24 @@ namespace Cmdty.Storage
                 inventoryBySim, injectWithdrawVolumeBySim, cmdtyConsumedBySim, inventoryLossBySim, netVolumeBySim, triggerPrices);
         }
 
+        private static double CmdtyVolumeConsumedOnWithdraw<T>(ICmdtyStorage<T> storage, double decisionVolume, T period, double inventory) where T : ITimePeriod<T>
+        {
+            return decisionVolume > 0.0
+                ? storage.CmdtyVolumeConsumedOnInject(period, inventory, decisionVolume)
+                : storage.CmdtyVolumeConsumedOnWithdraw(period, inventory, -decisionVolume);
+        }
+
+        private static double InjectWithdrawCostNpv<T>(ICmdtyStorage<T> storage, double decisionVolume, T period, double inventory,
+                                            Func<Day, double> discountToPresent) 
+            where T : ITimePeriod<T>
+        {
+            IReadOnlyList<DomesticCashFlow> injectWithdrawCostCostCashFlows = decisionVolume > 0.0
+                ? storage.InjectionCost(period, inventory, decisionVolume)
+                : storage.WithdrawalCost(period, inventory, -decisionVolume);
+            double injectWithdrawCostNpv = injectWithdrawCostCostCashFlows.Sum(cashFlow => cashFlow.Amount * discountToPresent(cashFlow.Date));
+            return injectWithdrawCostNpv;
+        }
+
         private static double Average(Span<double> span)
         {
             double sum = 0.0;
@@ -618,7 +625,7 @@ namespace Cmdty.Storage
         }
 
         private static double AverageContinuationValue(double inventoryAfterDecision, double[] inventoryGrid,
-            Vector<double>[] storageRegressValuesNextPeriod) // TODO should this be the regress or actual storage values
+            Vector<double>[] storageRegressValuesNextPeriod)
         {
             (int lowerInventoryIndex, int upperInventoryIndex) = StorageHelper.BisectInventorySpace(inventoryGrid, inventoryAfterDecision);
 
