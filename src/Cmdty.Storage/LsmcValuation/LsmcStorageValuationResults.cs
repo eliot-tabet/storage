@@ -57,6 +57,7 @@ namespace Cmdty.Storage
             CmdtyConsumedBySim = cmdtyConsumedBySim;
             InventoryLossBySim = inventoryLossBySim;
             NetVolumeBySim = netVolumeBySim;
+            TriggerPrices = triggerPrices;
         }
 
         public static LsmcStorageValuationResults<T> CreateExpiredResults()
