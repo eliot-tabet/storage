@@ -611,7 +611,35 @@ namespace Cmdty.Storage
             // ReSharper disable once ForCanBeConvertedToForeach
             for (int i = 0; i < span.Length; i++)
                 sum += span[i];
-            return sum;
+            return sum/span.Length;
+        }
+
+        private static double AverageContinuationValue(double inventoryAfterDecision, double[] inventoryGrid,
+            Vector<double>[] storageRegressValuesNextPeriod) // TODO should this be the regress or actual storage values
+        {
+            (int lowerInventoryIndex, int upperInventoryIndex) = StorageHelper.BisectInventorySpace(inventoryGrid, inventoryAfterDecision);
+
+            if (lowerInventoryIndex == upperInventoryIndex)
+                return storageRegressValuesNextPeriod[lowerInventoryIndex].Average();
+
+            double lowerInventory = inventoryGrid[lowerInventoryIndex];
+            if (Math.Abs(inventoryAfterDecision - lowerInventory) < FloatingPointTol)
+                return storageRegressValuesNextPeriod[lowerInventoryIndex].Average();
+
+            double upperInventory = inventoryGrid[upperInventoryIndex];
+            if (Math.Abs(inventoryAfterDecision - upperInventory) < FloatingPointTol)
+                return storageRegressValuesNextPeriod[upperInventoryIndex].Average();
+
+            double inventoryGridSpace = upperInventory - lowerInventory;
+            double lowerWeight = (upperInventory - inventoryAfterDecision) / inventoryGridSpace;
+            double upperWeight = 1.0 - lowerWeight;
+
+            Vector<double> lowerStorageRegressValues = storageRegressValuesNextPeriod[lowerInventoryIndex];
+            Vector<double> upperStorageRegressValues = storageRegressValuesNextPeriod[upperInventoryIndex];
+            Vector<double> weightedAverageStorageRegressValues =
+                lowerStorageRegressValues * lowerWeight + upperStorageRegressValues * upperWeight;
+
+            return weightedAverageStorageRegressValues.Average();
         }
 
         private static double InterpolateContinuationValue(double inventoryAfterDecision, double[] inventoryGrid, 
