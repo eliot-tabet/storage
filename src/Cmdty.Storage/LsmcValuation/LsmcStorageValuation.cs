@@ -472,8 +472,7 @@ namespace Cmdty.Storage
                     double inventoryLoss = storage.CmdtyInventoryPercentLoss(period) * inventory;
                     double[] decisionSet = StorageHelper.CalculateBangBangDecisionSet(injectWithdrawRange, inventory,
                         inventoryLoss, nextStepInventorySpaceMin, nextStepInventorySpaceMax, numericalTolerance);
-                    IReadOnlyList<DomesticCashFlow> inventoryCostCashFlows =
-                        storage.CmdtyInventoryCost(period, inventory);
+                    IReadOnlyList<DomesticCashFlow> inventoryCostCashFlows = storage.CmdtyInventoryCost(period, inventory);
                     double inventoryCostNpv = inventoryCostCashFlows.Sum(cashFlow => cashFlow.Amount * DiscountToCurrentDay(cashFlow.Date));
 
                     var decisionNpvsRegress = new double[decisionSet.Length];
@@ -488,7 +487,7 @@ namespace Cmdty.Storage
                         double injectWithdrawNpv = -decisionVolume * simulatedSpotPrice * discountFactorFromCmdtySettlement;
                         double cmdtyUsedForInjectWithdrawNpv = -cmdtyUsedForInjectWithdrawVolume * simulatedSpotPrice * discountFactorFromCmdtySettlement;
 
-                        var injectWithdrawCostNpv = InjectWithdrawCostNpv(storage, decisionVolume, period, inventory, DiscountToCurrentDay);
+                        double injectWithdrawCostNpv = InjectWithdrawCostNpv(storage, decisionVolume, period, inventory, DiscountToCurrentDay);
 
                         double immediateNpv = injectWithdrawNpv - injectWithdrawCostNpv + cmdtyUsedForInjectWithdrawNpv;
 
@@ -573,7 +572,14 @@ namespace Cmdty.Storage
                         double maxInjectContinuationValueChange = maxInjectContinuationValue - alternativeContinuationValue;
 
                         double maxInjectExcessVolume = maxInjectVolume - alternativeVolume;
+                        double maxInjectDecisionCostChange = InjectWithdrawCostNpv(storage, maxInjectVolume, period, expectedInventory, DiscountToCurrentDay) // This will be positive value
+                                                            - InjectWithdrawCostNpv(storage, alternativeVolume, period, expectedInventory, DiscountToCurrentDay);
+                        double cmdtyConsumeCostChange = CmdtyVolumeConsumedOnWithdraw(storage, maxInjectVolume, period, expectedInventory) -
+                                                        CmdtyVolumeConsumedOnWithdraw(storage, alternativeVolume, period, expectedInventory);
 
+                        double injectTriggerPrice = (maxInjectContinuationValueChange + maxInjectDecisionCostChange) /
+                                                    (discountFactorFromCmdtySettlement * maxInjectExcessVolume * (1.0 - cmdtyConsumeCostChange));
+                        injectTriggerPriceInfo = new TriggerPriceInfo(injectTriggerPrice, maxInjectVolume);
                     }
                 }
 
@@ -597,7 +603,8 @@ namespace Cmdty.Storage
                 inventoryBySim, injectWithdrawVolumeBySim, cmdtyConsumedBySim, inventoryLossBySim, netVolumeBySim, triggerPrices);
         }
 
-        private static double CmdtyVolumeConsumedOnWithdraw<T>(ICmdtyStorage<T> storage, double decisionVolume, T period, double inventory) where T : ITimePeriod<T>
+        private static double CmdtyVolumeConsumedOnWithdraw<T>(ICmdtyStorage<T> storage, double decisionVolume, T period, double inventory) 
+            where T : ITimePeriod<T>
         {
             return decisionVolume > 0.0
                 ? storage.CmdtyVolumeConsumedOnInject(period, inventory, decisionVolume)
