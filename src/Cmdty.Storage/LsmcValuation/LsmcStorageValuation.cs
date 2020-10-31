@@ -577,8 +577,8 @@ namespace Cmdty.Storage
                         double cmdtyConsumeCostChange = CmdtyVolumeConsumedOnWithdraw(storage, maxInjectVolume, period, expectedInventory) -
                                                         CmdtyVolumeConsumedOnWithdraw(storage, alternativeVolume, period, expectedInventory);
 
-                        double injectTriggerPrice = (maxInjectContinuationValueChange + maxInjectDecisionCostChange) /
-                                                    (discountFactorFromCmdtySettlement * maxInjectExcessVolume * (1.0 - cmdtyConsumeCostChange));
+                        double injectTriggerPrice = (maxInjectContinuationValueChange - maxInjectDecisionCostChange) /
+                                                    (discountFactorFromCmdtySettlement * (maxInjectExcessVolume + cmdtyConsumeCostChange));
                         injectTriggerPriceInfo = new TriggerPriceInfo(injectTriggerPrice, maxInjectVolume);
                     }
                 }
