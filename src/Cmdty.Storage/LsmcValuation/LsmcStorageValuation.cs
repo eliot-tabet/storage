@@ -557,9 +557,52 @@ namespace Cmdty.Storage
             var storageProfileSeries = new TimeSeries<T, StorageProfile>(periodsForResultsTimeSeries[0], storageProfiles);
             onProgressUpdate?.Invoke(1.0); // Progress with approximately 1.0 should have occured already, but might have been a bit off because of floating-point error.
 
+
+            // Calculate trigger prices
+            int numTriggerPrices = 3; // TODO move this to the parameters
+            var triggerPricePairs = new TriggerPricePair[numTriggerPrices];
+            for (int periodIndex = 0; periodIndex < numTriggerPrices; periodIndex++)
+            {
+                T period = periodsForResultsTimeSeries[periodIndex];
+                Vector<double>[] regressContinuationValues = storageRegressValuesByPeriod[periodIndex + 1];
+                double[] inventoryGridNexPeriod = inventorySpaceGrids[periodIndex + 1];
+
+                double expectedInventory = storageProfileSeries[period].Inventory;
+                (double nextStepInventorySpaceMin, double nextStepInventorySpaceMax) = inventorySpace[period.Offset(1)];
+                InjectWithdrawRange injectWithdrawRange = storage.GetInjectWithdrawRange(period, expectedInventory);
+                double inventoryLoss = storage.CmdtyInventoryPercentLoss(period) * expectedInventory;
+                double[] decisionSet = StorageHelper.CalculateBangBangDecisionSet(injectWithdrawRange, expectedInventory,
+                    inventoryLoss, nextStepInventorySpaceMin, nextStepInventorySpaceMax, numericalTolerance);
+
+                double maxInjectVolume = decisionSet.Max();
+                TriggerPriceInfo injectTriggerPriceInfo = null;
+                if (maxInjectVolume > 0)
+                {
+                    double alternativeVolume = decisionSet.OrderByDescending(d => d).ElementAt(1); // Second highest decision volume, usually will be zero, but might not due to forced injection
+                    if (maxInjectVolume > alternativeVolume)
+                    {
+
+                    }
+                }
+
+                double maxWithdraw = decisionSet.Min();
+                TriggerPriceInfo withdrawTriggerPriceInfo = null;
+                if (maxWithdraw < 0)
+                {
+                    double alternativeVolume = decisionSet.OrderBy(d => d).ElementAt(1); // Second lowest decision volume, usually will be zero, but might not due to forced withdrawal
+                    if (maxWithdraw < alternativeVolume)
+                    {
+
+                    }
+                }
+
+                triggerPricePairs[periodIndex] = new TriggerPricePair(injectTriggerPriceInfo, withdrawTriggerPriceInfo);
+            }
+            var triggerPrices = new TimeSeries<T, TriggerPricePair>(periodsForResultsTimeSeries.Take(numTriggerPrices), triggerPricePairs);
+
             var spotPricePanel = Panel.UseRawDataArray(spotSims.SpotPrices, spotSims.SimulatedPeriods, numSims);
             return new LsmcStorageValuationResults<T>(storageNpv, deltasSeries, storageProfileSeries, spotPricePanel, 
-                inventoryBySim, injectWithdrawVolumeBySim, cmdtyConsumedBySim, inventoryLossBySim, netVolumeBySim, null/*TODO*/);
+                inventoryBySim, injectWithdrawVolumeBySim, cmdtyConsumedBySim, inventoryLossBySim, netVolumeBySim, triggerPrices);
         }
 
         private static double Average(Span<double> span)
