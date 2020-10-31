@@ -560,8 +560,11 @@ namespace Cmdty.Storage
 
             // Calculate trigger prices
             int numTriggerPrices = 3; // TODO move this to the parameters
-            var triggerPricePairs = new TriggerPricePair[numTriggerPrices];
-            for (int periodIndex = 0; periodIndex < numTriggerPrices; periodIndex++)
+            int maxPossibleTriggerPrices = storage.EndPeriod.OffsetFrom(startActiveStorage); // Can only calculate trigger prices for period up to (but not including) storage end period
+            int numTriggerPricesToCalc = Math.Min(numTriggerPrices, maxPossibleTriggerPrices);
+
+            var triggerPricePairs = new TriggerPricePair[numTriggerPricesToCalc];
+            for (int periodIndex = 0; periodIndex < numTriggerPricesToCalc; periodIndex++)
             {
                 T period = periodsForResultsTimeSeries[periodIndex];
                 Vector<double>[] regressContinuationValues = storageRegressValuesByPeriod[periodIndex + 1];
@@ -598,7 +601,7 @@ namespace Cmdty.Storage
 
                 triggerPricePairs[periodIndex] = new TriggerPricePair(injectTriggerPriceInfo, withdrawTriggerPriceInfo);
             }
-            var triggerPrices = new TimeSeries<T, TriggerPricePair>(periodsForResultsTimeSeries.Take(numTriggerPrices), triggerPricePairs);
+            var triggerPrices = new TimeSeries<T, TriggerPricePair>(periodsForResultsTimeSeries.Take(numTriggerPricesToCalc), triggerPricePairs);
 
             var spotPricePanel = Panel.UseRawDataArray(spotSims.SpotPrices, spotSims.SimulatedPeriods, numSims);
             return new LsmcStorageValuationResults<T>(storageNpv, deltasSeries, storageProfileSeries, spotPricePanel, 
