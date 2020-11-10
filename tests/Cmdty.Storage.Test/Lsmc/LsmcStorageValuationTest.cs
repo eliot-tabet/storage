@@ -816,6 +816,28 @@ namespace Cmdty.Storage.Test
                     cancellationTokenSource.Token);
             });
         }
-        
+
+        [Fact]
+        [Trait("Category", "Lsmc.TriggerPrices")]
+        public void Calculate_SimpleStorage_InjectTriggerPricesDecreaseWithVolume()
+        {
+            LsmcStorageValuationResults<Day> lsmcResults = LsmcStorageValuation.Calculate(_valDate, Inventory,
+                _forwardCurve, _simpleDailyStorage, _settleDateRule, _flatInterestRateDiscounter, _gridCalc, NumTolerance,
+                _1FDailyMultiFactorParams, NumSims, RandomSeed, _oneFactorBasisFunctions);
+
+            const double tol = 1E-10;
+
+            foreach (TriggerPriceVolumeProfiles triggerPricePair in lsmcResults.TriggerPriceVolumeProfiles.Data)
+            {
+                IReadOnlyList<TriggerPricePoint> injectTriggerPrices = triggerPricePair.InjectTriggerPrices;
+                for (int i = 1; i < injectTriggerPrices.Count; i++)
+                {
+                    Assert.True(injectTriggerPrices[i].Volume > injectTriggerPrices[i-1].Volume);
+                    Assert.True(injectTriggerPrices[i].Price <= injectTriggerPrices[i - 1].Price + tol);
+                }
+            }
+
+        }
+
     }
 }

@@ -23,17 +23,22 @@
 // OTHER DEALINGS IN THE SOFTWARE.
 #endregion
 
+using System.Collections.Generic;
+using System.Linq;
+
 namespace Cmdty.Storage
 {
-    public sealed class TriggerPriceInfo // TODO info about why it failed
+    public sealed class TriggerPriceVolumeProfiles
     {
-        public double? Price { get; }
-        public double? Volume { get; }
+        public IReadOnlyList<TriggerPricePoint> InjectTriggerPrices { get; }
+        public IReadOnlyList<TriggerPricePoint> WithdrawTriggerPrices { get; }
 
-        public TriggerPriceInfo(double? price, double? volume)
+        public TriggerPriceVolumeProfiles(IEnumerable<TriggerPricePoint> injectTriggerPrices, 
+            IEnumerable<TriggerPricePoint> withdrawTriggerPrices)
         {
-            Price = price;
-            Volume = volume;
+            InjectTriggerPrices = injectTriggerPrices.ToArray();
+            WithdrawTriggerPrices = withdrawTriggerPrices.ToArray();
         }
+
     }
 }

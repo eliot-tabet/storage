@@ -337,7 +337,7 @@ namespace Cmdty.Storage
                         injectWithdrawCostNpvs[decisionIndex] = InjectWithdrawCostNpv(storage, decisionVolume, period, inventory, DiscountToCurrentDay);
 
                         // Cmdty Used For Inject/Withdraw (same for all price sims)
-                        cmdtyUsedForInjectWithdrawVolume[decisionIndex] = CmdtyVolumeConsumedOnWithdraw(storage, decisionVolume, period, inventory);
+                        cmdtyUsedForInjectWithdrawVolume[decisionIndex] = CmdtyVolumeConsumedOnDecision(storage, decisionVolume, period, inventory);
 
                         // Calculate continuation values
                         double inventoryAfterDecision = inventory + decisionVolume - inventoryLoss;
@@ -482,7 +482,7 @@ namespace Cmdty.Storage
                         double decisionVolume = decisionSet[decisionIndex];
                         double inventoryAfterDecision = inventory + decisionVolume - inventoryLoss;
 
-                        double cmdtyUsedForInjectWithdrawVolume = CmdtyVolumeConsumedOnWithdraw(storage, decisionVolume, period, inventory);
+                        double cmdtyUsedForInjectWithdrawVolume = CmdtyVolumeConsumedOnDecision(storage, decisionVolume, period, inventory);
 
                         double injectWithdrawNpv = -decisionVolume * simulatedSpotPrice * discountFactorFromCmdtySettlement;
                         double cmdtyUsedForInjectWithdrawNpv = -cmdtyUsedForInjectWithdrawVolume * simulatedSpotPrice * discountFactorFromCmdtySettlement;
@@ -534,14 +534,15 @@ namespace Cmdty.Storage
 
             var deltasSeries = new DoubleTimeSeries<T>(periodsForResultsTimeSeries[0], deltas);
             var storageProfileSeries = new TimeSeries<T, StorageProfile>(periodsForResultsTimeSeries[0], storageProfiles);
-            onProgressUpdate?.Invoke(1.0); // Progress with approximately 1.0 should have occured already, but might have been a bit off because of floating-point error.
             
             // Calculate trigger prices
-            int numTriggerPrices = 3; // TODO move this to the parameters
+            int numTriggerPricePeriods = 3; // TODO move this to the parameters
+            int numTriggerPriceVolumes = 10; // TODO move to parameters?
             int maxPossibleTriggerPrices = storage.EndPeriod.OffsetFrom(startActiveStorage); // Can only calculate trigger prices for period up to (but not including) storage end period
-            int numTriggerPricesToCalc = Math.Min(numTriggerPrices, maxPossibleTriggerPrices);
+            int numTriggerPricesToCalc = Math.Min(numTriggerPricePeriods, maxPossibleTriggerPrices);
 
-            var triggerPricePairs = new TriggerPricePair[numTriggerPricesToCalc];
+            var triggerVolumeProfilesArray = new TriggerPriceVolumeProfiles[numTriggerPricesToCalc];
+            var triggerPricesArray = new TriggerPrices[numTriggerPricesToCalc];
             for (int periodIndex = 0; periodIndex < numTriggerPricesToCalc; periodIndex++)
             {
                 T period = periodsForResultsTimeSeries[periodIndex];
@@ -559,32 +560,47 @@ namespace Cmdty.Storage
                     inventoryLoss, nextStepInventorySpaceMin, nextStepInventorySpaceMax, numericalTolerance);
 
                 double maxInjectVolume = decisionSet.Max();
-                TriggerPriceInfo injectTriggerPriceInfo = null;
+                var injectTriggerPrices = new List<TriggerPricePoint>();
+                var triggerPricesBuilder = new TriggerPrices.Builder();
                 if (maxInjectVolume > 0)
                 {
                     double alternativeVolume = decisionSet.OrderByDescending(d => d).ElementAt(1); // Second highest decision volume, usually will be zero, but might not due to forced injection
                     if (maxInjectVolume > alternativeVolume)
                     {
-                        double inventoryAfterMaxInject = expectedInventory + maxInjectVolume - inventoryLoss;
-                        double maxInjectContinuationValue = AverageContinuationValue(inventoryAfterMaxInject, inventoryGridNexPeriod, regressContinuationValues);
                         double inventoryAfterAlternative = expectedInventory + alternativeVolume - inventoryLoss;
                         double alternativeContinuationValue = AverageContinuationValue(inventoryAfterAlternative, inventoryGridNexPeriod, regressContinuationValues);
-                        double maxInjectContinuationValueChange = maxInjectContinuationValue - alternativeContinuationValue;
+                        double alternativeDecisionCost = InjectWithdrawCostNpv(storage, alternativeVolume, period, expectedInventory, DiscountToCurrentDay);
+                        double alternativeCmdtyConsumed = CmdtyVolumeConsumedOnDecision(storage, alternativeVolume, period, expectedInventory);
 
-                        double maxInjectExcessVolume = maxInjectVolume - alternativeVolume;
-                        double maxInjectDecisionCostChange = InjectWithdrawCostNpv(storage, maxInjectVolume, period, expectedInventory, DiscountToCurrentDay) // This will be positive value
-                                                            - InjectWithdrawCostNpv(storage, alternativeVolume, period, expectedInventory, DiscountToCurrentDay);
-                        double cmdtyConsumeCostChange = CmdtyVolumeConsumedOnWithdraw(storage, maxInjectVolume, period, expectedInventory) -
-                                                        CmdtyVolumeConsumedOnWithdraw(storage, alternativeVolume, period, expectedInventory);
+                        double triggerVolumeIncrement = (maxInjectVolume - alternativeVolume) / numTriggerPriceVolumes;
+                        var triggerPriceVolumes = new double[numTriggerPriceVolumes];
+                        triggerPriceVolumes[numTriggerPriceVolumes - 1] = maxInjectVolume; // Use exact max inject volume directly to avoid floating point error
+                        for (int i = 1; i < numTriggerPriceVolumes; i++)
+                            triggerPriceVolumes[i-1] = alternativeVolume + i * triggerVolumeIncrement;
 
-                        double injectTriggerPrice = (maxInjectContinuationValueChange - maxInjectDecisionCostChange) /
-                                                    (discountFactorFromCmdtySettlement * (maxInjectExcessVolume + cmdtyConsumeCostChange));
-                        injectTriggerPriceInfo = new TriggerPriceInfo(injectTriggerPrice, maxInjectVolume);
+                        foreach (double triggerVolume in triggerPriceVolumes)
+                        {
+                            double inventoryAfterTriggerVolume = expectedInventory + triggerVolume - inventoryLoss;
+                            double triggerVolumeContinuationValue = AverageContinuationValue(inventoryAfterTriggerVolume, inventoryGridNexPeriod, regressContinuationValues);
+                            double triggerVolumeContinuationValueChange = triggerVolumeContinuationValue - alternativeContinuationValue;
+
+                            double triggerVolumeExcessVolume = triggerVolume - alternativeVolume;
+                            double maxInjectDecisionCostChange = InjectWithdrawCostNpv(storage, triggerVolume, period, expectedInventory, DiscountToCurrentDay) // This will be positive value
+                                                                 - alternativeDecisionCost;
+                            double cmdtyConsumedCostChange = CmdtyVolumeConsumedOnDecision(storage, triggerVolume, period, expectedInventory) - alternativeCmdtyConsumed;
+
+                            double injectTriggerPrice = (triggerVolumeContinuationValueChange - maxInjectDecisionCostChange) /
+                                                        (discountFactorFromCmdtySettlement * (triggerVolumeExcessVolume + cmdtyConsumedCostChange));
+                            injectTriggerPrices.Add(new TriggerPricePoint(triggerVolume, injectTriggerPrice));
+                        }
+
+                        triggerPricesBuilder.MaxInjectTriggerPrice = injectTriggerPrices[injectTriggerPrices.Count - 1].Price;
+                        triggerPricesBuilder.MaxInjectVolume = maxInjectVolume;
                     }
                 }
 
                 double maxWithdraw = decisionSet.Min();
-                TriggerPriceInfo withdrawTriggerPriceInfo = null;
+                var withdrawTriggerPrices = new List<TriggerPricePoint>();
                 if (maxWithdraw < 0)
                 {
                     double alternativeVolume = decisionSet.OrderBy(d => d).ElementAt(1); // Second lowest decision volume, usually will be zero, but might not due to forced withdrawal
@@ -594,16 +610,21 @@ namespace Cmdty.Storage
                     }
                 }
 
-                triggerPricePairs[periodIndex] = new TriggerPricePair(injectTriggerPriceInfo, withdrawTriggerPriceInfo);
+                triggerVolumeProfilesArray[periodIndex] = new TriggerPriceVolumeProfiles(injectTriggerPrices, withdrawTriggerPrices);
+                triggerPricesArray[periodIndex] = triggerPricesBuilder.Build();
             }
-            var triggerPrices = new TimeSeries<T, TriggerPricePair>(periodsForResultsTimeSeries.Take(numTriggerPricesToCalc), triggerPricePairs);
+            var triggerPriceVolumeProfiles = 
+                new TimeSeries<T, TriggerPriceVolumeProfiles>(periodsForResultsTimeSeries.Take(numTriggerPricesToCalc), triggerVolumeProfilesArray);
+            var triggerPrices = new TimeSeries<T, TriggerPrices>(periodsForResultsTimeSeries.Take(numTriggerPricesToCalc), triggerPricesArray);
 
             var spotPricePanel = Panel.UseRawDataArray(spotSims.SpotPrices, spotSims.SimulatedPeriods, numSims);
+            onProgressUpdate?.Invoke(1.0); // Progress with approximately 1.0 should have occured already, but might have been a bit off because of floating-point error.
+
             return new LsmcStorageValuationResults<T>(storageNpv, deltasSeries, storageProfileSeries, spotPricePanel, 
-                inventoryBySim, injectWithdrawVolumeBySim, cmdtyConsumedBySim, inventoryLossBySim, netVolumeBySim, triggerPrices);
+                inventoryBySim, injectWithdrawVolumeBySim, cmdtyConsumedBySim, inventoryLossBySim, netVolumeBySim, triggerPrices, triggerPriceVolumeProfiles);
         }
 
-        private static double CmdtyVolumeConsumedOnWithdraw<T>(ICmdtyStorage<T> storage, double decisionVolume, T period, double inventory) 
+        private static double CmdtyVolumeConsumedOnDecision<T>(ICmdtyStorage<T> storage, double decisionVolume, T period, double inventory) 
             where T : ITimePeriod<T>
         {
             return decisionVolume > 0.0

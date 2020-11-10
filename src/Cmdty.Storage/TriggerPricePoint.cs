@@ -25,16 +25,20 @@
 
 namespace Cmdty.Storage
 {
-    public sealed class TriggerPricePair
+    public sealed class TriggerPricePoint
     {
-        public TriggerPriceInfo InjectTriggerPriceInfo { get; }
-        public TriggerPriceInfo WithdrawTriggerPriceInfo { get; }
+        public double Volume { get; }
+        public double Price { get; }
 
-        public TriggerPricePair(TriggerPriceInfo injectTriggerPriceInfo, TriggerPriceInfo withdrawTriggerPriceInfo)
+        public TriggerPricePoint(double volume, double price)
         {
-            InjectTriggerPriceInfo = injectTriggerPriceInfo;
-            WithdrawTriggerPriceInfo = withdrawTriggerPriceInfo;
+            Volume = volume;
+            Price = price;
         }
 
+        public override string ToString()
+        {
+            return $"{nameof(Volume)}: {Volume}, {nameof(Price)}: {Price}";
+        }
     }
 }
