@@ -836,8 +836,11 @@ namespace Cmdty.Storage.Test
                     Assert.True(injectTriggerPrices[i].Price <= injectTriggerPrices[i - 1].Price + tol);
                 }
             }
-
         }
 
+        // TODO more trigger price unit tests:
+        // Withdraw prices increase with volume
+        // Withdraw prices higher than inject prices
+        // Storage results as field and reuse between tests
     }
 }
