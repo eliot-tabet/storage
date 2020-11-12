@@ -876,10 +876,67 @@ namespace Cmdty.Storage.Test
             }
         }
 
-        // TODO more trigger price unit tests:
-        // Boundaries of trigger profile and trigger volumes
-        // Inventory zero, does not have withdraw price
-        // Inventory full, does not with inject price
+        [Fact]
+        [Trait("Category", "Lsmc.TriggerPrices")]
+        public void Calculate_SimpleStorage1FactorZeroInventory_NoWithdrawTriggerPriceOnFirstPeriod()
+        {
+            const int numSims = 500; // Use low number of sims so it will run quickly
+            const double inventory = 0.0;
+            LsmcStorageValuationResults<Day> lsmcResults = LsmcStorageValuation.Calculate(_valDate, inventory,
+                _forwardCurve, _simpleDailyStorage, _settleDateRule, _flatInterestRateDiscounter, _gridCalc, NumTolerance,
+                _1FDailyMultiFactorParams, numSims, RandomSeed, _oneFactorBasisFunctions);
+
+            TriggerPrices firstTriggerPrices = lsmcResults.TriggerPrices[0];
+            Assert.False(firstTriggerPrices.HasWithdrawPrice);
+            Assert.Null(firstTriggerPrices.MaxWithdrawVolume);
+            Assert.Null(firstTriggerPrices.MaxWithdrawTriggerPrice);
+            Assert.Equal(0, lsmcResults.TriggerPriceVolumeProfiles[0].WithdrawTriggerPrices.Count);
+        }
+
+        [Fact]
+        [Trait("Category", "Lsmc.TriggerPrices")]
+        public void Calculate_SimpleStorage1FactorInventoryFull_NoInjectTriggerPriceOnFirstPeriod()
+        {
+            const int numSims = 500; // Use low number of sims so it will run quickly
+            const double inventory = 52_500.0;
+            LsmcStorageValuationResults<Day> lsmcResults = LsmcStorageValuation.Calculate(_valDate, inventory,
+                _forwardCurve, _simpleDailyStorage, _settleDateRule, _flatInterestRateDiscounter, _gridCalc, NumTolerance,
+                _1FDailyMultiFactorParams, numSims, RandomSeed, _oneFactorBasisFunctions);
+
+            TriggerPrices firstTriggerPrices = lsmcResults.TriggerPrices[0];
+            Assert.False(firstTriggerPrices.HasInjectPrice);
+            Assert.Null(firstTriggerPrices.MaxInjectTriggerPrice);
+            Assert.Null(firstTriggerPrices.MaxInjectVolume);
+            Assert.Equal(0, lsmcResults.TriggerPriceVolumeProfiles[0].InjectTriggerPrices.Count);
+        }
+
+        [Fact]
+        [Trait("Category", "Lsmc.TriggerPrices")]
+        public void Calculate_SimpleStorage1Factor_TriggerVolumesConsistentWithMaxInjectWithdrawRate()
+        {
+            const int numSims = 500; // Use low number of sims so it will run quickly
+            LsmcStorageValuationResults<Day> lsmcResults = LsmcStorageValuation.Calculate(_valDate, Inventory,
+                _forwardCurve, _simpleDailyStorage, _settleDateRule, _flatInterestRateDiscounter, _gridCalc, NumTolerance,
+                _1FDailyMultiFactorParams, numSims, RandomSeed, _oneFactorBasisFunctions);
+
+            const double maxWithdrawalRate = 850.0;
+            const double maxInjectionRate = 625.0;
+
+            foreach (TriggerPrices triggerPrices in lsmcResults.TriggerPrices.Data)
+            {
+                Assert.Equal(maxInjectionRate, triggerPrices.MaxInjectVolume);
+                Assert.Equal(-maxWithdrawalRate, triggerPrices.MaxWithdrawVolume);
+            }
+
+            foreach (TriggerPriceVolumeProfiles triggerPriceProfile in lsmcResults.TriggerPriceVolumeProfiles.Data)
+            {
+                double maxInjectTriggerVolume = triggerPriceProfile.InjectTriggerPrices.Max(point => point.Volume);
+                Assert.Equal(maxInjectionRate, maxInjectTriggerVolume);
+                double maxWithdrawTriggerVolume = -triggerPriceProfile.WithdrawTriggerPrices.Min(point => point.Volume);
+                Assert.Equal(maxWithdrawalRate, maxWithdrawTriggerVolume);
+            }
+
+        }
 
     }
 }
