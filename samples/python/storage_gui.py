@@ -47,8 +47,12 @@ stor_type_wgt = ipw.RadioButtons(options=['Simple', 'Ratchets'], description='St
 start_wgt = ipw.DatePicker(description='Start')
 end_wgt = ipw.DatePicker(description='End')
 inj_cost_wgt = ipw.FloatText(description='Injection Cost')
+inj_consumed_wgt = ipw.FloatText(description='Inj % Consumed', step=0.001)
 with_cost_wgt = ipw.FloatText(description='Withdrw Cost')
-storage_common_wgt = ipw.HBox([ipw.VBox([start_wgt, end_wgt, inj_cost_wgt, with_cost_wgt]), stor_type_wgt])
+with_consumed_wgt = ipw.FloatText(description='With % Consumed', step=0.001)
+
+storage_common_wgt = ipw.HBox([ipw.VBox([start_wgt, end_wgt, inj_cost_wgt, 
+    with_cost_wgt]), ipw.VBox([stor_type_wgt, inj_consumed_wgt, with_consumed_wgt])])
 
 # Simple storage type properties
 invent_min_wgt = ipw.FloatText(description='Min Inventory')
@@ -119,6 +123,19 @@ seed_is_random_wgt.observe(on_seed_is_random_change, names='value')
 tech_params_wgt = ipw.HBox([ipw.VBox([num_sims_wgt, seed_is_random_wgt, random_seed_wgt, grid_points_wgt, 
                             num_tol_wgt]), basis_func_wgt])
 
+def create_tab(titles, children):
+    tab = ipw.Tab()
+    for idx, title in enumerate(titles):
+        tab.set_title(idx, title)
+    tab.children = children
+    return tab
+
+mkt_data_wgt = ipw.HBox([val_inputs_wgt, fwd_input_sheet, ipw.VBox([vol_params_wgt, ir_wgt])])
+
+tab_in_titles = ['Valuation Data', 'Storage Details', 'Technical Params']
+tab_in_children = [mkt_data_wgt, storage_details_wgt, tech_params_wgt]
+tab_in = create_tab(tab_in_titles, tab_in_children)
+
 # Output Widgets
 progress_wgt = ipw.FloatProgress(min=0.0, max=1.0)
 full_value_wgt = ipw.Text(description='Full Value', disabled=True)
@@ -127,15 +144,15 @@ extr_value_wgt = ipw.Text(description='Extr. Value', disabled=True)
 value_wgts = [full_value_wgt, intr_value_wgt, extr_value_wgt]
 values_wgt = ipw.VBox(value_wgts)
 
-out = ipw.Output()
+out_summary = ipw.Output()
+summary_vbox = ipw.HBox([values_wgt, out_summary])
 
-mkt_data_wgt = ipw.HBox([val_inputs_wgt, fwd_input_sheet, ipw.VBox([vol_params_wgt, ir_wgt])])
+out_triggers = ipw.Output()
 
-tab = ipw.Tab()
-tab_titles = ['Valuation Data', 'Storage Details', 'Technical Params']
-for idx, title in enumerate(tab_titles):
-    tab.set_title(idx, title)
-tab.children = [mkt_data_wgt, storage_details_wgt, tech_params_wgt]
+tab_out_titles = ['Summary', 'Trigger Prices']
+tab_out_children = [summary_vbox, out_triggers]
+tab_output = create_tab(tab_out_titles, tab_out_children)
+
 
 def on_progress(progress):
     progress_wgt.value = progress
@@ -158,7 +175,8 @@ def btn_clicked(b):
     for vw in value_wgts:
         vw.value = ''
     btn.disabled = True
-    out.clear_output()
+    out_summary.clear_output()
+    out_triggers.clear_output()
     try:
         global fwd_curve
         fwd_curve = read_fwd_curve()
@@ -168,7 +186,9 @@ def btn_clicked(b):
             storage = CmdtyStorage(freq, storage_start=start_wgt.value, storage_end=end_wgt.value, 
                                    injection_cost=inj_cost_wgt.value, withdrawal_cost=with_cost_wgt.value,
                                   min_inventory=invent_min_wgt.value, max_inventory=invent_max_wgt.value,
-                                  max_injection_rate=inj_rate_wgt.value, max_withdrawal_rate=with_rate_wgt.value)
+                                  max_injection_rate=inj_rate_wgt.value, max_withdrawal_rate=with_rate_wgt.value,
+                                  cmdty_consumed_inject=inj_consumed_wgt.value, 
+                                  cmdty_consumed_withdraw=with_consumed_wgt.value)
         else:
             ratchets = read_ratchets()
             storage = CmdtyStorage(freq, storage_start=start_wgt.value, storage_end=end_wgt.value, 
@@ -191,15 +211,30 @@ def btn_clicked(b):
         intr_value_wgt.value = "{0:,.0f}".format(val_results_3f.intrinsic_npv)
         extr_value_wgt.value = "{0:,.0f}".format(val_results_3f.extrinsic_npv)
         intr_delta = val_results_3f.intrinsic_profile['net_volume']
-        with out:
+        
+        active_fwd_curve = fwd_curve[storage.start:storage.end]
+        with out_summary:
             ax_1 = val_results_3f.deltas.plot(legend=True)
             ax_1.set_ylabel('Delta')
             intr_delta.plot(legend=True, ax=ax_1)
-            active_fwd_curve = fwd_curve[storage.start:storage.end]
             ax_2 = active_fwd_curve.plot(secondary_y=True, legend=True, ax=ax_1)
             ax_2.set_ylabel('Forward Price')
             ax_1.legend(['Full Delta', 'Intrinsic Delta'])
             ax_2.legend(['Forward Curve'])
+            show_inline_matplotlib_plots()
+        with out_triggers:
+            trigger_prices = val_results_3f.trigger_prices
+            ax_1 = trigger_prices['inject_trigger_price'].plot(legend=True)
+            ax_1.set_ylabel('Price')
+            trigger_prices['withdraw_trigger_price'].plot(legend=True, ax=ax_1)
+            active_fwd_curve.plot(legend=True, ax=ax_1)
+            ax_2 = val_results_3f.expected_profile['inventory'].plot(secondary_y=True, legend=True, ax=ax_1)
+            ax_2.set_ylabel('Volume')
+            box = ax_1.get_position()
+            ax_1.set_position([box.x0, box.y0 + box.height * 0.1, box.width, box.height * 0.9])
+            ax_1.legend(['Inject Trigger Price', 'Withdraw Trigger Price', 'Forward Curve'], loc='upper center', 
+                        bbox_to_anchor=(0.2, -0.12))
+            ax_2.legend(['Expected Inventory'], loc='upper center', bbox_to_anchor=(0.7, -0.12))
             show_inline_matplotlib_plots()
     except Exception as e:
         with out:
@@ -213,11 +248,10 @@ btn = ipw.Button(description='Calculate')
 btn.on_click(btn_clicked)  
 
 def display_gui():
-    display(tab)
+    display(tab_in)
     display(btn)
     display(progress_wgt)
-    display(values_wgt)
-    display(out)
+    display(tab_output)
 
 def test_data_btn():
     def btn_clicked_2(b):
@@ -229,7 +263,9 @@ def test_data_btn():
         inj_rate_wgt.value = 260
         with_rate_wgt.value = 130
         inj_cost_wgt.value = 1.1
+        inj_consumed_wgt.value = 0.01
         with_cost_wgt.value = 1.3
+        with_consumed_wgt.value = 0.018
         ir_wgt.value = 0.005
         spot_vol_wgt.value = 1.23
         spot_mr_wgt.value = 14.5

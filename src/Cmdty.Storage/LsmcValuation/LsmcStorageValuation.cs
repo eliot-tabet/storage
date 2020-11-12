@@ -536,14 +536,11 @@ namespace Cmdty.Storage
             var storageProfileSeries = new TimeSeries<T, StorageProfile>(periodsForResultsTimeSeries[0], storageProfiles);
             
             // Calculate trigger prices
-            int numTriggerPricePeriods = 3; // TODO move this to the parameters
             int numTriggerPriceVolumes = 10; // TODO move to parameters?
-            int maxPossibleTriggerPrices = storage.EndPeriod.OffsetFrom(startActiveStorage); // Can only calculate trigger prices for period up to (but not including) storage end period
-            int numTriggerPricesToCalc = Math.Min(numTriggerPricePeriods, maxPossibleTriggerPrices);
 
-            var triggerVolumeProfilesArray = new TriggerPriceVolumeProfiles[numTriggerPricesToCalc];
-            var triggerPricesArray = new TriggerPrices[numTriggerPricesToCalc];
-            for (int periodIndex = 0; periodIndex < numTriggerPricesToCalc; periodIndex++)
+            var triggerVolumeProfilesArray = new TriggerPriceVolumeProfiles[periodsForResultsTimeSeries.Length - 1];
+            var triggerPricesArray = new TriggerPrices[periodsForResultsTimeSeries.Length - 1];
+            for (int periodIndex = 0; periodIndex < periodsForResultsTimeSeries.Length - 1; periodIndex++)
             {
                 T period = periodsForResultsTimeSeries[periodIndex];
                 Vector<double>[] regressContinuationValues = storageRegressValuesByPeriod[periodIndex + 1];
@@ -611,9 +608,8 @@ namespace Cmdty.Storage
                 triggerVolumeProfilesArray[periodIndex] = new TriggerPriceVolumeProfiles(injectTriggerPrices, withdrawTriggerPrices);
                 triggerPricesArray[periodIndex] = triggerPricesBuilder.Build();
             }
-            var triggerPriceVolumeProfiles = 
-                new TimeSeries<T, TriggerPriceVolumeProfiles>(periodsForResultsTimeSeries.Take(numTriggerPricesToCalc), triggerVolumeProfilesArray);
-            var triggerPrices = new TimeSeries<T, TriggerPrices>(periodsForResultsTimeSeries.Take(numTriggerPricesToCalc), triggerPricesArray);
+            var triggerPriceVolumeProfiles = new TimeSeries<T, TriggerPriceVolumeProfiles>(periodsForResultsTimeSeries.First(), triggerVolumeProfilesArray);
+            var triggerPrices = new TimeSeries<T, TriggerPrices>(periodsForResultsTimeSeries.First(), triggerPricesArray);
 
             var spotPricePanel = Panel.UseRawDataArray(spotSims.SpotPrices, spotSims.SimulatedPeriods, numSims);
             onProgressUpdate?.Invoke(1.0); // Progress with approximately 1.0 should have occured already, but might have been a bit off because of floating-point error.
@@ -662,8 +658,6 @@ namespace Cmdty.Storage
                 triggerPriceVolumes[i] = maxWithdrawVolume + i * triggerVolumeIncrement;
             return triggerPriceVolumes;
         }
-
-        private enum ExcludedVolume { Min, Max }
 
         private static (double alternativeContinuationValue, double alternativeDecisionCost, double alternativeCmdtyConsumed) CalcAlternatives<T>(
             ICmdtyStorage<T> storage, double expectedInventory, double alternativeVolume, double inventoryLoss, double[] inventoryGridNexPeriod,

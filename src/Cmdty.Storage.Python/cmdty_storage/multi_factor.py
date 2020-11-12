@@ -235,6 +235,16 @@ class MultiFactorModel:
         return vol
 
 
+class TriggerPricePoint(tp.NamedTuple):
+    volume: float
+    price: float
+
+
+class TriggerPriceProfile(tp.NamedTuple):
+    inject_triggers: tp.List[TriggerPricePoint]
+    withdraw_triggers: tp.List[TriggerPricePoint]
+
+
 class MultiFactorValuationResults(tp.NamedTuple):
     npv: float
     deltas: pd.Series
@@ -247,6 +257,8 @@ class MultiFactorValuationResults(tp.NamedTuple):
     sim_cmdty_consumed: pd.DataFrame
     sim_inventory_loss: pd.DataFrame
     sim_net_volume: pd.DataFrame
+    trigger_prices: pd.DataFrame
+    trigger_profiles: pd.Series
 
     @property
     def extrinsic_npv(self):
@@ -341,6 +353,8 @@ def _net_multi_factor_calc(cmdty_storage, fwd_curve, interest_rates, inventory, 
                                                                               net_on_progress)
     deltas = utils.net_time_series_to_pandas_series(net_val_results.Deltas, cmdty_storage.freq)
     expected_profile = cs_intrinsic.profile_to_data_frame(cmdty_storage.freq, net_val_results.ExpectedStorageProfile)
+    trigger_prices = _trigger_prices_to_data_frame(cmdty_storage.freq, net_val_results.TriggerPrices)
+    trigger_profiles = _trigger_profiles_to_data_frame(cmdty_storage.freq, net_val_results.TriggerPriceVolumeProfiles)
     sim_spot = utils.net_panel_to_data_frame(net_val_results.SpotPriceBySim, cmdty_storage.freq)
 
     sim_inventory = utils.net_panel_to_data_frame(net_val_results.InventoryBySim, cmdty_storage.freq)
@@ -351,4 +365,46 @@ def _net_multi_factor_calc(cmdty_storage, fwd_curve, interest_rates, inventory, 
 
     return MultiFactorValuationResults(net_val_results.Npv, deltas, expected_profile, intrinsic_result.npv,
                                        intrinsic_result.profile, sim_spot, sim_inventory, sim_inject_withdraw,
-                                       sim_cmdty_consumed, sim_inventory_loss, sim_net_volume)
+                                       sim_cmdty_consumed, sim_inventory_loss, sim_net_volume, trigger_prices,
+                                       trigger_profiles)
+
+
+def _trigger_prices_to_data_frame(freq, net_trigger_prices) -> pd.DataFrame:
+    index = _create_period_index(freq, net_trigger_prices)
+    inject_volume = _create_empty_list(net_trigger_prices.Count)
+    inject_trigger_price = _create_empty_list(net_trigger_prices.Count)
+    withdraw_volume = _create_empty_list(net_trigger_prices.Count)
+    withdraw_trigger_price = _create_empty_list(net_trigger_prices.Count)
+    for i, trig in enumerate(net_trigger_prices.Data):
+        if trig.HasInjectPrice:
+            inject_volume[i] = trig.MaxInjectVolume
+            inject_trigger_price[i] = trig.MaxInjectTriggerPrice
+        if trig.HasWithdrawPrice:
+            withdraw_volume[i] = trig.MaxWithdrawVolume
+            withdraw_trigger_price[i] = trig.MaxWithdrawTriggerPrice
+    data_frame_data = {'inject_volume': inject_volume, 'inject_trigger_price': inject_trigger_price,
+                       'withdraw_volume': withdraw_volume, 'withdraw_trigger_price': withdraw_trigger_price}
+    data_frame = pd.DataFrame(data=data_frame_data, index=index)
+    return data_frame
+
+
+def _create_period_index(freq, net_time_series):
+    if net_time_series.Count == 0:
+        return pd.PeriodIndex(data=[], freq=freq)
+    else:
+        profile_start = utils.net_datetime_to_py_datetime(net_time_series.Indices[0].Start)
+        return pd.period_range(start=profile_start, freq=freq, periods=net_time_series.Count)
+
+
+def _create_empty_list(count: int) -> tp.List:
+    return [None] * count
+
+
+def _trigger_profiles_to_data_frame(freq, net_trigger_profiles) -> pd.Series:
+    index = _create_period_index(freq, net_trigger_profiles)
+    profiles_list = _create_empty_list(net_trigger_profiles.Count)
+    for i, prof in enumerate(net_trigger_profiles.Data):
+        inject_triggers = [TriggerPricePoint(x.Volume, x.Price) for x in prof.InjectTriggerPrices]
+        withdraw_triggers = [TriggerPricePoint(x.Volume, x.Price) for x in prof.WithdrawTriggerPrices]
+        profiles_list[i] = TriggerPriceProfile(inject_triggers, withdraw_triggers)
+    return pd.Series(data=profiles_list, index=index)
