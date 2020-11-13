@@ -159,7 +159,7 @@ class TestMultiFactorModel(unittest.TestCase):
         self.assertEqual(two_f_model_float_corr_covar, two_f_model_float_array_corr_covar)
         self.assertEqual(two_f_model_float_corr_covar, two_f_model_int_corr_covar)
         self.assertEqual(two_f_model_float_corr_covar, two_f_model_int_array_corr_covar)
-
+        # TODO test MultiFactorModel.for_3_factor_seasonal
 
 class TestMultiFactorValue(unittest.TestCase):
     def test_multi_factor_value_regression(self):

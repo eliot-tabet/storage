@@ -234,6 +234,57 @@ class MultiFactorModel:
                     factor_num=factor_num, fwd=fwd_contract))
         return vol
 
+    @staticmethod
+    def for_3_factor_seasonal(freq: str,
+                              spot_mean_reversion: float,
+                              spot_vol: float,
+                              long_term_vol: float,
+                              seasonal_vol: float,
+                              start: utils.ForwardPointType,
+                              end: utils.ForwardPointType,
+                              time_func: tp.Optional[utils.TimeFunctionType] = None) -> 'MultiFactorModel':
+        factors, factor_corrs = create_3_factor_season_params(freq, spot_mean_reversion, spot_vol, long_term_vol,
+                                                              seasonal_vol, start, end)
+        return MultiFactorModel(freq, factors, factor_corrs, time_func)
+
+
+days_per_year = 365.25
+seconds_per_year = 60 * 60 * 24 * days_per_year
+
+
+def create_3_factor_season_params(
+          freq: str,
+          spot_mean_reversion: float,
+          spot_vol: float,
+          long_term_vol: float,
+          seasonal_vol: float,
+          start: utils.ForwardPointType,
+          end: utils.ForwardPointType) -> tp.Tuple[tp.Iterable[tp.Tuple[float, utils.CurveType]], np.ndarray]:
+    factor_corrs = np.array([
+        [1.0, 0.0, 0.0],
+        [0.0, 1.0, 0.0],
+        [0.0, 0.0, 1.0]])
+    start_period = start if isinstance(start, pd.Period) else pd.Period(start, freq=freq)
+    end_period = end if isinstance(end, pd.Period) else pd.Period(end, freq=freq)
+    index = pd.period_range(start=start_period, end=end_period, freq=freq)
+    long_term_vol_curve = pd.Series(index=index, data=[long_term_vol] * len(index))
+    spot_vol_curve = pd.Series(index=index.copy(), data=[spot_vol] * len(index))
+    peak_period = pd.Period(year=start_period.year, month=2, day=1, freq=freq)
+    phase = np.pi / 2.0
+    amplitude = seasonal_vol / 2.0
+    seasonal_vol_array = np.empty((len(index)))
+    for i, p in enumerate(index):
+        t_from_peak = (p.start_time - peak_period.start_time).total_seconds() / seconds_per_year
+        seasonal_vol_array[i] = 2.0 * np.pi * t_from_peak + phase
+    seasonal_vol_array = np.sin(seasonal_vol_array) * amplitude
+    seasonal_vol_curve = pd.Series(index=index.copy(), data=seasonal_vol_array)
+    factors = [
+        (spot_mean_reversion, spot_vol_curve),
+        (0.0, long_term_vol_curve),
+        (0.0, seasonal_vol_curve)
+    ]
+    return factors, factor_corrs
+
 
 class TriggerPricePoint(tp.NamedTuple):
     volume: float

@@ -1,11 +1,13 @@
 import pandas as pd
 import ipywidgets as ipw
 import ipysheet as ips
-from cmdty_storage import CmdtyStorage, three_factor_seasonal_value, intrinsic_value
+from cmdty_storage import CmdtyStorage, three_factor_seasonal_value, intrinsic_value, MultiFactorModel
+from curves import max_smooth_interp, adjustments
 from datetime import date, timedelta
 from IPython.display import display
 from ipywidgets.widgets.interaction import show_inline_matplotlib_plots
 from collections import namedtuple
+import itertools
 
 # Shared properties
 freq='D'
@@ -13,6 +15,13 @@ num_fwd_rows = 15
 date_format = 'YYYY-MM-DD'
 num_ratch_rows = 20
 RatchetRow = namedtuple('RatchetRow', ['date', 'inventory', 'inject_rate', 'withdraw_rate'])
+
+def create_tab(titles, children):
+    tab = ipw.Tab()
+    for idx, title in enumerate(titles):
+        tab.set_title(idx, title)
+    tab.children = children
+    return tab
 
 def enumerate_ratchets():
     ratchet_row = 0
@@ -33,14 +42,44 @@ def read_ratchets():
                                                         ratch.withdraw_rate))
     return ratchets
 
-# Forward curve input
+val_date_wgt = ipw.DatePicker(description='Val Date', value=date.today())
+inventory_wgt = ipw.FloatText(description='Inventory')
+ir_wgt = ipw.FloatText(description='Intrst Rate %', step=0.005)
+val_inputs_wgt = ipw.VBox([val_date_wgt, inventory_wgt, ir_wgt])
+
+# Forward curve
 fwd_input_sheet = ips.sheet(rows=num_fwd_rows, columns=2, column_headers=['fwd_start', 'price'])
 for row_num in range(0, num_fwd_rows):
     ips.cell(row_num, 0, '', date_format=date_format, type='date')
     ips.cell(row_num, 1, '', type='numeric')
 
-def on_stor_type_change(change):
-    print(change)
+out_fwd_curve = ipw.Output()
+smooth_curve_wgt = ipw.Checkbox(description='Apply Smoothing', value=False)
+apply_wkend_shaping_wgt = ipw.Checkbox(description='Wkend Shaping', value=False, disabled=True)
+wkend_factor_wgt = ipw.FloatText(description='Wkend shaping factor', step=0.005, disabled=True)
+btw_plot_fwd_wgt = ipw.Button(description='Plot Forward Curve')
+
+def on_smooth_curve_change(change):
+    apply_wkend_shaping_wgt.disabled = not change['new']
+
+smooth_curve_wgt.observe(on_smooth_curve_change, names='value')
+
+def on_apply_wkend_shaping_change(change):
+    wkend_factor_wgt.disabled = not change['new']
+
+apply_wkend_shaping_wgt.observe(on_apply_wkend_shaping_change, names='value')
+
+def on_plot_fwd_clicked(b):
+    out_fwd_curve.clear_output()
+    curve = read_fwd_curve()
+    with out_fwd_curve:
+        curve.plot()
+        show_inline_matplotlib_plots()
+
+btw_plot_fwd_wgt.on_click(on_plot_fwd_clicked)
+
+fwd_data_wgt = ipw.HBox([ipw.VBox([smooth_curve_wgt, apply_wkend_shaping_wgt, wkend_factor_wgt,
+                       fwd_input_sheet]), ipw.VBox([btw_plot_fwd_wgt, out_fwd_curve])])
 
 # Common storage properties
 stor_type_wgt = ipw.RadioButtons(options=['Simple', 'Ratchets'], description='Storage Type')
@@ -74,25 +113,41 @@ for row_num in range(0, num_ratch_rows):
 # Compose storage
 storage_details_wgt = ipw.VBox([storage_common_wgt, storage_simple_wgt])
 
-def on_test_rad_change(change):
+def on_stor_type_change(change):
     if change['new'] == 'Simple':
         storage_details_wgt.children = (storage_common_wgt, storage_simple_wgt)
     else:
         storage_details_wgt.children = (storage_common_wgt, ratch_input_sheet)
-stor_type_wgt.observe(on_test_rad_change, names='value')
+stor_type_wgt.observe(on_stor_type_change, names='value')
 
-val_date_wgt = ipw.DatePicker(description='Val Date', value=date.today())
-inventory_wgt = ipw.FloatText(description='Inventory')
 
-val_inputs_wgt = ipw.VBox([val_date_wgt, inventory_wgt])
-
-ir_wgt = ipw.FloatText(description='Intrst Rate %', step=0.005)
-
+# Volatility parameters
 spot_vol_wgt = ipw.FloatText(description='Spot Vol', step=0.01)
 spot_mr_wgt = ipw.FloatText(description='Spot Mean Rev', step=0.01)
 lt_vol_wgt = ipw.FloatText(description='Long Term Vol', step=0.01)
 seas_vol_wgt = ipw.FloatText(description='Seasonal Vol', step=0.01)
-vol_params_wgt = ipw.VBox([spot_vol_wgt, spot_mr_wgt, lt_vol_wgt, seas_vol_wgt])
+btn_plot_vol = ipw.Button(description='Plot Forward Vol')
+out_vols =  ipw.Output()
+vol_params_wgt = ipw.HBox([ipw.VBox([spot_vol_wgt, spot_mr_wgt, lt_vol_wgt, seas_vol_wgt, btn_plot_vol]), out_vols])
+
+# Plotting vol
+def btn_plot_vol_clicked(b):
+    out_vols.clear_output()
+    with out_vols:
+        if val_date_wgt.value is None or end_wgt.value is None:
+            print('Enter val date and storage end date.')
+            return
+        vol_model = MultiFactorModel.for_3_factor_seasonal(freq, spot_mr_wgt.value, spot_vol_wgt.value,
+                                   lt_vol_wgt.value, seas_vol_wgt.value, val_date_wgt.value, end_wgt.value)
+        start_vol_period = pd.Period(val_date_wgt.value, freq=freq)
+        end_vol_period = start_vol_period + 1
+        periods = pd.period_range(start=end_vol_period, end=end_wgt.value, freq=freq)
+        fwd_vols = [vol_model.integrated_vol(start_vol_period, end_vol_period, period) for period in periods]
+        fwd_vol_series = pd.Series(data=fwd_vols, index=periods)
+        fwd_vol_series.plot()
+        show_inline_matplotlib_plots()
+        
+btn_plot_vol.on_click(btn_plot_vol_clicked)
 
 # Technical Parameters
 num_sims_wgt = ipw.IntText(description='Num Sims', value=1000, step=500)
@@ -123,17 +178,8 @@ seed_is_random_wgt.observe(on_seed_is_random_change, names='value')
 tech_params_wgt = ipw.HBox([ipw.VBox([num_sims_wgt, seed_is_random_wgt, random_seed_wgt, grid_points_wgt, 
                             num_tol_wgt]), basis_func_wgt])
 
-def create_tab(titles, children):
-    tab = ipw.Tab()
-    for idx, title in enumerate(titles):
-        tab.set_title(idx, title)
-    tab.children = children
-    return tab
-
-mkt_data_wgt = ipw.HBox([val_inputs_wgt, fwd_input_sheet, ipw.VBox([vol_params_wgt, ir_wgt])])
-
-tab_in_titles = ['Valuation Data', 'Storage Details', 'Technical Params']
-tab_in_children = [mkt_data_wgt, storage_details_wgt, tech_params_wgt]
+tab_in_titles = ['Valuation Data', 'Forward Curve', 'Storage Details', 'Volatility Params', 'Technical Params']
+tab_in_children = [val_inputs_wgt, fwd_data_wgt, storage_details_wgt, vol_params_wgt, tech_params_wgt]
 tab_in = create_tab(tab_in_titles, tab_in_children)
 
 # Output Widgets
@@ -163,12 +209,24 @@ def twentieth_of_next_month(period): return period.asfreq('M').asfreq('D', 'end'
 def read_fwd_curve():
     fwd_periods = []
     fwd_prices = []
-    fwd_row=0
+    fwd_row = 0
     while fwd_input_sheet[fwd_row, 0].value != '':
         fwd_periods.append(pd.Period(fwd_input_sheet[fwd_row, 0].value, freq=freq))
         fwd_prices.append(fwd_input_sheet[fwd_row, 1].value)
-        fwd_row+=1
-    return pd.Series(fwd_prices, pd.PeriodIndex(fwd_periods)).resample(freq).fillna('pad')
+        fwd_row += 1
+    if smooth_curve_wgt.value:
+        p1, p2 = itertools.tee(fwd_periods)
+        next(p2, None)
+        contracts = []
+        for start, end, price in zip(p1, p2, fwd_prices):
+            contracts.append((start, end - 1, price))
+        weekend_adjust = None
+        if apply_wkend_shaping_wgt.value:
+            wkend_factor = wkend_factor_wgt.value
+            weekend_adjust = adjustments.dayofweek(default=1.0, saturday=wkend_factor, sunday=wkend_factor)
+        return max_smooth_interp(contracts, freq=freq, mult_season_adjust=weekend_adjust)
+    else:
+        return pd.Series(fwd_prices, pd.PeriodIndex(fwd_periods)).resample(freq).fillna('pad')
 
 def btn_clicked(b):
     progress_wgt.value = 0.0
@@ -237,7 +295,7 @@ def btn_clicked(b):
             ax_2.legend(['Expected Inventory'], loc='upper center', bbox_to_anchor=(0.7, -0.12))
             show_inline_matplotlib_plots()
     except Exception as e:
-        with out:
+        with out_summary:
             print('Exception:')
             print(e)
     finally:
@@ -260,6 +318,7 @@ def test_data_btn():
         start_wgt.value = today + timedelta(days=5)
         end_wgt.value = today + timedelta(days=380)
         invent_max_wgt.value = 100000
+        wkend_factor_wgt.value = 0.97
         inj_rate_wgt.value = 260
         with_rate_wgt.value = 130
         inj_cost_wgt.value = 1.1
