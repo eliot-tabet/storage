@@ -106,7 +106,7 @@ namespace Cmdty.Storage.Benchmarks
         public double ValueSimpleDailyStorageOneFactor_ManagedNumerics()
         {
             Control.UseManaged();
-            LsmcStorageValuationResults<Day> results = LsmcStorageValuation.Calculate(_valDate, Inventory,
+            LsmcStorageValuationResults<Day> results = LsmcStorageValuation.WithNoLogger.Calculate(_valDate, Inventory,
                 _forwardCurve, _simpleDailyStorage, _settleDateRule, _flatInterestRateDiscounter, _gridCalc, NumTolerance,
                 _1FDailyMultiFactorParams, NumSims, RandomSeed, _oneFactorBasisFunctions);
             return results.Npv;
@@ -116,7 +116,7 @@ namespace Cmdty.Storage.Benchmarks
         public double ValueSimpleDailyStorageOneFactor_MklNumerics()
         {
             Control.UseNativeMKL();
-            LsmcStorageValuationResults<Day> results = LsmcStorageValuation.Calculate(_valDate, Inventory,
+            LsmcStorageValuationResults<Day> results = LsmcStorageValuation.WithNoLogger.Calculate(_valDate, Inventory,
                 _forwardCurve, _simpleDailyStorage, _settleDateRule, _flatInterestRateDiscounter, _gridCalc, NumTolerance,
                 _1FDailyMultiFactorParams, NumSims, RandomSeed, _oneFactorBasisFunctions);
             return results.Npv;

@@ -394,7 +394,7 @@ def _net_multi_factor_calc(cmdty_storage, fwd_curve, interest_rates, inventory, 
                                                        numerical_tolerance, time_period_type)
 
     # Multi-factor calc
-    net_val_results = net_cs.LsmcStorageValuation.Calculate[time_period_type](net_current_period,
+    net_val_results = net_cs.LsmcStorageValuation.WithNoLogger.Calculate[time_period_type](net_current_period,
                                                                               inventory, net_forward_curve,
                                                                               cmdty_storage.net_storage,
                                                                               net_settlement_rule, net_discount_func,

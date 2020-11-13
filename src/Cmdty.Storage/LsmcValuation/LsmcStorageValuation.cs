@@ -37,14 +37,15 @@ using MathNet.Numerics.LinearAlgebra.Double;
 
 namespace Cmdty.Storage
 {
-    public static class LsmcStorageValuation
+    public class LsmcStorageValuation
     {
         private const double FloatingPointTol = 1E-8;   // TODO better way to pick this.
         // This has been very roughly estimated. Probably there is a better way of splitting up progress by estimating the order of the backward and forward components.
         private const double BackwardPcntTime = 0.96;
 
+        public static LsmcStorageValuation WithNoLogger => new LsmcStorageValuation();
 
-        public static LsmcStorageValuationResults<T> Calculate<T>(T currentPeriod, double startingInventory,
+        public LsmcStorageValuationResults<T> Calculate<T>(T currentPeriod, double startingInventory,
             TimeSeries<T, double> forwardCurve, ICmdtyStorage<T> storage, Func<T, Day> settleDateRule,
             Func<Day, Day, double> discountFactors,
             IDoubleStateSpaceGridCalc gridCalc,
@@ -60,7 +61,7 @@ namespace Cmdty.Storage
                 gridCalc, numericalTolerance, modelParameters, numSims, seed, basisFunctions, CancellationToken.None, onProgressUpdate);
         }
         
-        public static LsmcStorageValuationResults<T> Calculate<T>(T currentPeriod, double startingInventory,
+        public LsmcStorageValuationResults<T> Calculate<T>(T currentPeriod, double startingInventory,
             TimeSeries<T, double> forwardCurve, ICmdtyStorage<T> storage, Func<T, Day> settleDateRule,
             Func<Day, Day, double> discountFactors,
             IDoubleStateSpaceGridCalc gridCalc,
@@ -80,7 +81,7 @@ namespace Cmdty.Storage
                 cancellationToken, onProgressUpdate);
         }
 
-        public static LsmcStorageValuationResults<T> Calculate<T>(T currentPeriod, double startingInventory,
+        public LsmcStorageValuationResults<T> Calculate<T>(T currentPeriod, double startingInventory,
             TimeSeries<T, double> forwardCurve, ICmdtyStorage<T> storage, Func<T, Day> settleDateRule,
             Func<Day, Day, double> discountFactors,
             IDoubleStateSpaceGridCalc gridCalc,
@@ -99,7 +100,7 @@ namespace Cmdty.Storage
         }
 
 
-        public static LsmcStorageValuationResults<T> Calculate<T>(T currentPeriod, double startingInventory,
+        public LsmcStorageValuationResults<T> Calculate<T>(T currentPeriod, double startingInventory,
             TimeSeries<T, double> forwardCurve, ICmdtyStorage<T> storage, Func<T, Day> settleDateRule,
             Func<Day, Day, double> discountFactors,
             IDoubleStateSpaceGridCalc gridCalc,
@@ -139,7 +140,7 @@ namespace Cmdty.Storage
                 gridCalc, numericalTolerance, spotSims, basisFunctions, cancellationToken, onProgressUpdate);
         }
 
-        public static LsmcStorageValuationResults<T> Calculate<T>(T currentPeriod, double startingInventory,
+        public LsmcStorageValuationResults<T> Calculate<T>(T currentPeriod, double startingInventory,
             TimeSeries<T, double> forwardCurve, ICmdtyStorage<T> storage, Func<T, Day> settleDateRule,
             Func<Day, Day, double> discountFactors,
             IDoubleStateSpaceGridCalc gridCalc,
@@ -156,7 +157,7 @@ namespace Cmdty.Storage
                 CancellationToken.None, onProgressUpdate);
         }
 
-        public static LsmcStorageValuationResults<T> Calculate<T>(T currentPeriod, double startingInventory,
+        public LsmcStorageValuationResults<T> Calculate<T>(T currentPeriod, double startingInventory,
             TimeSeries<T, double> forwardCurve, ICmdtyStorage<T> storage, Func<T, Day> settleDateRule,
             Func<Day, Day, double> discountFactors,
             IDoubleStateSpaceGridCalc gridCalc,
