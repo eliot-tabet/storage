@@ -34,17 +34,25 @@ using Cmdty.TimePeriodValueTypes;
 using Cmdty.TimeSeries;
 using MathNet.Numerics.LinearAlgebra;
 using MathNet.Numerics.LinearAlgebra.Double;
+using Microsoft.Extensions.Logging;
 
 namespace Cmdty.Storage
 {
     public class LsmcStorageValuation
     {
+        private readonly ILogger<LsmcStorageValuation> _logger;
+
         private const double FloatingPointTol = 1E-8;   // TODO better way to pick this.
         // This has been very roughly estimated. Probably there is a better way of splitting up progress by estimating the order of the backward and forward components.
         private const double BackwardPcntTime = 0.96;
 
-        public static LsmcStorageValuation WithNoLogger => new LsmcStorageValuation();
+        public LsmcStorageValuation(ILogger<LsmcStorageValuation> logger = null)
+        {
+            _logger = logger;
+        }
 
+        public static LsmcStorageValuation WithNoLogger => new LsmcStorageValuation();
+        
         public LsmcStorageValuationResults<T> Calculate<T>(T currentPeriod, double startingInventory,
             TimeSeries<T, double> forwardCurve, ICmdtyStorage<T> storage, Func<T, Day> settleDateRule,
             Func<Day, Day, double> discountFactors,
@@ -259,6 +267,7 @@ namespace Cmdty.Storage
             double progress = 0.0;
             double backStepProgressPcnt = BackwardPcntTime / (periodsForResultsTimeSeries.Length - 1);
 
+            _logger?.LogInformation("Starting backward induction.");
             foreach (T period in periodsForResultsTimeSeries.Reverse().Skip(1))
             {
                 double[] nextPeriodInventorySpaceGrid = inventorySpaceGrids[backCounter + 1];
@@ -422,7 +431,9 @@ namespace Cmdty.Storage
                 onProgressUpdate?.Invoke(progress);
                 cancellationToken.ThrowIfCancellationRequested();
             }
-            
+            _logger?.LogInformation("Completed backward induction.");
+
+
             var inventoryBySim = new Panel<T, double>(periodsForResultsTimeSeries, numSims);
             var injectWithdrawVolumeBySim = new Panel<T, double>(periodsForResultsTimeSeries, numSims);
             var cmdtyConsumedBySim = new Panel<T, double>(periodsForResultsTimeSeries, numSims);
@@ -437,6 +448,7 @@ namespace Cmdty.Storage
                 startingInventories[i] = startingInventory;
 
             double forwardStepProgressPcnt = (1.0 - BackwardPcntTime) / periodsForResultsTimeSeries.Length;
+            _logger?.LogInformation("Starting forward simulation.");
             for (int periodIndex = 0; periodIndex < periodsForResultsTimeSeries.Length - 1; periodIndex++) // TODO more clearly handle this -1
             {
                 T period = periodsForResultsTimeSeries[periodIndex];
@@ -523,6 +535,7 @@ namespace Cmdty.Storage
                 onProgressUpdate?.Invoke(progress);
                 cancellationToken.ThrowIfCancellationRequested();
             }
+            _logger?.LogInformation("Completed forward simulation.");
 
             double expectedFinalInventory = Average(inventoryBySim[inventoryBySim.NumRows - 1]);
             // Profile at storage end when no decisions can happen
@@ -537,6 +550,7 @@ namespace Cmdty.Storage
             var storageProfileSeries = new TimeSeries<T, StorageProfile>(periodsForResultsTimeSeries[0], storageProfiles);
             
             // Calculate trigger prices
+            _logger?.LogInformation("Started trigger price calculation.");
             int numTriggerPriceVolumes = 10; // TODO move to parameters?
 
             var triggerVolumeProfilesArray = new TriggerPriceVolumeProfiles[periodsForResultsTimeSeries.Length - 1];
@@ -611,6 +625,8 @@ namespace Cmdty.Storage
             }
             var triggerPriceVolumeProfiles = new TimeSeries<T, TriggerPriceVolumeProfiles>(periodsForResultsTimeSeries.First(), triggerVolumeProfilesArray);
             var triggerPrices = new TimeSeries<T, TriggerPrices>(periodsForResultsTimeSeries.First(), triggerPricesArray);
+            _logger?.LogInformation("Completed trigger price calculation.");
+
 
             var spotPricePanel = Panel.UseRawDataArray(spotSims.SpotPrices, spotSims.SimulatedPeriods, numSims);
             onProgressUpdate?.Invoke(1.0); // Progress with approximately 1.0 should have occured already, but might have been a bit off because of floating-point error.
