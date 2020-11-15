@@ -59,6 +59,12 @@ def on_log_level_change(change):
     
 log_level_wgt.observe(on_log_level_change, names='value')
 
+def on_clear_logs_clicked(b):
+    log_handler.clear_logs()
+
+btn_clear_logs = ipw.Button(description='Clear Log Display')
+btn_clear_logs.on_click(on_clear_logs_clicked)
+
 # Shared properties
 freq='D'
 num_fwd_rows = 15
@@ -127,6 +133,7 @@ def on_plot_fwd_clicked(b):
         show_inline_matplotlib_plots()
 
 btw_plot_fwd_wgt.on_click(on_plot_fwd_clicked)
+
 
 fwd_data_wgt = ipw.HBox([ipw.VBox([smooth_curve_wgt, apply_wkend_shaping_wgt, wkend_factor_wgt,
                        fwd_input_sheet]), ipw.VBox([btw_plot_fwd_wgt, out_fwd_curve])])
@@ -309,6 +316,7 @@ def btn_clicked(b):
                                   twentieth_of_next_month(pd.Period(end_wgt.value, freq='D')), freq='D'), dtype='float64')
         interest_rate_curve[:] = ir_wgt.value
         seed = None if seed_is_random_wgt.value else random_seed_wgt.value
+        logger.info('Valuation started.')
         val_results_3f = three_factor_seasonal_value(storage, val_date_wgt.value, inventory_wgt.value, fwd_curve=fwd_curve,
                                      interest_rates=interest_rate_curve, settlement_rule=twentieth_of_next_month,
                                     spot_mean_reversion=spot_mr_wgt.value, spot_vol=spot_vol_wgt.value,
@@ -317,6 +325,7 @@ def btn_clicked(b):
                                     basis_funcs=basis_funcs_input_wgt.value, seed=seed,
                                     num_inventory_grid_points=grid_points_wgt.value, on_progress_update=on_progress,
                                     numerical_tolerance=num_tol_wgt.value)
+        logger.info('Valuation completed without error.')
         full_value_wgt.value = "{0:,.0f}".format(val_results_3f.npv)
         intr_value_wgt.value = "{0:,.0f}".format(val_results_3f.intrinsic_npv)
         extr_value_wgt.value = "{0:,.0f}".format(val_results_3f.extrinsic_npv)
@@ -356,7 +365,7 @@ def btn_clicked(b):
 btn_calculate = ipw.Button(description='Calculate')
 btn_calculate.on_click(btn_clicked)  
 
-controls_wgt = ipw.HBox([ipw.VBox([btn_calculate, progress_wgt, log_level_wgt]), log_handler.out])
+controls_wgt = ipw.HBox([ipw.VBox([btn_calculate, progress_wgt, log_level_wgt, btn_clear_logs]), log_handler.out])
 
 def display_gui():
     display(tab_in)
