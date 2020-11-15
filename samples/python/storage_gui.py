@@ -1,13 +1,63 @@
 import pandas as pd
 import ipywidgets as ipw
 import ipysheet as ips
-from cmdty_storage import CmdtyStorage, three_factor_seasonal_value, intrinsic_value, MultiFactorModel
+from cmdty_storage import CmdtyStorage, three_factor_seasonal_value, MultiFactorModel, multi_factor
 from curves import max_smooth_interp, adjustments
 from datetime import date, timedelta
 from IPython.display import display
 from ipywidgets.widgets.interaction import show_inline_matplotlib_plots
 from collections import namedtuple
 import itertools
+import logging
+
+# Set up logging
+class OutputWidgetHandler(logging.Handler):
+    """ Custom logging handler sending logs to an output widget """
+
+    def __init__(self, *args, **kwargs):
+        super(OutputWidgetHandler, self).__init__(*args, **kwargs)
+        layout = {
+            'width': '50%',
+            'height': '160px',
+            'border': '1px solid black',
+            'overflow_y': 'auto',
+        }
+        self.out = ipw.Output(layout=layout)
+
+    def emit(self, record):
+        """ Overload of logging.Handler method """
+        formatted_record = self.format(record)
+        new_output = {
+            'name': 'stdout',
+            'output_type': 'stream',
+            'text': formatted_record+'\n'
+        }
+        self.out.outputs = (new_output, ) + self.out.outputs 
+
+    def clear_logs(self):
+        """ Clear the current logs """
+        self.out.clear_output()
+
+logger = logging.getLogger('storage_gui')
+log_handler = OutputWidgetHandler()
+log_handler.setFormatter(logging.Formatter('%(asctime)s  - [%(levelname)s] %(message)s'))
+logger.addHandler(log_handler)
+logger.setLevel(logging.INFO)
+
+log_level_wgt = ipw.Dropdown(description='Log Level',
+                options=['Debug', 'Info', 'Warning', 'Error', 'Critical'],
+                value='Info')
+
+multi_factor.logger.addHandler(log_handler)
+multi_factor.logger.setLevel(logging.INFO)
+
+def on_log_level_change(change):
+    level_text = change['new']
+    level_int = getattr(logging, level_text.upper())
+    logger.setLevel(level_int)
+    multi_factor.logger.setLevel(level_int)
+    
+log_level_wgt.observe(on_log_level_change, names='value')
 
 # Shared properties
 freq='D'
@@ -232,12 +282,14 @@ def btn_clicked(b):
     progress_wgt.value = 0.0
     for vw in value_wgts:
         vw.value = ''
-    btn.disabled = True
+    btn_calculate.disabled = True
     out_summary.clear_output()
     out_triggers.clear_output()
     try:
         global fwd_curve
+        logger.debug('Reading forward curve.')
         fwd_curve = read_fwd_curve()
+        logger.debug('Forward curve read successfully.')
         global storage
         global val_results_3f
         if stor_type_wgt.value == 'Simple':
@@ -295,24 +347,24 @@ def btn_clicked(b):
             ax_2.legend(['Expected Inventory'], loc='upper center', bbox_to_anchor=(0.7, -0.12))
             show_inline_matplotlib_plots()
     except Exception as e:
-        with out_summary:
-            print('Exception:')
-            print(e)
+        logger.error('Exception:')
+        logger.error(e)
     finally:
-        btn.disabled = False
+        btn_calculate.disabled = False
 
 
-btn = ipw.Button(description='Calculate')
-btn.on_click(btn_clicked)  
+btn_calculate = ipw.Button(description='Calculate')
+btn_calculate.on_click(btn_clicked)  
+
+controls_wgt = ipw.HBox([ipw.VBox([btn_calculate, progress_wgt, log_level_wgt]), log_handler.out])
 
 def display_gui():
     display(tab_in)
-    display(btn)
-    display(progress_wgt)
+    display(controls_wgt)
     display(tab_output)
 
 def test_data_btn():
-    def btn_clicked_2(b):
+    def btn_test_data_clicked(b):
         today = date.today()
         inventory_wgt.value = 1456
         start_wgt.value = today + timedelta(days=5)
@@ -351,7 +403,7 @@ def test_data_btn():
         for idx, wthd in enumerate([752.5, 813.7, 836.45, 854.78, 872.9]):
             ratch_input_sheet[ratch_2_offset + idx, 3].value = wthd
 
-    btn2 = ipw.Button(description='Populate Test Data')
-    btn2.on_click(btn_clicked_2)
+    btn_test_data = ipw.Button(description='Populate Test Data')
+    btn_test_data.on_click(btn_test_data_clicked)
 
-    display(btn2)
+    display(btn_test_data)

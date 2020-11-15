@@ -24,7 +24,8 @@
 import unittest
 import pandas as pd
 import numpy as np
-from cmdty_storage import multi_factor as mf, CmdtyStorage, LsmcStorageValuation
+from cmdty_storage import multi_factor as mf, CmdtyStorage, three_factor_seasonal_value, \
+                            multi_factor_value
 from datetime import date
 import itertools
 from tests import utils
@@ -213,9 +214,7 @@ class TestMultiFactorValue(unittest.TestCase):
         seed = 11
         basis_funcs = '1 + x0 + x0**2 + x1 + x1*x1'
 
-        lsmc = LsmcStorageValuation()
-
-        multi_factor_val = lsmc.multi_factor_value(cmdty_storage, val_date, inventory, forward_curve,
+        multi_factor_val = multi_factor_value(cmdty_storage, val_date, inventory, forward_curve,
                                               interest_rate_curve, twentieth_of_next_month,
                                               factors, factor_corrs, num_sims,
                                               basis_funcs, seed,
@@ -278,9 +277,8 @@ class TestMultiFactorValue(unittest.TestCase):
         num_sims = 500
         seed = 11
         basis_funcs = '1 + x_st + x_sw + x_lt + x_st**2 + x_sw**2 + x_lt**2'
-        lsmc = LsmcStorageValuation()
 
-        multi_factor_val = lsmc.three_factor_seasonal_value(cmdty_storage, val_date, inventory, forward_curve,
+        multi_factor_val = three_factor_seasonal_value(cmdty_storage, val_date, inventory, forward_curve,
                                                        interest_rate_curve, twentieth_of_next_month,
                                                        spot_mean_reversion, spot_volatility, long_term_vol,
                                                        seasonal_volatility,
