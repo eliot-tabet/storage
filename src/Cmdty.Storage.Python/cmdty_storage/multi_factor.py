@@ -316,108 +316,112 @@ class MultiFactorValuationResults(tp.NamedTuple):
         return self.npv - self.intrinsic_npv
 
 
-def three_factor_seasonal_value(cmdty_storage: CmdtyStorage,
-                                val_date: utils.TimePeriodSpecType,
-                                inventory: float,
-                                fwd_curve: pd.Series,
-                                interest_rates: pd.Series,
-                                settlement_rule: tp.Callable[[pd.Period], date],
-                                spot_mean_reversion: float,
-                                spot_vol: float,
-                                long_term_vol: float,
-                                seasonal_vol: float,
-                                num_sims: int,
-                                basis_funcs: str,
-                                seed: tp.Optional[int] = None,
-                                num_inventory_grid_points: int = 100,
-                                numerical_tolerance: float = 1E-12,
-                                on_progress_update: tp.Optional[tp.Callable[[float], None]] = None,
-                                ) -> MultiFactorValuationResults:
-    time_period_type = utils.FREQ_TO_PERIOD_TYPE[cmdty_storage.freq]
-    net_current_period = utils.from_datetime_like(val_date, time_period_type)
-    net_multi_factor_params = net_mf.MultiFactorParameters.For3FactorSeasonal[time_period_type](
-        spot_mean_reversion, spot_vol, long_term_vol, seasonal_vol, net_current_period,
-        cmdty_storage.net_storage.EndPeriod)
-    # Transform factors x_st -> x0, x_lt -> x1, x_sw -> x2
-    basis_func_transformed = basis_funcs.replace('x_st', 'x0').replace('x_lt', 'x1').replace('x_sw', 'x2')
-    return _net_multi_factor_calc(cmdty_storage, fwd_curve, interest_rates, inventory, net_multi_factor_params,
-                                  num_inventory_grid_points, num_sims, numerical_tolerance, on_progress_update,
-                                  basis_func_transformed, seed, settlement_rule, time_period_type,
-                                  val_date)
+class LsmcStorageValuation:
 
+    def __init__(self, logger = None):
+        self.net_lsmc_value = net_cs.LsmcStorageValuation(logger)
 
-def multi_factor_value(cmdty_storage: CmdtyStorage,
-                       val_date: utils.TimePeriodSpecType,
-                       inventory: float,
-                       fwd_curve: pd.Series,
-                       interest_rates: pd.Series,
-                       settlement_rule: tp.Callable[[pd.Period], date],
-                       factors: tp.Iterable[tp.Tuple[float, utils.CurveType]],
-                       factor_corrs: FactorCorrsType,
-                       num_sims: int,
-                       basis_funcs: str,
-                       seed: tp.Optional[int] = None,
-                       num_inventory_grid_points: int = 100,
-                       numerical_tolerance: float = 1E-12,
-                       on_progress_update: tp.Optional[tp.Callable[[float], None]] = None,
-                       ) -> MultiFactorValuationResults:
-    factor_corrs = _validate_multi_factor_params(factors, factor_corrs)
-    if cmdty_storage.freq != fwd_curve.index.freqstr:
-        raise ValueError("cmdty_storage and forward_curve have different frequencies.")
-    time_period_type = utils.FREQ_TO_PERIOD_TYPE[cmdty_storage.freq]
-    net_multi_factor_params = _create_net_multi_factor_params(factor_corrs, factors, time_period_type)
-    return _net_multi_factor_calc(cmdty_storage, fwd_curve, interest_rates, inventory, net_multi_factor_params,
-                                  num_inventory_grid_points, num_sims, numerical_tolerance, on_progress_update,
-                                  basis_funcs, seed, settlement_rule, time_period_type,
-                                  val_date)
+    def three_factor_seasonal_value(self, cmdty_storage: CmdtyStorage,
+                                    val_date: utils.TimePeriodSpecType,
+                                    inventory: float,
+                                    fwd_curve: pd.Series,
+                                    interest_rates: pd.Series,
+                                    settlement_rule: tp.Callable[[pd.Period], date],
+                                    spot_mean_reversion: float,
+                                    spot_vol: float,
+                                    long_term_vol: float,
+                                    seasonal_vol: float,
+                                    num_sims: int,
+                                    basis_funcs: str,
+                                    seed: tp.Optional[int] = None,
+                                    num_inventory_grid_points: int = 100,
+                                    numerical_tolerance: float = 1E-12,
+                                    on_progress_update: tp.Optional[tp.Callable[[float], None]] = None,
+                                    ) -> MultiFactorValuationResults:
+        time_period_type = utils.FREQ_TO_PERIOD_TYPE[cmdty_storage.freq]
+        net_current_period = utils.from_datetime_like(val_date, time_period_type)
+        net_multi_factor_params = net_mf.MultiFactorParameters.For3FactorSeasonal[time_period_type](
+            spot_mean_reversion, spot_vol, long_term_vol, seasonal_vol, net_current_period,
+            cmdty_storage.net_storage.EndPeriod)
+        # Transform factors x_st -> x0, x_lt -> x1, x_sw -> x2
+        basis_func_transformed = basis_funcs.replace('x_st', 'x0').replace('x_lt', 'x1').replace('x_sw', 'x2')
+        return self._net_multi_factor_calc(cmdty_storage, fwd_curve, interest_rates, inventory, net_multi_factor_params,
+                                      num_inventory_grid_points, num_sims, numerical_tolerance, on_progress_update,
+                                      basis_func_transformed, seed, settlement_rule, time_period_type,
+                                      val_date)
 
+    def multi_factor_value(self, cmdty_storage: CmdtyStorage,
+                           val_date: utils.TimePeriodSpecType,
+                           inventory: float,
+                           fwd_curve: pd.Series,
+                           interest_rates: pd.Series,
+                           settlement_rule: tp.Callable[[pd.Period], date],
+                           factors: tp.Iterable[tp.Tuple[float, utils.CurveType]],
+                           factor_corrs: FactorCorrsType,
+                           num_sims: int,
+                           basis_funcs: str,
+                           seed: tp.Optional[int] = None,
+                           num_inventory_grid_points: int = 100,
+                           numerical_tolerance: float = 1E-12,
+                           on_progress_update: tp.Optional[tp.Callable[[float], None]] = None,
+                           ) -> MultiFactorValuationResults:
+        factor_corrs = _validate_multi_factor_params(factors, factor_corrs)
+        if cmdty_storage.freq != fwd_curve.index.freqstr:
+            raise ValueError("cmdty_storage and forward_curve have different frequencies.")
+        time_period_type = utils.FREQ_TO_PERIOD_TYPE[cmdty_storage.freq]
+        net_multi_factor_params = _create_net_multi_factor_params(factor_corrs, factors, time_period_type)
+        return self._net_multi_factor_calc(cmdty_storage, fwd_curve, interest_rates, inventory, net_multi_factor_params,
+                                      num_inventory_grid_points, num_sims, numerical_tolerance, on_progress_update,
+                                      basis_funcs, seed, settlement_rule, time_period_type,
+                                      val_date)
 
-def _net_multi_factor_calc(cmdty_storage, fwd_curve, interest_rates, inventory, net_multi_factor_params,
-                           num_inventory_grid_points, num_sims, numerical_tolerance, on_progress_update,
-                           basis_funcs, seed, settlement_rule, time_period_type,
-                           val_date):
-    # Convert inputs to .NET types
-    net_forward_curve = utils.series_to_double_time_series(fwd_curve, time_period_type)
-    net_current_period = utils.from_datetime_like(val_date, time_period_type)
-    net_grid_calc = net_cs.FixedSpacingStateSpaceGridCalc.CreateForFixedNumberOfPointsOnGlobalInventoryRange[
-        time_period_type](cmdty_storage.net_storage, num_inventory_grid_points)
-    net_settlement_rule = utils.wrap_settle_for_dotnet(settlement_rule, cmdty_storage.freq)
-    net_interest_rate_time_series = utils.series_to_double_time_series(interest_rates, utils.FREQ_TO_PERIOD_TYPE['D'])
-    net_discount_func = net_cs.StorageHelper.CreateAct65ContCompDiscounterFromSeries(net_interest_rate_time_series)
-    net_on_progress = utils.wrap_on_progress_for_dotnet(on_progress_update)
+    def _net_multi_factor_calc(self, cmdty_storage, fwd_curve, interest_rates, inventory, net_multi_factor_params,
+                               num_inventory_grid_points, num_sims, numerical_tolerance, on_progress_update,
+                               basis_funcs, seed, settlement_rule, time_period_type,
+                               val_date):
+        # Convert inputs to .NET types
+        net_forward_curve = utils.series_to_double_time_series(fwd_curve, time_period_type)
+        net_current_period = utils.from_datetime_like(val_date, time_period_type)
+        net_grid_calc = net_cs.FixedSpacingStateSpaceGridCalc.CreateForFixedNumberOfPointsOnGlobalInventoryRange[
+            time_period_type](cmdty_storage.net_storage, num_inventory_grid_points)
+        net_settlement_rule = utils.wrap_settle_for_dotnet(settlement_rule, cmdty_storage.freq)
+        net_interest_rate_time_series = utils.series_to_double_time_series(interest_rates, utils.FREQ_TO_PERIOD_TYPE['D'])
+        net_discount_func = net_cs.StorageHelper.CreateAct65ContCompDiscounterFromSeries(net_interest_rate_time_series)
+        net_on_progress = utils.wrap_on_progress_for_dotnet(on_progress_update)
 
-    net_basis_functions = net_cs.BasisFunctionsBuilder.Parse(basis_funcs)
-    # Intrinsic calc
-    intrinsic_result = cs_intrinsic.net_intrinsic_calc(cmdty_storage, net_current_period, net_interest_rate_time_series,
-                                                       inventory, net_forward_curve, net_settlement_rule,
-                                                       num_inventory_grid_points,
-                                                       numerical_tolerance, time_period_type)
+        net_basis_functions = net_cs.BasisFunctionsBuilder.Parse(basis_funcs)
+        # Intrinsic calc
+        intrinsic_result = cs_intrinsic.net_intrinsic_calc(cmdty_storage, net_current_period, net_interest_rate_time_series,
+                                                           inventory, net_forward_curve, net_settlement_rule,
+                                                           num_inventory_grid_points,
+                                                           numerical_tolerance, time_period_type)
 
-    # Multi-factor calc
-    net_val_results = net_cs.LsmcStorageValuation.WithNoLogger.Calculate[time_period_type](net_current_period,
-                                                                              inventory, net_forward_curve,
-                                                                              cmdty_storage.net_storage,
-                                                                              net_settlement_rule, net_discount_func,
-                                                                              net_grid_calc, numerical_tolerance,
-                                                                              net_multi_factor_params, num_sims, seed,
-                                                                              net_basis_functions,
-                                                                              net_on_progress)
-    deltas = utils.net_time_series_to_pandas_series(net_val_results.Deltas, cmdty_storage.freq)
-    expected_profile = cs_intrinsic.profile_to_data_frame(cmdty_storage.freq, net_val_results.ExpectedStorageProfile)
-    trigger_prices = _trigger_prices_to_data_frame(cmdty_storage.freq, net_val_results.TriggerPrices)
-    trigger_profiles = _trigger_profiles_to_data_frame(cmdty_storage.freq, net_val_results.TriggerPriceVolumeProfiles)
-    sim_spot = utils.net_panel_to_data_frame(net_val_results.SpotPriceBySim, cmdty_storage.freq)
+        # Multi-factor calc
+        net_val_results = net_cs.LsmcStorageValuation.WithNoLogger.Calculate[time_period_type](net_current_period,
+                                                                                  inventory, net_forward_curve,
+                                                                                  cmdty_storage.net_storage,
+                                                                                  net_settlement_rule, net_discount_func,
+                                                                                  net_grid_calc, numerical_tolerance,
+                                                                                  net_multi_factor_params, num_sims, seed,
+                                                                                  net_basis_functions,
+                                                                                  net_on_progress)
+        deltas = utils.net_time_series_to_pandas_series(net_val_results.Deltas, cmdty_storage.freq)
+        expected_profile = cs_intrinsic.profile_to_data_frame(cmdty_storage.freq, net_val_results.ExpectedStorageProfile)
+        trigger_prices = _trigger_prices_to_data_frame(cmdty_storage.freq, net_val_results.TriggerPrices)
+        trigger_profiles = _trigger_profiles_to_data_frame(cmdty_storage.freq, net_val_results.TriggerPriceVolumeProfiles)
+        sim_spot = utils.net_panel_to_data_frame(net_val_results.SpotPriceBySim, cmdty_storage.freq)
 
-    sim_inventory = utils.net_panel_to_data_frame(net_val_results.InventoryBySim, cmdty_storage.freq)
-    sim_inject_withdraw = utils.net_panel_to_data_frame(net_val_results.InjectWithdrawVolumeBySim, cmdty_storage.freq)
-    sim_cmdty_consumed = utils.net_panel_to_data_frame(net_val_results.CmdtyConsumedBySim, cmdty_storage.freq)
-    sim_inventory_loss = utils.net_panel_to_data_frame(net_val_results.InventoryLossBySim, cmdty_storage.freq)
-    sim_net_volume = utils.net_panel_to_data_frame(net_val_results.NetVolumeBySim, cmdty_storage.freq)
+        sim_inventory = utils.net_panel_to_data_frame(net_val_results.InventoryBySim, cmdty_storage.freq)
+        sim_inject_withdraw = utils.net_panel_to_data_frame(net_val_results.InjectWithdrawVolumeBySim, cmdty_storage.freq)
+        sim_cmdty_consumed = utils.net_panel_to_data_frame(net_val_results.CmdtyConsumedBySim, cmdty_storage.freq)
+        sim_inventory_loss = utils.net_panel_to_data_frame(net_val_results.InventoryLossBySim, cmdty_storage.freq)
+        sim_net_volume = utils.net_panel_to_data_frame(net_val_results.NetVolumeBySim, cmdty_storage.freq)
 
-    return MultiFactorValuationResults(net_val_results.Npv, deltas, expected_profile, intrinsic_result.npv,
-                                       intrinsic_result.profile, sim_spot, sim_inventory, sim_inject_withdraw,
-                                       sim_cmdty_consumed, sim_inventory_loss, sim_net_volume, trigger_prices,
-                                       trigger_profiles)
+        return MultiFactorValuationResults(net_val_results.Npv, deltas, expected_profile,
+                                           intrinsic_result.npv,
+                                           intrinsic_result.profile, sim_spot, sim_inventory, sim_inject_withdraw,
+                                           sim_cmdty_consumed, sim_inventory_loss, sim_net_volume, trigger_prices,
+                                           trigger_profiles)
 
 
 def _trigger_prices_to_data_frame(freq, net_trigger_prices) -> pd.DataFrame:

@@ -24,7 +24,7 @@
 import unittest
 import pandas as pd
 import numpy as np
-from cmdty_storage import multi_factor as mf, multi_factor_value, CmdtyStorage, three_factor_seasonal_value
+from cmdty_storage import multi_factor as mf, CmdtyStorage, LsmcStorageValuation
 from datetime import date
 import itertools
 from tests import utils
@@ -161,6 +161,7 @@ class TestMultiFactorModel(unittest.TestCase):
         self.assertEqual(two_f_model_float_corr_covar, two_f_model_int_array_corr_covar)
         # TODO test MultiFactorModel.for_3_factor_seasonal
 
+
 class TestMultiFactorValue(unittest.TestCase):
     def test_multi_factor_value_regression(self):
         storage_start = '2019-12-01'
@@ -211,7 +212,10 @@ class TestMultiFactorValue(unittest.TestCase):
         num_sims = 500
         seed = 11
         basis_funcs = '1 + x0 + x0**2 + x1 + x1*x1'
-        multi_factor_val = multi_factor_value(cmdty_storage, val_date, inventory, forward_curve,
+
+        lsmc = LsmcStorageValuation()
+
+        multi_factor_val = lsmc.multi_factor_value(cmdty_storage, val_date, inventory, forward_curve,
                                               interest_rate_curve, twentieth_of_next_month,
                                               factors, factor_corrs, num_sims,
                                               basis_funcs, seed,
@@ -274,7 +278,9 @@ class TestMultiFactorValue(unittest.TestCase):
         num_sims = 500
         seed = 11
         basis_funcs = '1 + x_st + x_sw + x_lt + x_st**2 + x_sw**2 + x_lt**2'
-        multi_factor_val = three_factor_seasonal_value(cmdty_storage, val_date, inventory, forward_curve,
+        lsmc = LsmcStorageValuation()
+
+        multi_factor_val = lsmc.three_factor_seasonal_value(cmdty_storage, val_date, inventory, forward_curve,
                                                        interest_rate_curve, twentieth_of_next_month,
                                                        spot_mean_reversion, spot_volatility, long_term_vol,
                                                        seasonal_volatility,
