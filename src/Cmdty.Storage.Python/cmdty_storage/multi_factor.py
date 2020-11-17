@@ -403,7 +403,9 @@ def _net_multi_factor_calc(cmdty_storage, fwd_curve, interest_rates, inventory, 
 
     # Multi-factor calc
     logger.debug('Calculating LSMC value.')
-    net_val_results = net_cs.LsmcStorageValuation.WithNoLogger.Calculate[time_period_type](net_current_period,
+    net_logger = utils.create_net_log_adapter(logger, net_cs.LsmcStorageValuation)
+    lsmc = net_cs.LsmcStorageValuation(net_logger)
+    net_val_results = lsmc.Calculate[time_period_type](net_current_period,
                                                                               inventory, net_forward_curve,
                                                                               cmdty_storage.net_storage,
                                                                               net_settlement_rule, net_discount_func,

@@ -32,8 +32,10 @@ from pathlib import Path
 
 clr.AddReference(str(Path("cmdty_storage/lib/Cmdty.TimePeriodValueTypes")))
 import Cmdty.TimePeriodValueTypes as net_tp
+
 clr.AddReference(str(Path('cmdty_storage/lib/Cmdty.TimeSeries')))
 import Cmdty.TimeSeries as ts
+
 clr.AddReference(str(Path('cmdty_storage/lib/Cmdty.Storage')))
 import Cmdty.Storage as net_cs
 
@@ -158,8 +160,8 @@ ForwardPointType = tp.Union[str, date, datetime, pd.Period]
 CurveType = tp.Union[pd.Series, tp.Dict[ForwardPointType, float]]
 TimeFunctionType = tp.Callable[[tp.Union[date, datetime], tp.Union[date, datetime]], float]
 FwdContractType = tp.Union[date, datetime, pd.Period, float,
-                    tp.Tuple[date, date], tp.Tuple[datetime, datetime],
-                    tp.Tuple[pd.Period, pd.Period]]
+                           tp.Tuple[date, date], tp.Tuple[datetime, datetime],
+                           tp.Tuple[pd.Period, pd.Period]]
 FwdContractsType = tp.Iterable[FwdContractType]
 
 
@@ -316,3 +318,12 @@ def net_panel_to_data_frame(net_panel, freq: str) -> pd.DataFrame:
     sim_periods = [net_time_period_to_pandas_period(p, freq) for p in net_panel.RowKeys]
     period_index = pd.PeriodIndex(data=sim_periods, freq=freq)
     return pd.DataFrame(data=np_array, index=period_index)
+
+
+def create_net_log_adapter(logger, net_logger_type):
+    def log(level, msg):
+        logger.log(level, msg)
+
+    is_enabled = dotnet.Func[dotnet.Int32, dotnet.Boolean](lambda level: logger.isEnabledFor(level))
+    py_log = dotnet.Action[dotnet.Int32, dotnet.String](log)
+    return net_cs.PythonHelpers.PythonLoggerAdapter[net_logger_type](is_enabled, py_log)
