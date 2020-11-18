@@ -25,7 +25,6 @@
 
 using System;
 using System.Collections.Generic;
-using System.Text;
 using Cmdty.Storage.PythonHelpers;
 using Microsoft.Extensions.Logging;
 using Xunit;
@@ -37,27 +36,56 @@ namespace Cmdty.Storage.Test
 
         [Fact]
         [Trait("Category", "PythonHelpers")]
-        public void LogInfo()
+        public void LogInformation_AsExpected()
         {
-            var logAdapter = new PythonLoggerAdapter<LsmcStorageValuation>(i => true, (i, s) => { });
-            logAdapter.LogInformation("Hello {0}, {1}", "one", "two");
+            (List<int> isEnabledCalls, List<(int logLevel, string message)> logCalls, PythonLoggerAdapter<LsmcStorageValuation> logAdapter) 
+                    = CreateLogAdapter();
+
+            logAdapter.LogInformation("Hello {0}, {1}.", "one", "two");
+            
+            Assert.Equal(new int[0], isEnabledCalls);
+            Assert.Equal(new (int logLevel, string message)[]{(20, "Hello one, two.")}, logCalls);
         }
 
         [Fact]
         [Trait("Category", "PythonHelpers")]
-        public void LogError()
+        public void IsEnabled_LogLevelError_AsExpected()
         {
-            var logAdapter = new PythonLoggerAdapter<LsmcStorageValuation>(i => true, (i, s) => { });
-            logAdapter.LogError(new Exception("My exceptions") , "Hello {0}, {1}", "one", "two");
+            (List<int> isEnabledCalls, List<(int logLevel, string message)> logCalls, PythonLoggerAdapter<LsmcStorageValuation> logAdapter)
+                = CreateLogAdapter();
+
+            logAdapter.IsEnabled(LogLevel.Error);
+
+            Assert.Equal(new int[]{40}, isEnabledCalls);
+            Assert.Equal(new (int logLevel, string message)[0], logCalls);
         }
 
         [Fact]
         [Trait("Category", "PythonHelpers")]
-        public void LogError2()
+        public void LogCritical_WithException_AsExpected()
         {
-            var logAdapter = new PythonLoggerAdapter<LsmcStorageValuation>(i => true, (i, s) => { });
-            logAdapter.LogError(new Exception("My exceptions"), "Hello");
+            (List<int> isEnabledCalls, List<(int logLevel, string message)> logCalls, PythonLoggerAdapter<LsmcStorageValuation> logAdapter)
+                = CreateLogAdapter();
+
+            var exception = new ApplicationException("Some error message.");
+            logAdapter.LogCritical(exception,"Error {0}, {1}.", "one", "two");
+
+            Assert.Equal(new int[0], isEnabledCalls);
+            Assert.Equal(new (int logLevel, string message)[] { (50, $"Error one, two.{Environment.NewLine}{exception}") }, logCalls);
         }
 
+        private static (List<int> isEnabledCalls, List<(int logLevel, string message)> logCalls, PythonLoggerAdapter<LsmcStorageValuation> logAdapter) CreateLogAdapter()
+        {
+            var isEnabledCalls = new List<int>();
+            var logCalls = new List<(int logLevel, string message)>();
+
+            var logAdapter = new PythonLoggerAdapter<LsmcStorageValuation>(logLevel =>
+            {
+                isEnabledCalls.Add(logLevel);
+                return true;
+            }, (logLevel, message) => { logCalls.Add((logLevel, message)); });
+            return (isEnabledCalls, logCalls, logAdapter);
+        }
+        
     }
 }

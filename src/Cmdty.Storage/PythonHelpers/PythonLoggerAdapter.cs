@@ -24,6 +24,7 @@
 #endregion
 
 using System;
+using JetBrains.Annotations;
 using Microsoft.Extensions.Logging;
 
 namespace Cmdty.Storage.PythonHelpers
@@ -33,19 +34,18 @@ namespace Cmdty.Storage.PythonHelpers
         private readonly Func<int, bool> _pythonIsEnabled;
         private readonly Action<int, string> _pythonLog;
         
-
-        public PythonLoggerAdapter(Func<int, bool> pythonIsEnabled, Action<int, string> pythonLog)
+        public PythonLoggerAdapter([NotNull] Func<int, bool> pythonIsEnabled, [NotNull] Action<int, string> pythonLog)
         {
-            _pythonIsEnabled = pythonIsEnabled;
-            _pythonLog = pythonLog;
+            _pythonIsEnabled = pythonIsEnabled ?? throw new ArgumentNullException(nameof(pythonIsEnabled));
+            _pythonLog = pythonLog ?? throw new ArgumentNullException(nameof(pythonLog));
         }
 
         public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception exception, Func<TState, Exception, string> formatter)
         {
-            // TODO include error message
             string message = state.ToString();
+            if (exception != null)
+                message = message + Environment.NewLine + exception;
             int pythonLogLevel = ConvertLogLevel(logLevel);
-
             _pythonLog(pythonLogLevel, message);
         }
 
