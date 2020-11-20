@@ -24,6 +24,7 @@
 #endregion
 
 using System;
+using System.Collections;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
@@ -38,15 +39,15 @@ namespace Cmdty.Storage
     /// <summary>
     /// Used for combining basis functions.
     /// </summary>
-    public sealed class BasisFunctionsBuilder
+    public sealed class BasisFunctionsBuilder : IEnumerable<BasisFunction>
     {
-        public IEnumerable<BasisFunction> Functions { get; }
+        private readonly IEnumerable<BasisFunction> _functions;
 
         public BasisFunctionsBuilder(BasisFunction basisFunction) =>
-            Functions = new[] { basisFunction };
+            _functions = new[] { basisFunction };
 
         public BasisFunctionsBuilder(IEnumerable<BasisFunction> basisFunctions) =>
-            Functions = basisFunctions;
+            _functions = basisFunctions;
 
         public static implicit operator BasisFunctionsBuilder(BasisFunction basisFunction) => 
             new BasisFunctionsBuilder(basisFunction);
@@ -57,21 +58,21 @@ namespace Cmdty.Storage
         public static implicit operator BasisFunctionsBuilder(List<BasisFunction> basisFunctions) =>
             new BasisFunctionsBuilder(basisFunctions);
 
-        public static implicit operator BasisFunction[](BasisFunctionsBuilder builder) => builder.Functions.ToArray();
+        public static implicit operator BasisFunction[](BasisFunctionsBuilder builder) => builder._functions.ToArray();
 
-        public static implicit operator List<BasisFunction>(BasisFunctionsBuilder builder) => builder.Functions.ToList();
+        public static implicit operator List<BasisFunction>(BasisFunctionsBuilder builder) => builder._functions.ToList();
 
         public static BasisFunctionsBuilder operator +(BasisFunctionsBuilder builder1, BasisFunctionsBuilder builder2) 
             => Combine(builder1, builder2);
 
         public static BasisFunctionsBuilder operator +(BasisFunctionsBuilder builder, BasisFunction basisFunction)
-            => new BasisFunctionsBuilder(builder.Functions.Concat(new [] {basisFunction}));
+            => new BasisFunctionsBuilder(builder._functions.Concat(new [] {basisFunction}));
 
         public static BasisFunctionsBuilder operator +(BasisFunction basisFunction, BasisFunctionsBuilder builder)
-            => new BasisFunctionsBuilder(builder.Functions.Concat(new[] { basisFunction }));
+            => new BasisFunctionsBuilder(builder._functions.Concat(new[] { basisFunction }));
         
         public static BasisFunctionsBuilder Combine(BasisFunctionsBuilder builder1, BasisFunctionsBuilder builder2)
-            => new BasisFunctionsBuilder(builder1.Functions.Concat(builder2.Functions));
+            => new BasisFunctionsBuilder(builder1._functions.Concat(builder2._functions));
 
         public static BasisFunctionsBuilder Ones => new BasisFunctionsBuilder(BasisFunctions.Ones);
 
@@ -129,5 +130,14 @@ namespace Cmdty.Storage
             });
         }
 
+        public IEnumerator<BasisFunction> GetEnumerator()
+        {
+            return _functions.GetEnumerator();
+        }
+
+        IEnumerator IEnumerable.GetEnumerator()
+        {
+            return ((IEnumerable) _functions).GetEnumerator();
+        }
     }
 }

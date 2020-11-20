@@ -48,29 +48,20 @@ namespace Cmdty.Storage.Test
         private const double Inventory = 5_685;
         private const int RandomSeed = 11;
         private const int RegressMaxDegree = 2;
-        private const double NumTolerance = 1E-10;
         private const double OneFactorMeanReversion = 12.5;
         private const double TrinomialTimeDelta = 1.0 / 365.0;
         private const int NumInventorySpacePoints = 100;
         private readonly TimeSeries<Day, double> _oneFactorFlatSpotVols;
-
         private readonly ITestOutputHelper _testOutputHelper;
         private readonly CmdtyStorage<Day> _simpleDailyStorage;
         private readonly CmdtyStorage<Day> _dailyStorageWithRatchets;
         private readonly CmdtyStorage<Day> _simpleDailyStorageTerminalInventoryValue;
         private readonly Func<double, double, double> _terminalInventoryValue;
-
-        private readonly Day _valDate;
-        private readonly IDoubleStateSpaceGridCalc _gridCalc;
-        private readonly Func<Day, Day, double> _flatInterestRateDiscounter;
-        private readonly MultiFactorParameters<Day> _1FDailyMultiFactorParams;
-        private readonly MultiFactorParameters<Day> _1FZeroMeanReversionDailyMultiFactorParams;
-        private readonly MultiFactorParameters<Day> _1FVeryLowVolDailyMultiFactorParams;
         private readonly MultiFactorParameters<Day> _2FVeryLowVolDailyMultiFactorParams;
-        private readonly Func<Day, Day> _settleDateRule;
-        private readonly TimeSeries<Day, double> _forwardCurve;
-        private readonly BasisFunction[] _oneFactorBasisFunctions;
-        private readonly BasisFunction[] _twoFactorBasisFunctions;
+        private readonly List<BasisFunction> _oneFactorBasisFunctions;
+        private readonly LsmcValuationParameters<Day>.Builder _1FactorParamsBuilder;
+        private readonly LsmcValuationParameters<Day>.Builder _2FactorParamsBuilder;
+        private readonly LsmcValuationParameters<Day>.Builder _triggerPriceTestParamsBuilder;
 
         public LsmcStorageValuationTest(ITestOutputHelper testOutputHelper)
         {
@@ -145,48 +136,79 @@ namespace Cmdty.Storage.Test
                 .Build();
             #endregion Set Up Storage Objects
 
+            var valDate = new Day(2019, 8, 29);
             const double oneFactorSpotVol = 0.95;
-            _oneFactorFlatSpotVols = TimeSeriesFactory.ForConstantData(_valDate, storageEnd, oneFactorSpotVol);
-            _1FDailyMultiFactorParams = MultiFactorParameters.For1Factor(OneFactorMeanReversion, _oneFactorFlatSpotVols);
-            _1FZeroMeanReversionDailyMultiFactorParams = MultiFactorParameters.For1Factor(0.0, _oneFactorFlatSpotVols);
-            var smallFlatSpotVols = TimeSeriesFactory.ForConstantData(_valDate, storageEnd, SmallVol);
-            _1FVeryLowVolDailyMultiFactorParams =
-                MultiFactorParameters.For1Factor(OneFactorMeanReversion, smallFlatSpotVols);
+            _oneFactorFlatSpotVols = TimeSeriesFactory.ForConstantData(valDate, storageEnd, oneFactorSpotVol);
+            var oneFactorDailyMultiFactorParams = MultiFactorParameters.For1Factor(OneFactorMeanReversion, _oneFactorFlatSpotVols);
+            var smallFlatSpotVols = TimeSeriesFactory.ForConstantData(valDate, storageEnd, SmallVol);
             _2FVeryLowVolDailyMultiFactorParams = MultiFactorParameters.For2Factors(TwoFactorCorr,
                 new Factor<Day>(0.0, smallFlatSpotVols),
                 new Factor<Day>(OneFactorMeanReversion, smallFlatSpotVols));
-            _valDate = new Day(2019, 8, 29);
 
             const double flatInterestRate = 0.055;
-            _flatInterestRateDiscounter = StorageHelper.CreateAct65ContCompDiscounter(flatInterestRate);
-            
-            _gridCalc = FixedSpacingStateSpaceGridCalc.CreateForFixedNumberOfPointsOnGlobalInventoryRange(_simpleDailyStorage, NumInventorySpacePoints);
+            var gridCalc = FixedSpacingStateSpaceGridCalc.CreateForFixedNumberOfPointsOnGlobalInventoryRange(_simpleDailyStorage, NumInventorySpacePoints);
+            var discounter = StorageHelper.CreateAct65ContCompDiscounter(flatInterestRate);
 
-            _settleDateRule = deliveryDate => Month.FromDateTime(deliveryDate.Start).Offset(1).First<Day>() + 19; // Settlement on 20th of following month
+            Day SettleDateRule(Day deliveryDate) => Month.FromDateTime(deliveryDate.Start).Offset(1).First<Day>() + 19;
 
             const double baseForwardPrice = 53.5;
             const double forwardSeasonalFactor = 24.6;
-            _forwardCurve = TimeSeriesFactory.FromMap(_valDate, storageEnd, day =>
+            var forwardCurve = TimeSeriesFactory.FromMap(valDate, storageEnd, day =>
             {
-                int daysForward = day.OffsetFrom(_valDate);
+                int daysForward = day.OffsetFrom(valDate);
                 return baseForwardPrice + Math.Sin(2.0 * Math.PI / 365.0 * daysForward) * forwardSeasonalFactor;
             });
 
             _oneFactorBasisFunctions = BasisFunctionsBuilder.Ones + 
-                            BasisFunctionsBuilder.AllMarkovFactorAllPositiveIntegerPowersUpTo(RegressMaxDegree, 1);
+                                       BasisFunctionsBuilder.AllMarkovFactorAllPositiveIntegerPowersUpTo(RegressMaxDegree, 1);
 
-            _twoFactorBasisFunctions = BasisFunctionsBuilder.Ones +
-                                BasisFunctionsBuilder.AllMarkovFactorAllPositiveIntegerPowersUpTo(RegressMaxDegree, 2);
+            _1FactorParamsBuilder = new LsmcValuationParameters<Day>.Builder
+            {
+                CurrentPeriod = valDate,
+                Inventory = Inventory,
+                ForwardCurve = forwardCurve,
+                SettleDateRule = SettleDateRule,
+                DiscountFactors = discounter,
+                GridCalc = gridCalc,
+                BasisFunctions = _oneFactorBasisFunctions,
+            }
+            .SimulateWithMultiFactorModelAndMersenneTwister(oneFactorDailyMultiFactorParams, NumSims, RandomSeed);
+
+            const int triggerPriceTestNumSims = 500;
+            _triggerPriceTestParamsBuilder = new LsmcValuationParameters<Day>.Builder
+                {
+                    CurrentPeriod = valDate,
+                    Inventory = Inventory,
+                    ForwardCurve = forwardCurve,
+                    SettleDateRule = SettleDateRule,
+                    DiscountFactors = discounter,
+                    GridCalc = gridCalc,
+                    BasisFunctions = _oneFactorBasisFunctions,
+                    Storage = _simpleDailyStorage
+                }
+                .SimulateWithMultiFactorModelAndMersenneTwister(oneFactorDailyMultiFactorParams, triggerPriceTestNumSims, RandomSeed);
+
+            _2FactorParamsBuilder = new LsmcValuationParameters<Day>.Builder
+                {
+                    CurrentPeriod = valDate,
+                    Inventory = Inventory,
+                    ForwardCurve = forwardCurve,
+                    SettleDateRule = SettleDateRule,
+                    DiscountFactors = StorageHelper.CreateAct65ContCompDiscounter(flatInterestRate),
+                    GridCalc = FixedSpacingStateSpaceGridCalc.CreateForFixedNumberOfPointsOnGlobalInventoryRange(_simpleDailyStorage, NumInventorySpacePoints),
+                    BasisFunctions = BasisFunctionsBuilder.Ones +
+                                     BasisFunctionsBuilder.AllMarkovFactorAllPositiveIntegerPowersUpTo(RegressMaxDegree, 2)
+            };
         }
 
         [Fact]
         [Trait("Category", "Lsmc.AtEndOfStorage")]
         public void Calculate_CurrentPeriodAfterStorageEnd_ResultWithZeroNpv()
         {
-            Day valDate = _simpleDailyStorage.EndPeriod + 1;
-            LsmcStorageValuationResults<Day> lsmcResults = LsmcStorageValuation.WithNoLogger.Calculate(valDate, Inventory,
-                _forwardCurve, _simpleDailyStorage, _settleDateRule, _flatInterestRateDiscounter, _gridCalc, NumTolerance,
-                _1FDailyMultiFactorParams, NumSims, RandomSeed, _oneFactorBasisFunctions);
+            var builder = _1FactorParamsBuilder.Clone();
+            builder.CurrentPeriod = _simpleDailyStorage.EndPeriod + 1;
+            builder.Storage = _simpleDailyStorage;
+            LsmcStorageValuationResults<Day> lsmcResults = LsmcStorageValuation.WithNoLogger.Calculate(builder.Build());
             Assert.Equal(0.0, lsmcResults.Npv);
         }
 
@@ -194,10 +216,10 @@ namespace Cmdty.Storage.Test
         [Trait("Category", "Lsmc.AtEndOfStorage")]
         public void Calculate_CurrentPeriodAfterStorageEnd_ResultWithEmptyDeltas()
         {
-            Day valDate = _simpleDailyStorage.EndPeriod + 1;
-            LsmcStorageValuationResults<Day> lsmcResults = LsmcStorageValuation.WithNoLogger.Calculate(valDate, Inventory,
-                _forwardCurve, _simpleDailyStorage, _settleDateRule, _flatInterestRateDiscounter, _gridCalc, NumTolerance,
-                _1FDailyMultiFactorParams, NumSims, RandomSeed, _oneFactorBasisFunctions);
+            var builder = _1FactorParamsBuilder.Clone();
+            builder.CurrentPeriod = _simpleDailyStorage.EndPeriod + 1;
+            builder.Storage = _simpleDailyStorage;
+            LsmcStorageValuationResults<Day> lsmcResults = LsmcStorageValuation.WithNoLogger.Calculate(builder.Build());
             Assert.True(lsmcResults.Deltas.IsEmpty);
         }
         // TODO same unit test as above, but testing the other output data, decision, simulated prices etc.
@@ -206,11 +228,11 @@ namespace Cmdty.Storage.Test
         [Trait("Category", "Lsmc.AtEndOfStorage")]
         public void Calculate_CurrentPeriodEqualToStorageEndStorageMustBeEmptyAtEnd_ResultWithZeroNpv()
         {
-            Day valDate = _simpleDailyStorage.EndPeriod;
-            const double inventory = 0.0;
-            LsmcStorageValuationResults<Day> lsmcResults = LsmcStorageValuation.WithNoLogger.Calculate(valDate, inventory,
-                _forwardCurve, _simpleDailyStorage, _settleDateRule, _flatInterestRateDiscounter, _gridCalc, NumTolerance,
-                _1FDailyMultiFactorParams, NumSims, RandomSeed, _oneFactorBasisFunctions);
+            var builder = _1FactorParamsBuilder.Clone();
+            builder.CurrentPeriod = _simpleDailyStorage.EndPeriod;
+            builder.Inventory = 0.0;
+            builder.Storage = _simpleDailyStorage;
+            LsmcStorageValuationResults<Day> lsmcResults = LsmcStorageValuation.WithNoLogger.Calculate(builder.Build());
             Assert.Equal(0.0, lsmcResults.Npv);
         }
 
@@ -218,11 +240,11 @@ namespace Cmdty.Storage.Test
         [Trait("Category", "Lsmc.AtEndOfStorage")]
         public void Calculate_CurrentPeriodEqualToStorageEndStorageMustBeEmptyAtEnd_ResultWithEmptyDeltas()
         {
-            Day valDate = _simpleDailyStorage.EndPeriod;
-            const double inventory = 0.0;
-            LsmcStorageValuationResults<Day> lsmcResults = LsmcStorageValuation.WithNoLogger.Calculate(valDate, inventory,
-                _forwardCurve, _simpleDailyStorage, _settleDateRule, _flatInterestRateDiscounter, _gridCalc, NumTolerance,
-                _1FDailyMultiFactorParams, NumSims, RandomSeed, _oneFactorBasisFunctions);
+            var builder = _1FactorParamsBuilder.Clone();
+            builder.CurrentPeriod = _simpleDailyStorage.EndPeriod;
+            builder.Inventory = 0.0;
+            builder.Storage = _simpleDailyStorage;
+            LsmcStorageValuationResults<Day> lsmcResults = LsmcStorageValuation.WithNoLogger.Calculate(builder.Build());
             Assert.True(lsmcResults.Deltas.IsEmpty);
         }
 
@@ -232,14 +254,15 @@ namespace Cmdty.Storage.Test
         [Trait("Category", "Lsmc.AtEndOfStorage")]
         public void Calculate_CurrentPeriodEqualToStorageEndAndInventoryHasTerminalValue_NpvEqualsTerminalValue()
         {
-            Day valDate = _simpleDailyStorageTerminalInventoryValue.EndPeriod;
-            const double inventory = 0.0;
-            double valDateSpotPrice = _forwardCurve[valDate];
-            LsmcStorageValuationResults<Day> lsmcResults = LsmcStorageValuation.WithNoLogger.Calculate(valDate, inventory,
-                _forwardCurve, _simpleDailyStorageTerminalInventoryValue, _settleDateRule, _flatInterestRateDiscounter, _gridCalc, NumTolerance,
-                _1FDailyMultiFactorParams, NumSims, RandomSeed, _oneFactorBasisFunctions);
+            var builder = _1FactorParamsBuilder.Clone();
+            builder.CurrentPeriod = _simpleDailyStorageTerminalInventoryValue.EndPeriod;
+            builder.Inventory = 0.0;
+            builder.Storage = _simpleDailyStorageTerminalInventoryValue;
+            var lsmcParams = builder.Build();
+            LsmcStorageValuationResults<Day> lsmcResults = LsmcStorageValuation.WithNoLogger.Calculate(lsmcParams);
 
-            double expectedNpv = _terminalInventoryValue(valDateSpotPrice, inventory);
+            double valDateSpotPrice = lsmcParams.ForwardCurve[builder.CurrentPeriod];
+            double expectedNpv = _terminalInventoryValue(valDateSpotPrice, lsmcParams.Inventory);
             Assert.Equal(expectedNpv, lsmcResults.Npv);
         }
 
@@ -249,16 +272,17 @@ namespace Cmdty.Storage.Test
         [Trait("Category", "Lsmc.AtEndOfStorage")]
         public void Calculate_CurrentPeriodDayBeforeStorageEndAndStorageMustBeEmptyAtEnd_NpvEqualsInventoryTimesSpotMinusWithdrawalCost()
         {
-            Day valDate = _simpleDailyStorage.EndPeriod - 1;
-            const double inventory = 352.14;
-            double valDateSpotPrice = _forwardCurve[valDate];
-            LsmcStorageValuationResults<Day> lsmcResults = LsmcStorageValuation.WithNoLogger.Calculate(valDate, inventory,
-                _forwardCurve, _simpleDailyStorage, _settleDateRule, _flatInterestRateDiscounter, _gridCalc, NumTolerance,
-                _1FDailyMultiFactorParams, NumSims, RandomSeed, _oneFactorBasisFunctions);
+            var builder = _1FactorParamsBuilder.Clone();
+            builder.CurrentPeriod = _simpleDailyStorage.EndPeriod - 1;
+            builder.Inventory = 352.14;
+            builder.Storage = _simpleDailyStorage;
+            var lsmcParams = builder.Build();
+            LsmcStorageValuationResults<Day> lsmcResults = LsmcStorageValuation.WithNoLogger.Calculate(lsmcParams);
             const double constantWithdrawalCost = 0.93;
 
-            double discountFactor = _flatInterestRateDiscounter(valDate, _settleDateRule(valDate));
-            double expectedNpv = inventory * valDateSpotPrice * discountFactor - constantWithdrawalCost * inventory;
+            double valDateSpotPrice = lsmcParams.ForwardCurve[lsmcParams.CurrentPeriod];
+            double discountFactor = lsmcParams.DiscountFactors(lsmcParams.CurrentPeriod, lsmcParams.SettleDateRule(lsmcParams.CurrentPeriod));
+            double expectedNpv = lsmcParams.Inventory * valDateSpotPrice * discountFactor - constantWithdrawalCost * lsmcParams.Inventory;
             Assert.Equal(expectedNpv, lsmcResults.Npv, 8);
         }
 
@@ -266,55 +290,62 @@ namespace Cmdty.Storage.Test
         [Trait("Category", "Lsmc.AtEndOfStorage")]
         public void Calculate_CurrentPeriodDayBeforeStorageEndAndStorageMustBeEmptyAtEnd_DeltaEqualsInventory()
         {
-            Day valDate = _simpleDailyStorage.EndPeriod - 1;
-            const double inventory = 352.14;
-            LsmcStorageValuationResults<Day> lsmcResults = LsmcStorageValuation.WithNoLogger.Calculate(valDate, inventory,
-                _forwardCurve, _simpleDailyStorage, _settleDateRule, _flatInterestRateDiscounter, _gridCalc, NumTolerance,
-                _1FDailyMultiFactorParams, NumSims, RandomSeed, _oneFactorBasisFunctions);
+            var builder = _1FactorParamsBuilder.Clone();
+            builder.CurrentPeriod = _simpleDailyStorage.EndPeriod - 1;
+            builder.Storage = _simpleDailyStorage;
+            builder.Inventory = 352.14;
+            var lsmcParams = builder.Build();
+            LsmcStorageValuationResults<Day> lsmcResults = LsmcStorageValuation.WithNoLogger.Calculate(lsmcParams);
 
-            Assert.Equal(inventory, lsmcResults.Deltas[valDate], 10);
+            Assert.Equal(lsmcParams.Inventory, lsmcResults.Deltas[lsmcParams.CurrentPeriod], 10);
         }
 
-        // TODO same unit test as above, but testing the other output data, decision, simulated prices etc.
+        //// TODO same unit test as above, but testing the other output data, decision, simulated prices etc.
 
-        // TODO terminal value looks like call option payoff, value day before equals call value
+        //// TODO terminal value looks like call option payoff, value day before equals call value
 
         [Fact]
         [Trait("Category", "Lsmc.LikeCalls")]
         public void Calculate_StorageLikeCallOptionsOneFactor_NpvEqualsBlack76()
         {
-            var valDate = new Day(2019, 8, 29);
+            var paramsBuilder = new LsmcValuationParameters<Day>.Builder
+            {
+                CurrentPeriod = new Day(2019, 8, 29),
+                BasisFunctions = _1FactorParamsBuilder.BasisFunctions
+            };
             const int numInventorySpacePoints = 100;
             const int numSims = 2_000;
             const int seed = 13;
 
             (DoubleTimeSeries<Day> forwardCurve, DoubleTimeSeries<Day> spotVolCurve) =
-                TestHelper.CreateDailyTestForwardAndSpotVolCurves(valDate, new Day(2020, 4, 1));
+                TestHelper.CreateDailyTestForwardAndSpotVolCurves(paramsBuilder.CurrentPeriod, new Day(2020, 4, 1));
+            paramsBuilder.ForwardCurve = forwardCurve;
             const double meanReversion = 16.5;
             const double interestRate = 0.09;
-            const double numTolerance = 1E-10;
 
             TestHelper.CallOptionLikeTestData testData = TestHelper.CreateThreeCallsLikeStorageTestData(forwardCurve);
+            paramsBuilder.Inventory = testData.Inventory;
+            paramsBuilder.Storage = testData.Storage;
 
             var multiFactorParams = MultiFactorParameters.For1Factor(meanReversion, spotVolCurve);
-            
-            Day SettleDateRule(Day settleDate) => testData.SettleDates[Month.FromDateTime(settleDate.Start)];
-            Func<Day, Day, double> discounter = StorageHelper.CreateAct65ContCompDiscounter(interestRate);
-            IDoubleStateSpaceGridCalc gridSpace = 
+
+            paramsBuilder.SimulateWithMultiFactorModelAndMersenneTwister(multiFactorParams, numSims, seed);
+
+            paramsBuilder.SettleDateRule = settleDate => testData.SettleDates[Month.FromDateTime(settleDate.Start)];
+            paramsBuilder.DiscountFactors = StorageHelper.CreateAct65ContCompDiscounter(interestRate);
+            paramsBuilder.GridCalc =
                 FixedSpacingStateSpaceGridCalc.CreateForFixedNumberOfPointsOnGlobalInventoryRange(testData.Storage, numInventorySpacePoints);
 
-            LsmcStorageValuationResults<Day> results = LsmcStorageValuation.WithNoLogger.Calculate(valDate, testData.Inventory,
-                forwardCurve,
-                testData.Storage, SettleDateRule, discounter, gridSpace, numTolerance,
-                multiFactorParams, numSims, seed, _oneFactorBasisFunctions);
+            var lsmcParams = paramsBuilder.Build();
+            LsmcStorageValuationResults<Day> results = LsmcStorageValuation.WithNoLogger.Calculate(lsmcParams);
 
             // Calculate value of equivalent call options
             double expectStorageValue = 0.0;
             foreach (TestHelper.CallOption option in testData.CallOptions)
             {
-                double impliedVol = TestHelper.OneFactorImpliedVol(valDate, option.ExpiryDate, spotVolCurve, meanReversion);
+                double impliedVol = TestHelper.OneFactorImpliedVol(lsmcParams.CurrentPeriod, option.ExpiryDate, spotVolCurve, meanReversion);
                 double forwardPrice = forwardCurve[option.ExpiryDate];
-                double black76Value = TestHelper.Black76CallOptionValue(valDate, forwardPrice,
+                double black76Value = TestHelper.Black76CallOptionValue(lsmcParams.CurrentPeriod, forwardPrice,
                                           impliedVol, interestRate, option.StrikePrice, option.ExpiryDate,
                                           option.SettleDate) * option.NotionalVolume;
                 expectStorageValue += black76Value;
@@ -331,31 +362,36 @@ namespace Cmdty.Storage.Test
         [Trait("Category", "Lsmc.LikeCalls")]
         public void Calculate_StorageLikeCallOptionsOneFactor_DeltaEqualsBlack76DeltaUndiscounted()
         {
-            var valDate = new Day(2019, 8, 29);
+            var paramsBuilder = new LsmcValuationParameters<Day>.Builder
+            {
+                CurrentPeriod = new Day(2019, 8, 29),
+                BasisFunctions = _1FactorParamsBuilder.BasisFunctions
+            };
             const int numInventorySpacePoints = 100;
             const int numSims = 2_000;
             const int seed = 8;
 
             (DoubleTimeSeries<Day> forwardCurve, DoubleTimeSeries<Day> spotVolCurve) =
-                TestHelper.CreateDailyTestForwardAndSpotVolCurves(valDate, new Day(2020, 4, 1));
+                TestHelper.CreateDailyTestForwardAndSpotVolCurves(paramsBuilder.CurrentPeriod, new Day(2020, 4, 1));
+            paramsBuilder.ForwardCurve = forwardCurve;
             const double meanReversion = 16.5;
             const double interestRate = 0.09;
-            const double numTolerance = 1E-10;
 
             TestHelper.CallOptionLikeTestData testData = TestHelper.CreateThreeCallsLikeStorageTestData(forwardCurve);
+            paramsBuilder.Inventory = testData.Inventory;
+            paramsBuilder.Storage = testData.Storage;
 
             var multiFactorParams = MultiFactorParameters.For1Factor(meanReversion, spotVolCurve);
 
-            Day SettleDateRule(Day settleDate) => testData.SettleDates[Month.FromDateTime(settleDate.Start)];
-            Func<Day, Day, double> discounter = StorageHelper.CreateAct65ContCompDiscounter(interestRate);
-            IDoubleStateSpaceGridCalc gridSpace =
-                FixedSpacingStateSpaceGridCalc.CreateForFixedNumberOfPointsOnGlobalInventoryRange(testData.Storage,
-                    numInventorySpacePoints);
+            paramsBuilder.SimulateWithMultiFactorModelAndMersenneTwister(multiFactorParams, numSims, seed);
 
-            LsmcStorageValuationResults<Day> results = LsmcStorageValuation.WithNoLogger.Calculate(valDate, testData.Inventory,
-                forwardCurve,
-                testData.Storage, SettleDateRule, discounter, gridSpace, numTolerance,
-                multiFactorParams, numSims, seed, _oneFactorBasisFunctions);
+            paramsBuilder.SettleDateRule = settleDate => testData.SettleDates[Month.FromDateTime(settleDate.Start)];
+            paramsBuilder.DiscountFactors = StorageHelper.CreateAct65ContCompDiscounter(interestRate);
+            paramsBuilder.GridCalc =
+                FixedSpacingStateSpaceGridCalc.CreateForFixedNumberOfPointsOnGlobalInventoryRange(testData.Storage, numInventorySpacePoints);
+
+            var lsmcParams = paramsBuilder.Build();
+            LsmcStorageValuationResults<Day> results = LsmcStorageValuation.WithNoLogger.Calculate(lsmcParams);
 
             const double tol = 0.04; // 4% tolerance
 
@@ -365,9 +401,9 @@ namespace Cmdty.Storage.Test
                 {
                     TestHelper.CallOption option = testData.CallOptions.Single(call => call.ExpiryDate == day);
                     double impliedVol =
-                        TestHelper.OneFactorImpliedVol(valDate, option.ExpiryDate, spotVolCurve, meanReversion);
+                        TestHelper.OneFactorImpliedVol(lsmcParams.CurrentPeriod, option.ExpiryDate, spotVolCurve, meanReversion);
                     double forwardPrice = forwardCurve[option.ExpiryDate];
-                    double black76DeltaUndiscounted = TestHelper.Black76CallOptionDeltaUndiscounted(valDate, forwardPrice,
+                    double black76DeltaUndiscounted = TestHelper.Black76CallOptionDeltaUndiscounted(lsmcParams.CurrentPeriod, forwardPrice,
                                                           impliedVol, option.StrikePrice, option.ExpiryDate) * option.NotionalVolume;
                     double storageDelta = results.Deltas[option.ExpiryDate];
                     // Storage delta should 
@@ -376,27 +412,27 @@ namespace Cmdty.Storage.Test
                 else
                     Assert.Equal(0.0, delta);
             }
-
         }
 
         [Fact]
         [Trait("Category", "Lsmc.LikeTrinomial")]
         public void Calculate_OneFactorSimpleStorage_NpvApproximatelyEqualsTrinomialNpv()
         {
-            LsmcStorageValuationResults<Day> lsmcResults = LsmcStorageValuation.WithNoLogger.Calculate(_valDate, Inventory,
-                _forwardCurve, _simpleDailyStorage, _settleDateRule, _flatInterestRateDiscounter, _gridCalc, NumTolerance,
-                _1FDailyMultiFactorParams, NumSims, RandomSeed, _oneFactorBasisFunctions);
+            var builder = _1FactorParamsBuilder.Clone();
+            builder.Storage = _simpleDailyStorage;
+            var lsmcParams = builder.Build();
+            LsmcStorageValuationResults<Day> lsmcResults = LsmcStorageValuation.WithNoLogger.Calculate(lsmcParams);
 
-            TreeStorageValuationResults<Day> treeResults = TreeStorageValuation<Day>.ForStorage(_simpleDailyStorage)
+            TreeStorageValuationResults<Day> treeResults = TreeStorageValuation<Day>.ForStorage(lsmcParams.Storage)
                 .WithStartingInventory(Inventory)
-                .ForCurrentPeriod(_valDate)
-                .WithForwardCurve(_forwardCurve)
+                .ForCurrentPeriod(lsmcParams.CurrentPeriod)
+                .WithForwardCurve(lsmcParams.ForwardCurve)
                 .WithOneFactorTrinomialTree(_oneFactorFlatSpotVols, OneFactorMeanReversion, TrinomialTimeDelta)
-                .WithCmdtySettlementRule(_settleDateRule)
-                .WithDiscountFactorFunc(_flatInterestRateDiscounter)
+                .WithCmdtySettlementRule(lsmcParams.SettleDateRule)
+                .WithDiscountFactorFunc(lsmcParams.DiscountFactors)
                 .WithFixedNumberOfPointsOnGlobalInventoryRange(NumInventorySpacePoints)
                 .WithLinearInventorySpaceInterpolation()
-                .WithNumericalTolerance(NumTolerance)
+                .WithNumericalTolerance(lsmcParams.NumericalTolerance)
                 .Calculate();
 
             _testOutputHelper.WriteLine("Tree");
@@ -411,20 +447,21 @@ namespace Cmdty.Storage.Test
         [Trait("Category", "Lsmc.LikeTrinomial")]
         public void Calculate_OneFactorStorageWithRatchets_NpvApproximatelyEqualsTrinomialNpv()
         {
-            LsmcStorageValuationResults<Day> lsmcResults = LsmcStorageValuation.WithNoLogger.Calculate(_valDate, Inventory,
-                _forwardCurve, _dailyStorageWithRatchets, _settleDateRule, _flatInterestRateDiscounter, _gridCalc, NumTolerance,
-                _1FDailyMultiFactorParams, NumSims, RandomSeed, _oneFactorBasisFunctions);
+            var builder = _1FactorParamsBuilder.Clone();
+            builder.Storage = _dailyStorageWithRatchets;
+            var lsmcParams = builder.Build();
+            LsmcStorageValuationResults<Day> lsmcResults = LsmcStorageValuation.WithNoLogger.Calculate(lsmcParams);
 
-            TreeStorageValuationResults<Day> treeResults = TreeStorageValuation<Day>.ForStorage(_dailyStorageWithRatchets)
+            TreeStorageValuationResults<Day> treeResults = TreeStorageValuation<Day>.ForStorage(lsmcParams.Storage)
                 .WithStartingInventory(Inventory)
-                .ForCurrentPeriod(_valDate)
-                .WithForwardCurve(_forwardCurve)
+                .ForCurrentPeriod(lsmcParams.CurrentPeriod)
+                .WithForwardCurve(lsmcParams.ForwardCurve)
                 .WithOneFactorTrinomialTree(_oneFactorFlatSpotVols, OneFactorMeanReversion, TrinomialTimeDelta)
-                .WithCmdtySettlementRule(_settleDateRule)
-                .WithDiscountFactorFunc(_flatInterestRateDiscounter)
+                .WithCmdtySettlementRule(lsmcParams.SettleDateRule)
+                .WithDiscountFactorFunc(lsmcParams.DiscountFactors)
                 .WithFixedNumberOfPointsOnGlobalInventoryRange(NumInventorySpacePoints)
                 .WithLinearInventorySpaceInterpolation()
-                .WithNumericalTolerance(NumTolerance)
+                .WithNumericalTolerance(lsmcParams.NumericalTolerance)
                 .Calculate();
 
             _testOutputHelper.WriteLine("Tree");
@@ -438,23 +475,24 @@ namespace Cmdty.Storage.Test
         [Fact(Skip = "Still working on this.")]
         [Trait("Category", "Lsmc.LikeTrinomial")]
         //[Fact]
-        public void Calculate_OneFactorValDateAfterStorageStart_NpvApproximatelyEqualsTrinomialNpv()
+        public void Calculate_OneFactorSimpleStorageValDateAfterStorageStart_NpvApproximatelyEqualsTrinomialNpv()
         {
-            Day valDate = _simpleDailyStorage.StartPeriod + 10;
-            LsmcStorageValuationResults<Day> lsmcResults = LsmcStorageValuation.WithNoLogger.Calculate(valDate, Inventory,
-                _forwardCurve, _simpleDailyStorage, _settleDateRule, _flatInterestRateDiscounter, _gridCalc, NumTolerance,
-                _1FDailyMultiFactorParams, NumSims, RandomSeed, _oneFactorBasisFunctions);
+            var builder = _1FactorParamsBuilder.Clone();
+            builder.CurrentPeriod = _simpleDailyStorage.StartPeriod + 10;
+            builder.Storage = _simpleDailyStorage;
+            LsmcValuationParameters<Day> lsmcParams = builder.Build();
+            LsmcStorageValuationResults<Day> lsmcResults = LsmcStorageValuation.WithNoLogger.Calculate(lsmcParams);
 
-            TreeStorageValuationResults<Day> treeResults = TreeStorageValuation<Day>.ForStorage(_simpleDailyStorage)
+            TreeStorageValuationResults<Day> treeResults = TreeStorageValuation<Day>.ForStorage(lsmcParams.Storage)
                 .WithStartingInventory(Inventory)
-                .ForCurrentPeriod(valDate)
-                .WithForwardCurve(_forwardCurve)
+                .ForCurrentPeriod(lsmcParams.CurrentPeriod)
+                .WithForwardCurve(lsmcParams.ForwardCurve)
                 .WithOneFactorTrinomialTree(_oneFactorFlatSpotVols, OneFactorMeanReversion, TrinomialTimeDelta)
-                .WithCmdtySettlementRule(_settleDateRule)
-                .WithDiscountFactorFunc(_flatInterestRateDiscounter)
+                .WithCmdtySettlementRule(lsmcParams.SettleDateRule)
+                .WithDiscountFactorFunc(lsmcParams.DiscountFactors)
                 .WithFixedNumberOfPointsOnGlobalInventoryRange(NumInventorySpacePoints)
                 .WithLinearInventorySpaceInterpolation()
-                .WithNumericalTolerance(NumTolerance)
+                .WithNumericalTolerance(lsmcParams.NumericalTolerance)
                 .Calculate();
 
             _testOutputHelper.WriteLine("Tree");
@@ -465,18 +503,18 @@ namespace Cmdty.Storage.Test
             TestHelper.AssertWithinPercentTol(treeResults.NetPresentValue, lsmcResults.Npv, percentageTol);
         }
 
-        private IntrinsicStorageValuationResults<Day> CalcIntrinsic(CmdtyStorage<Day> storage) =>IntrinsicStorageValuation<Day>
-                                            .ForStorage(storage)
+        private IntrinsicStorageValuationResults<Day> CalcIntrinsic(LsmcValuationParameters<Day> lsmcParams) => IntrinsicStorageValuation<Day>
+                                            .ForStorage(lsmcParams.Storage)
                                             .WithStartingInventory(Inventory)
-                                            .ForCurrentPeriod(_valDate)
-                                            .WithForwardCurve(_forwardCurve)
-                                            .WithCmdtySettlementRule(_settleDateRule)
-                                            .WithDiscountFactorFunc(_flatInterestRateDiscounter)
+                                            .ForCurrentPeriod(lsmcParams.CurrentPeriod)
+                                            .WithForwardCurve(lsmcParams.ForwardCurve)
+                                            .WithCmdtySettlementRule(lsmcParams.SettleDateRule)
+                                            .WithDiscountFactorFunc(lsmcParams.DiscountFactors)
                                             .WithFixedNumberOfPointsOnGlobalInventoryRange(NumInventorySpacePoints)
                                             .WithLinearInventorySpaceInterpolation()
-                                            .WithNumericalTolerance(NumTolerance)
+                                            .WithNumericalTolerance(lsmcParams.NumericalTolerance)
                                             .Calculate();
-                                    
+
 
         // TODO investigate why the below two test require a high tolerance. I suspect this is due to a high 'foresight' bias caused by using the same simulation for regression and decision
         [Fact]
@@ -484,14 +522,16 @@ namespace Cmdty.Storage.Test
         public void Calculate_OneFactorZeroMeanReversionSimpleStorage_NpvApproximatelyEqualsIntrinsicNpv()
         {
             const int regressPolyDegree = 5;  // Test requires a higher poly degree than the others
-            BasisFunction[] basisFunctions = BasisFunctionsBuilder.Ones +
-                            BasisFunctionsBuilder.AllMarkovFactorAllPositiveIntegerPowersUpTo(regressPolyDegree, 1);
-            LsmcStorageValuationResults<Day> lsmcResults = LsmcStorageValuation.WithNoLogger.Calculate(_valDate, Inventory,
-                _forwardCurve, _simpleDailyStorage, _settleDateRule, _flatInterestRateDiscounter, _gridCalc, NumTolerance,
-                _1FZeroMeanReversionDailyMultiFactorParams, NumSims, RandomSeed, basisFunctions);
+            var builder = _1FactorParamsBuilder.Clone();
+            builder.Storage = _simpleDailyStorage;
+            builder.SimulateWithMultiFactorModelAndMersenneTwister(MultiFactorParameters.For1Factor(0.0, _oneFactorFlatSpotVols), NumSims, RandomSeed);
+            builder.BasisFunctions = BasisFunctionsBuilder.Ones +
+                                     BasisFunctionsBuilder.AllMarkovFactorAllPositiveIntegerPowersUpTo(regressPolyDegree, 1);
 
-            IntrinsicStorageValuationResults<Day> intrinsicResults = CalcIntrinsic(_simpleDailyStorage);
-            
+            LsmcValuationParameters<Day> lsmcParams = builder.Build();
+            LsmcStorageValuationResults<Day> lsmcResults = LsmcStorageValuation.WithNoLogger.Calculate(lsmcParams);
+            IntrinsicStorageValuationResults<Day> intrinsicResults = CalcIntrinsic(lsmcParams);
+
             const double percentageTol = 0.04; // 4%
             _testOutputHelper.WriteLine(intrinsicResults.NetPresentValue.ToString(CultureInfo.InvariantCulture));
             _testOutputHelper.WriteLine(lsmcResults.Npv.ToString(CultureInfo.InvariantCulture));
@@ -503,13 +543,15 @@ namespace Cmdty.Storage.Test
         public void Calculate_OneFactorZeroMeanReversionStorageWithRatchets_NpvApproximatelyEqualsIntrinsicNpv()
         {
             const int regressPolyDegree = 5;  // Test requires a higher poly degree than the others
-            BasisFunction[] basisFunctions = BasisFunctionsBuilder.Ones +
-                                BasisFunctionsBuilder.AllMarkovFactorAllPositiveIntegerPowersUpTo(regressPolyDegree, 1);
-            LsmcStorageValuationResults<Day> lsmcResults = LsmcStorageValuation.WithNoLogger.Calculate(_valDate, Inventory,
-                _forwardCurve, _dailyStorageWithRatchets, _settleDateRule, _flatInterestRateDiscounter, _gridCalc, NumTolerance,
-                _1FZeroMeanReversionDailyMultiFactorParams, NumSims, RandomSeed, basisFunctions);
+            var builder = _1FactorParamsBuilder.Clone();
+            builder.Storage = _dailyStorageWithRatchets;
+            builder.SimulateWithMultiFactorModelAndMersenneTwister(MultiFactorParameters.For1Factor(0.0, _oneFactorFlatSpotVols), NumSims, RandomSeed);
+            builder.BasisFunctions = BasisFunctionsBuilder.Ones +
+                                     BasisFunctionsBuilder.AllMarkovFactorAllPositiveIntegerPowersUpTo(regressPolyDegree, 1);
 
-            IntrinsicStorageValuationResults<Day> intrinsicResults = CalcIntrinsic(_dailyStorageWithRatchets);
+            LsmcValuationParameters<Day> lsmcParams = builder.Build();
+            LsmcStorageValuationResults<Day> lsmcResults = LsmcStorageValuation.WithNoLogger.Calculate(lsmcParams);
+            IntrinsicStorageValuationResults<Day> intrinsicResults = CalcIntrinsic(lsmcParams);
 
             const double percentageTol = 0.04; // 4%
             _testOutputHelper.WriteLine(intrinsicResults.NetPresentValue.ToString(CultureInfo.InvariantCulture));
@@ -521,11 +563,17 @@ namespace Cmdty.Storage.Test
         [Trait("Category", "Lsmc.LikeIntrinsic")]
         public void Calculate_OneFactorVeryLowVolsSimpleStorage_NpvApproximatelyEqualsIntrinsicNpv()
         {
-            LsmcStorageValuationResults<Day> lsmcResults = LsmcStorageValuation.WithNoLogger.Calculate(_valDate, Inventory,
-                _forwardCurve, _simpleDailyStorage, _settleDateRule, _flatInterestRateDiscounter, _gridCalc, NumTolerance,
-                _1FVeryLowVolDailyMultiFactorParams, NumSims, RandomSeed, _oneFactorBasisFunctions);
+            var builder = _1FactorParamsBuilder.Clone();
+            builder.Storage = _simpleDailyStorage;
 
-            IntrinsicStorageValuationResults<Day> intrinsicResults = CalcIntrinsic(_simpleDailyStorage);
+            var smallFlatSpotVols = TimeSeriesFactory.ForConstantData(builder.CurrentPeriod, builder.Storage.EndPeriod, SmallVol);
+            var oneFactorVeryLowVolDailyMultiFactorParams =
+                MultiFactorParameters.For1Factor(OneFactorMeanReversion, smallFlatSpotVols);
+            builder.SimulateWithMultiFactorModelAndMersenneTwister(oneFactorVeryLowVolDailyMultiFactorParams, NumSims, RandomSeed);
+
+            LsmcValuationParameters<Day> lsmcParams = builder.Build();
+            LsmcStorageValuationResults<Day> lsmcResults = LsmcStorageValuation.WithNoLogger.Calculate(lsmcParams);
+            IntrinsicStorageValuationResults<Day> intrinsicResults = CalcIntrinsic(lsmcParams);
 
             const double percentageTol = 0.0001; // 0.01%
             TestHelper.AssertWithinPercentTol(intrinsicResults.NetPresentValue, lsmcResults.Npv, percentageTol);
@@ -535,11 +583,17 @@ namespace Cmdty.Storage.Test
         [Trait("Category", "Lsmc.LikeIntrinsic")]
         public void Calculate_OneFactorVeryLowVolsStorageWithRatchets_NpvApproximatelyEqualsIntrinsicNpv()
         {
-            LsmcStorageValuationResults<Day> lsmcResults = LsmcStorageValuation.WithNoLogger.Calculate(_valDate, Inventory,
-                _forwardCurve, _dailyStorageWithRatchets, _settleDateRule, _flatInterestRateDiscounter, _gridCalc, NumTolerance,
-                _1FVeryLowVolDailyMultiFactorParams, NumSims, RandomSeed, _oneFactorBasisFunctions);
+            var builder = _1FactorParamsBuilder.Clone();
+            builder.Storage = _dailyStorageWithRatchets;
 
-            IntrinsicStorageValuationResults<Day> intrinsicResults = CalcIntrinsic(_dailyStorageWithRatchets);
+            var smallFlatSpotVols = TimeSeriesFactory.ForConstantData(builder.CurrentPeriod, builder.Storage.EndPeriod, SmallVol);
+            var oneFactorVeryLowVolDailyMultiFactorParams =
+                MultiFactorParameters.For1Factor(OneFactorMeanReversion, smallFlatSpotVols);
+            builder.SimulateWithMultiFactorModelAndMersenneTwister(oneFactorVeryLowVolDailyMultiFactorParams, NumSims, RandomSeed);
+
+            LsmcValuationParameters<Day> lsmcParams = builder.Build();
+            LsmcStorageValuationResults<Day> lsmcResults = LsmcStorageValuation.WithNoLogger.Calculate(lsmcParams);
+            IntrinsicStorageValuationResults<Day> intrinsicResults = CalcIntrinsic(lsmcParams);
 
             const double percentageTol = 0.0004; // 0.04%
             TestHelper.AssertWithinPercentTol(intrinsicResults.NetPresentValue, lsmcResults.Npv, percentageTol);
@@ -549,30 +603,35 @@ namespace Cmdty.Storage.Test
         [Trait("Category", "Lsmc.LikeIntrinsic")]
         public void Calculate_OneFactorVeryLowVolsSimpleStorage_DeltasApproximatelyEqualIntrinsicVolumeProfile()
         {
-            AssertDeltasApproximatelyEqualIntrinsicVolumeProfile(_simpleDailyStorage);
+            AssertVeryLowVolDeltasApproximatelyEqualIntrinsicVolumeProfile(_simpleDailyStorage);
         }
-        
+
         [Fact(Skip = "Need to investigate why this is failing.")] // TODO investigate
         [Trait("Category", "Lsmc.LikeIntrinsic")]
         public void Calculate_OneFactorVeryLowVolsStorageWithRatchets_DeltasApproximatelyEqualIntrinsicVolumeProfile()
         {
-            AssertDeltasApproximatelyEqualIntrinsicVolumeProfile(_dailyStorageWithRatchets);
+            AssertVeryLowVolDeltasApproximatelyEqualIntrinsicVolumeProfile(_dailyStorageWithRatchets);
         }
 
-        private void AssertDeltasApproximatelyEqualIntrinsicVolumeProfile(CmdtyStorage<Day> simpleDailyStorage)
+        private void AssertVeryLowVolDeltasApproximatelyEqualIntrinsicVolumeProfile(CmdtyStorage<Day> storage)
         {
-            LsmcStorageValuationResults<Day> lsmcResults = LsmcStorageValuation.WithNoLogger.Calculate(_valDate, Inventory,
-                _forwardCurve, simpleDailyStorage, _settleDateRule, _flatInterestRateDiscounter, _gridCalc, NumTolerance,
-                _1FVeryLowVolDailyMultiFactorParams, NumSims, RandomSeed, _oneFactorBasisFunctions);
+            var builder = _1FactorParamsBuilder.Clone();
+            builder.Storage = storage;
+            var smallFlatSpotVols = TimeSeriesFactory.ForConstantData(builder.CurrentPeriod, builder.Storage.EndPeriod, SmallVol);
+            var oneFactorVeryLowVolDailyMultiFactorParams =
+                MultiFactorParameters.For1Factor(OneFactorMeanReversion, smallFlatSpotVols);
+            builder.SimulateWithMultiFactorModelAndMersenneTwister(oneFactorVeryLowVolDailyMultiFactorParams, NumSims, RandomSeed);
 
-            IntrinsicStorageValuationResults<Day> intrinsicResults = CalcIntrinsic(simpleDailyStorage);
+            LsmcValuationParameters<Day> lsmcParams = builder.Build();
+
+            LsmcStorageValuationResults<Day> lsmcResults = LsmcStorageValuation.WithNoLogger.Calculate(lsmcParams);
+            IntrinsicStorageValuationResults<Day> intrinsicResults = CalcIntrinsic(lsmcParams);
 
             TimeSeries<Day, StorageProfile> intrinsicProfile = intrinsicResults.StorageProfile;
             DoubleTimeSeries<Day> lsmcDeltas = lsmcResults.Deltas;
 
             Assert.Equal(intrinsicProfile.Start, lsmcDeltas.Start);
-            Assert.Equal(intrinsicProfile.End,
-                lsmcDeltas.End - 1); // TODO IMPORTANT get rid of -1 and don't include end date in lsmc deltas?
+            Assert.Equal(intrinsicProfile.End, lsmcDeltas.End - 1); // TODO IMPORTANT get rid of -1 and don't include end date in lsmc deltas?
 
             const int precision = 5;
 
@@ -588,11 +647,13 @@ namespace Cmdty.Storage.Test
         [Trait("Category", "Lsmc.LikeIntrinsic")]
         public void Calculate_TwoFactorVeryLowVolsSimpleStorage_NpvApproximatelyEqualsIntrinsicNpv()
         {
-            LsmcStorageValuationResults<Day> lsmcResults = LsmcStorageValuation.WithNoLogger.Calculate(_valDate, Inventory,
-                _forwardCurve, _simpleDailyStorage, _settleDateRule, _flatInterestRateDiscounter, _gridCalc, NumTolerance,
-                _2FVeryLowVolDailyMultiFactorParams, NumSims, RandomSeed, _twoFactorBasisFunctions);
+            var builder = _2FactorParamsBuilder.Clone();
+            builder.Storage = _simpleDailyStorage;
+            builder.SimulateWithMultiFactorModelAndMersenneTwister(_2FVeryLowVolDailyMultiFactorParams, NumSims, RandomSeed);
+            var lsmcParams = builder.Build();
 
-            IntrinsicStorageValuationResults<Day> intrinsicResults = CalcIntrinsic(_simpleDailyStorage);
+            LsmcStorageValuationResults<Day> lsmcResults = LsmcStorageValuation.WithNoLogger.Calculate(lsmcParams);
+            IntrinsicStorageValuationResults<Day> intrinsicResults = CalcIntrinsic(lsmcParams);
 
             const double percentageTol = 0.0001; // 0.01%
             TestHelper.AssertWithinPercentTol(intrinsicResults.NetPresentValue, lsmcResults.Npv, percentageTol);
@@ -602,11 +663,13 @@ namespace Cmdty.Storage.Test
         [Trait("Category", "Lsmc.LikeIntrinsic")]
         public void Calculate_TwoFactorVeryLowVolsStorageWithRatchets_NpvApproximatelyEqualsIntrinsicNpv()
         {
-            LsmcStorageValuationResults<Day> lsmcResults = LsmcStorageValuation.WithNoLogger.Calculate(_valDate, Inventory,
-                _forwardCurve, _dailyStorageWithRatchets, _settleDateRule, _flatInterestRateDiscounter, _gridCalc, NumTolerance,
-                _2FVeryLowVolDailyMultiFactorParams, NumSims, RandomSeed, _twoFactorBasisFunctions);
+            var builder = _2FactorParamsBuilder.Clone();
+            builder.Storage = _dailyStorageWithRatchets;
+            builder.SimulateWithMultiFactorModelAndMersenneTwister(_2FVeryLowVolDailyMultiFactorParams, NumSims, RandomSeed);
+            var lsmcParams = builder.Build();
 
-            IntrinsicStorageValuationResults<Day> intrinsicResults = CalcIntrinsic(_dailyStorageWithRatchets);
+            LsmcStorageValuationResults<Day> lsmcResults = LsmcStorageValuation.WithNoLogger.Calculate(lsmcParams);
+            IntrinsicStorageValuationResults<Day> intrinsicResults = CalcIntrinsic(lsmcParams);
 
             const double percentageTol = 0.0004; // 0.01%
             TestHelper.AssertWithinPercentTol(intrinsicResults.NetPresentValue, lsmcResults.Npv, percentageTol);
@@ -620,17 +683,12 @@ namespace Cmdty.Storage.Test
             // There will be a small difference between the LSMC NPV and the intrinsic calc because of sampling error
             // between the simulated spot price and the forward price. Thi isn't the case with the trinomial tree as by construction
             // the tree expected spot price will exactly equal the forward price
-            const double percentageTol = 0.03;
             var currentDate = new Day(2019, 8, 29);
-            const int numInventorySpacePoints = 500;
-            const int numSims = 1_000;
-            const int seed = 11;
-            const double numTolerance = 1E-10;
+            const double percentageTol = 0.03;
 
             var storageStart = new Day(2019, 12, 1);
             var storageEnd = new Day(2020, 4, 1);
 
-            const double storageStartingInventory = 0.0;
             const double minInventory = 0.0;
             const double maxInventory = 10_000.0;
 
@@ -689,15 +747,8 @@ namespace Cmdty.Storage.Test
                 }),
             };
 
-            Day InjectionCostPaymentTerms(Day injectionDate)
-            {
-                return injectionDate.Offset(10);
-            }
-
-            Day WithdrawalCostPaymentTerms(Day withdrawalDate)
-            {
-                return withdrawalDate.Offset(4);
-            }
+            Day InjectionCostPaymentTerms(Day injectionDate) => injectionDate.Offset(10);
+            Day WithdrawalCostPaymentTerms(Day withdrawalDate) => withdrawalDate.Offset(4);
 
             CmdtyStorage<Day> storage = CmdtyStorage<Day>.Builder
                 .WithActiveTimePeriod(storageStart, storageEnd)
@@ -711,14 +762,25 @@ namespace Cmdty.Storage.Test
                 .WithTerminalInventoryNpv((cmdtySpotPrice, inventory) => 0.0)
                 .Build();
 
-            var flatInterestRateDiscounter = StorageHelper.CreateAct65ContCompDiscounter(interestRate);
-            var multiFactorParams1Factor = MultiFactorParameters.For1Factor(meanReversion, spotVolCurve);
-            var gridCalc = FixedSpacingStateSpaceGridCalc.CreateForFixedNumberOfPointsOnGlobalInventoryRange(storage, numInventorySpacePoints);
-            Day SettleDateRule(Day deliveryDate) => settlementDates[Month.FromDateTime(deliveryDate.Start)];
+            const int numInventorySpacePoints = 500;
+            const int numSims = 1_000;
+            const int seed = 11;
+            
+            var lsmcParams = new LsmcValuationParameters<Day>.Builder
+            {
+                CurrentPeriod = currentDate,
+                Inventory = 0.0,
+                ForwardCurve = forwardCurve,
+                Storage = storage,
+                SettleDateRule = deliveryDate => settlementDates[Month.FromDateTime(deliveryDate.Start)],
+                DiscountFactors = StorageHelper.CreateAct65ContCompDiscounter(interestRate),
+                GridCalc = FixedSpacingStateSpaceGridCalc.CreateForFixedNumberOfPointsOnGlobalInventoryRange(storage, numInventorySpacePoints),
+                BasisFunctions = _oneFactorBasisFunctions,
+            }
+            .SimulateWithMultiFactorModelAndMersenneTwister(MultiFactorParameters.For1Factor(meanReversion, spotVolCurve), numSims, seed)
+            .Build();
 
-            LsmcStorageValuationResults<Day> valuationResults = LsmcStorageValuation.WithNoLogger.Calculate(currentDate, storageStartingInventory,
-                forwardCurve, storage, SettleDateRule, flatInterestRateDiscounter, gridCalc, numTolerance,
-                multiFactorParams1Factor, numSims, seed, _oneFactorBasisFunctions);
+            LsmcStorageValuationResults<Day> valuationResults = LsmcStorageValuation.WithNoLogger.Calculate(lsmcParams);
 
             // Calculate the NPV Manually
 
@@ -765,9 +827,7 @@ namespace Cmdty.Storage.Test
             }
 
             double expectedNpv = injectionPv + withdrawalPv;
-
             double percentError = (valuationResults.Npv - expectedNpv) / expectedNpv;
-
             Assert.InRange(percentError, -percentageTol, percentageTol);
         }
 
@@ -780,13 +840,15 @@ namespace Cmdty.Storage.Test
         [Trait("Category", "Lsmc.Ancillary")]
         public void Calculate_OnProgressCalledWithArgumentsInAscendingOrderBetweenZeroAndOne()
         {
+            const int numSims = 100;
             var progresses = new List<double>();
-            void OnProgress(double progressPcnt) => progresses.Add(progressPcnt);
+            var paramsBuilder = _1FactorParamsBuilder.Clone()
+                .SimulateWithMultiFactorModelAndMersenneTwister(MultiFactorParameters.For1Factor(16.5, _oneFactorFlatSpotVols), numSims, RandomSeed);
+            paramsBuilder.Storage = _simpleDailyStorage;
+            paramsBuilder.OnProgressUpdate = progressPcnt => progresses.Add(progressPcnt);
+            var lsmcParams = paramsBuilder.Build();
 
-            // ReSharper disable once UnusedVariable
-            LsmcStorageValuationResults<Day> lsmcResults = LsmcStorageValuation.WithNoLogger.Calculate(_valDate, Inventory,
-                _forwardCurve, _simpleDailyStorage, _settleDateRule, _flatInterestRateDiscounter, _gridCalc, NumTolerance,
-                _1FDailyMultiFactorParams, NumSims, RandomSeed, _oneFactorBasisFunctions, OnProgress);
+            LsmcStorageValuationResults<Day> lsmcResults = LsmcStorageValuation.WithNoLogger.Calculate(lsmcParams);
 
             Assert.InRange(progresses[0], 0.0, 1.0);
             // ReSharper disable once UseIndexFromEndExpression
@@ -805,49 +867,28 @@ namespace Cmdty.Storage.Test
         {
             const int numSims = 5_000; // Large number of sims to ensure valuation doesn't finish cancel called
             var cancellationTokenSource = new CancellationTokenSource();
-            
+
+            var paramsBuilder = _1FactorParamsBuilder.Clone();
+            paramsBuilder.Storage = _simpleDailyStorage;
+            paramsBuilder.CancellationToken = cancellationTokenSource.Token;
+            paramsBuilder.SimulateWithMultiFactorModelAndMersenneTwister(MultiFactorParameters.For1Factor(16.5, _oneFactorFlatSpotVols), numSims, RandomSeed);
+            LsmcValuationParameters<Day> lsmcParams = paramsBuilder.Build();
+
             Assert.Throws<OperationCanceledException>(() =>
             {
                 cancellationTokenSource.CancelAfter(TimeSpan.FromSeconds(0.5));
                 // ReSharper disable once UnusedVariable
-                LsmcStorageValuationResults<Day> lsmcResults = LsmcStorageValuation.WithNoLogger.Calculate(_valDate, Inventory,
-                    _forwardCurve, _simpleDailyStorage, _settleDateRule, _flatInterestRateDiscounter, _gridCalc,
-                    NumTolerance, _1FDailyMultiFactorParams, numSims, RandomSeed, _oneFactorBasisFunctions,
-                    cancellationTokenSource.Token);
+                LsmcStorageValuationResults<Day> lsmcResults = LsmcStorageValuation.WithNoLogger.Calculate(lsmcParams);
             });
         }
 
-        [Fact(Skip = "Failing, needs further investigation")]
-        [Trait("Category", "Lsmc.TriggerPrices")]
-        public void Calculate_SimpleStorage1Factor_InjectTriggerPricesDecreaseWithVolume()
-        {
-            const int numSims = 500; // Use low number of sims so it will run quickly
-            LsmcStorageValuationResults<Day> lsmcResults = LsmcStorageValuation.WithNoLogger.Calculate(_valDate, Inventory,
-                _forwardCurve, _simpleDailyStorage, _settleDateRule, _flatInterestRateDiscounter, _gridCalc, NumTolerance,
-                _1FDailyMultiFactorParams, numSims, RandomSeed, _oneFactorBasisFunctions);
-
-            const double tol = 1E-10;
-
-            foreach (TriggerPriceVolumeProfiles triggerPricePair in lsmcResults.TriggerPriceVolumeProfiles.Data)
-            {
-                IReadOnlyList<TriggerPricePoint> injectTriggerPrices = triggerPricePair.InjectTriggerPrices;
-                for (int i = 1; i < injectTriggerPrices.Count; i++)
-                {
-                    Assert.True(injectTriggerPrices[i].Volume > injectTriggerPrices[i-1].Volume);
-                    Assert.True(injectTriggerPrices[i].Price <= injectTriggerPrices[i - 1].Price + tol);
-                }
-            }
-        }
 
         [Fact(Skip = "Failing, needs further investigation")]
         [Trait("Category", "Lsmc.TriggerPrices")]
         public void Calculate_SimpleStorage1Factor_WithdrawTriggerPricesIncreaseWithAbsVolume()
         {
-            const int numSims = 1000; // Use low number of sims so it will run quickly
-            var gridCalc = FixedSpacingStateSpaceGridCalc.CreateForFixedNumberOfPointsOnGlobalInventoryRange(_simpleDailyStorage, 500);
-            LsmcStorageValuationResults<Day> lsmcResults = LsmcStorageValuation.WithNoLogger.Calculate(_valDate, Inventory,
-                _forwardCurve, _simpleDailyStorage, _settleDateRule, _flatInterestRateDiscounter, gridCalc, NumTolerance,
-                _1FDailyMultiFactorParams, numSims, RandomSeed, _oneFactorBasisFunctions);
+            LsmcValuationParameters<Day> lsmcParams = _triggerPriceTestParamsBuilder.Build();
+            LsmcStorageValuationResults<Day> lsmcResults = LsmcStorageValuation.WithNoLogger.Calculate(lsmcParams);
 
             const double tol = 1E-8;
 
@@ -866,27 +907,21 @@ namespace Cmdty.Storage.Test
         [Trait("Category", "Lsmc.TriggerPrices")]
         public void Calculate_SimpleStorage1Factor_WithdrawTriggerPriceHigherThanInjectTriggerPrice()
         {
-            const int numSims = 500; // Use low number of sims so it will run quickly
-            LsmcStorageValuationResults<Day> lsmcResults = LsmcStorageValuation.WithNoLogger.Calculate(_valDate, Inventory,
-                _forwardCurve, _simpleDailyStorage, _settleDateRule, _flatInterestRateDiscounter, _gridCalc, NumTolerance,
-                _1FDailyMultiFactorParams, numSims, RandomSeed, _oneFactorBasisFunctions);
-
+            LsmcValuationParameters<Day> lsmcParams = _triggerPriceTestParamsBuilder.Build();
+            LsmcStorageValuationResults<Day> lsmcResults = LsmcStorageValuation.WithNoLogger.Calculate(lsmcParams);
             foreach (TriggerPrices triggerPrices in lsmcResults.TriggerPrices.Data)
-            {
                 if (triggerPrices.HasWithdrawPrice && triggerPrices.HasInjectPrice)
                     Assert.True(triggerPrices.MaxWithdrawTriggerPrice > triggerPrices.MaxInjectTriggerPrice);
-            }
         }
 
         [Fact]
         [Trait("Category", "Lsmc.TriggerPrices")]
         public void Calculate_SimpleStorage1FactorZeroInventory_NoWithdrawTriggerPriceOnFirstPeriod()
         {
-            const int numSims = 500; // Use low number of sims so it will run quickly
-            const double inventory = 0.0;
-            LsmcStorageValuationResults<Day> lsmcResults = LsmcStorageValuation.WithNoLogger.Calculate(_valDate, inventory,
-                _forwardCurve, _simpleDailyStorage, _settleDateRule, _flatInterestRateDiscounter, _gridCalc, NumTolerance,
-                _1FDailyMultiFactorParams, numSims, RandomSeed, _oneFactorBasisFunctions);
+            LsmcValuationParameters<Day>.Builder paramsBuilder = _triggerPriceTestParamsBuilder.Clone();
+            paramsBuilder.Inventory = 0.0;
+            LsmcValuationParameters<Day> lsmcParams = paramsBuilder.Build();
+            LsmcStorageValuationResults<Day> lsmcResults = LsmcStorageValuation.WithNoLogger.Calculate(lsmcParams);
 
             TriggerPrices firstTriggerPrices = lsmcResults.TriggerPrices[0];
             Assert.False(firstTriggerPrices.HasWithdrawPrice);
@@ -899,11 +934,10 @@ namespace Cmdty.Storage.Test
         [Trait("Category", "Lsmc.TriggerPrices")]
         public void Calculate_SimpleStorage1FactorInventoryFull_NoInjectTriggerPriceOnFirstPeriod()
         {
-            const int numSims = 500; // Use low number of sims so it will run quickly
-            const double inventory = 52_500.0;
-            LsmcStorageValuationResults<Day> lsmcResults = LsmcStorageValuation.WithNoLogger.Calculate(_valDate, inventory,
-                _forwardCurve, _simpleDailyStorage, _settleDateRule, _flatInterestRateDiscounter, _gridCalc, NumTolerance,
-                _1FDailyMultiFactorParams, numSims, RandomSeed, _oneFactorBasisFunctions);
+            LsmcValuationParameters<Day>.Builder paramsBuilder = _triggerPriceTestParamsBuilder.Clone();
+            paramsBuilder.Inventory = 52_500.0;
+            LsmcValuationParameters<Day> lsmcParams = paramsBuilder.Build();
+            LsmcStorageValuationResults<Day> lsmcResults = LsmcStorageValuation.WithNoLogger.Calculate(lsmcParams);
 
             TriggerPrices firstTriggerPrices = lsmcResults.TriggerPrices[0];
             Assert.False(firstTriggerPrices.HasInjectPrice);
@@ -916,10 +950,8 @@ namespace Cmdty.Storage.Test
         [Trait("Category", "Lsmc.TriggerPrices")]
         public void Calculate_SimpleStorage1Factor_TriggerVolumesConsistentWithMaxInjectWithdrawRate()
         {
-            const int numSims = 500; // Use low number of sims so it will run quickly
-            LsmcStorageValuationResults<Day> lsmcResults = LsmcStorageValuation.WithNoLogger.Calculate(_valDate, Inventory,
-                _forwardCurve, _simpleDailyStorage, _settleDateRule, _flatInterestRateDiscounter, _gridCalc, NumTolerance,
-                _1FDailyMultiFactorParams, numSims, RandomSeed, _oneFactorBasisFunctions);
+            LsmcValuationParameters<Day> lsmcParams = _triggerPriceTestParamsBuilder.Build();
+            LsmcStorageValuationResults<Day> lsmcResults = LsmcStorageValuation.WithNoLogger.Calculate(lsmcParams);
 
             const double maxWithdrawalRate = 850.0;
             const double maxInjectionRate = 625.0;

@@ -405,14 +405,21 @@ def _net_multi_factor_calc(cmdty_storage, fwd_curve, interest_rates, inventory, 
     logger.debug('Calculating LSMC value.')
     net_logger = utils.create_net_log_adapter(logger, net_cs.LsmcStorageValuation)
     lsmc = net_cs.LsmcStorageValuation(net_logger)
-    net_val_results = lsmc.Calculate[time_period_type](net_current_period,
-                                                                              inventory, net_forward_curve,
-                                                                              cmdty_storage.net_storage,
-                                                                              net_settlement_rule, net_discount_func,
-                                                                              net_grid_calc, numerical_tolerance,
-                                                                              net_multi_factor_params, num_sims, seed,
-                                                                              net_basis_functions,
-                                                                              net_on_progress)
+    net_lsmc_params_builder = net_cs.PythonHelpers.ObjectFactory.CreateLsmcValuationParamsBuilder[time_period_type]()
+    net_lsmc_params_builder.CurrentPeriod = net_current_period
+    net_lsmc_params_builder.Inventory = inventory
+    net_lsmc_params_builder.ForwardCurve = net_forward_curve
+    net_lsmc_params_builder.Storage = cmdty_storage.net_storage
+    net_lsmc_params_builder.SettleDateRule = net_settlement_rule
+    net_lsmc_params_builder.DiscountFactors = net_discount_func
+    net_lsmc_params_builder.GridCalc = net_grid_calc
+    net_lsmc_params_builder.NumericalTolerance = numerical_tolerance
+    net_lsmc_params_builder.BasisFunctions = net_basis_functions
+    if net_on_progress is not None:
+        net_lsmc_params_builder.OnProgressUpdate = net_on_progress
+    net_lsmc_params_builder.SimulateWithMultiFactorModelAndMersenneTwister(net_multi_factor_params, num_sims, seed)
+    net_lsmc_params = net_lsmc_params_builder.Build()
+    net_val_results = lsmc.Calculate[time_period_type](net_lsmc_params)
     logger.debug('Calculation of LSMC value complete.')
 
     deltas = utils.net_time_series_to_pandas_series(net_val_results.Deltas, cmdty_storage.freq)

@@ -26,10 +26,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Threading;
 using Cmdty.Core.Common;
 using Cmdty.Core.Simulation;
-using Cmdty.Core.Simulation.MultiFactor;
 using Cmdty.TimePeriodValueTypes;
 using Cmdty.TimeSeries;
 using MathNet.Numerics.LinearAlgebra;
@@ -53,177 +51,62 @@ namespace Cmdty.Storage
 
         public static LsmcStorageValuation WithNoLogger => new LsmcStorageValuation();
         
-        public LsmcStorageValuationResults<T> Calculate<T>(T currentPeriod, double startingInventory,
-            TimeSeries<T, double> forwardCurve, ICmdtyStorage<T> storage, Func<T, Day> settleDateRule,
-            Func<Day, Day, double> discountFactors,
-            IDoubleStateSpaceGridCalc gridCalc,
-            double numericalTolerance,
-            MultiFactorParameters<T> modelParameters,
-            int numSims,
-            int? seed,
-            IEnumerable<BasisFunction> basisFunctions,
-            Action<double> onProgressUpdate = null)
-            where T : ITimePeriod<T>
-        {
-            return Calculate(currentPeriod, startingInventory, forwardCurve, storage, settleDateRule, discountFactors,
-                gridCalc, numericalTolerance, modelParameters, numSims, seed, basisFunctions, CancellationToken.None, onProgressUpdate);
-        }
-        
-        public LsmcStorageValuationResults<T> Calculate<T>(T currentPeriod, double startingInventory,
-            TimeSeries<T, double> forwardCurve, ICmdtyStorage<T> storage, Func<T, Day> settleDateRule,
-            Func<Day, Day, double> discountFactors,
-            IDoubleStateSpaceGridCalc gridCalc,
-            double numericalTolerance,
-            MultiFactorParameters<T> modelParameters,
-            int numSims,
-            int? seed,
-            IEnumerable<BasisFunction> basisFunctions,
-            CancellationToken cancellationToken,
-            Action<double> onProgressUpdate = null)
-            where T : ITimePeriod<T>
-        {
-            var normalGenerator = seed == null ? new MersenneTwisterGenerator(true) :
-                new MersenneTwisterGenerator(seed.Value, true);
-            return Calculate(currentPeriod, startingInventory, forwardCurve, storage, settleDateRule, discountFactors,
-                gridCalc, numericalTolerance, modelParameters, normalGenerator, numSims, basisFunctions, 
-                cancellationToken, onProgressUpdate);
-        }
-
-        public LsmcStorageValuationResults<T> Calculate<T>(T currentPeriod, double startingInventory,
-            TimeSeries<T, double> forwardCurve, ICmdtyStorage<T> storage, Func<T, Day> settleDateRule,
-            Func<Day, Day, double> discountFactors,
-            IDoubleStateSpaceGridCalc gridCalc,
-            double numericalTolerance,
-            MultiFactorParameters<T> modelParameters,
-            IStandardNormalGenerator normalGenerator,
-            int numSims,
-            IEnumerable<BasisFunction> basisFunctions,
-            Action<double> onProgressUpdate = null)
-            where T : ITimePeriod<T>
-        {
-            return Calculate(currentPeriod, startingInventory, forwardCurve, storage, settleDateRule, discountFactors,
-                gridCalc, numericalTolerance, modelParameters,
-                normalGenerator, numSims, basisFunctions, CancellationToken.None,
-                onProgressUpdate);
-        }
-
-
-        public LsmcStorageValuationResults<T> Calculate<T>(T currentPeriod, double startingInventory,
-            TimeSeries<T, double> forwardCurve, ICmdtyStorage<T> storage, Func<T, Day> settleDateRule,
-            Func<Day, Day, double> discountFactors,
-            IDoubleStateSpaceGridCalc gridCalc,
-            double numericalTolerance,
-            MultiFactorParameters<T> modelParameters,
-            IStandardNormalGenerator normalGenerator,
-            int numSims,
-            IEnumerable<BasisFunction> basisFunctions,
-            CancellationToken cancellationToken,
-            Action<double> onProgressUpdate = null)
-            where T : ITimePeriod<T>
-        {
-            if (currentPeriod.CompareTo(storage.EndPeriod) > 0)
-            {
-                onProgressUpdate?.Invoke(1.0);
-                return LsmcStorageValuationResults<T>.CreateExpiredResults();
-            }
-            // TODO progress update for price simulation?
-            // TODO allow intraday simulation?
-            MultiFactorSpotSimResults<T> spotSims;
-            if (currentPeriod.Equals(storage.EndPeriod))
-            {
-                // TODO think of more elegant way of doing this
-                spotSims = new MultiFactorSpotSimResults<T>(new double[0], 
-                    new double[0], new T[0], 0, numSims, modelParameters.NumFactors);
-            }
-            else
-            {
-                DateTime currentDate = currentPeriod.Start; // TODO IMPORTANT, this needs to change;
-                T simStart = new[] { currentPeriod.Offset(1), storage.StartPeriod }.Max();
-                var simulatedPeriods = simStart.EnumerateTo(storage.EndPeriod);
-                var simulator = new MultiFactorSpotPriceSimulator<T>(modelParameters, currentDate, forwardCurve, simulatedPeriods, TimeFunctions.Act365, normalGenerator);
-                spotSims = simulator.Simulate(numSims);
-            }
-
-            return Calculate(currentPeriod, startingInventory, forwardCurve, storage, settleDateRule, discountFactors,
-                gridCalc, numericalTolerance, spotSims, basisFunctions, cancellationToken, onProgressUpdate);
-        }
-
-        public LsmcStorageValuationResults<T> Calculate<T>(T currentPeriod, double startingInventory,
-            TimeSeries<T, double> forwardCurve, ICmdtyStorage<T> storage, Func<T, Day> settleDateRule,
-            Func<Day, Day, double> discountFactors,
-            IDoubleStateSpaceGridCalc gridCalc,
-            double numericalTolerance, ISpotSimResults<T> spotSims,
-            IEnumerable<BasisFunction> basisFunctions,
-            Action<double> onProgressUpdate = null)
-            where T : ITimePeriod<T>
-        {
-            return Calculate(currentPeriod, startingInventory,
-                forwardCurve, storage, settleDateRule,
-                discountFactors,
-                gridCalc,
-                numericalTolerance, spotSims, basisFunctions,
-                CancellationToken.None, onProgressUpdate);
-        }
-
-        public LsmcStorageValuationResults<T> Calculate<T>(T currentPeriod, double startingInventory,
-            TimeSeries<T, double> forwardCurve, ICmdtyStorage<T> storage, Func<T, Day> settleDateRule,
-            Func<Day, Day, double> discountFactors,
-            IDoubleStateSpaceGridCalc gridCalc,
-            double numericalTolerance, ISpotSimResults<T> spotSims,
-            IEnumerable<BasisFunction> basisFunctions,
-            CancellationToken cancellationToken,
-            Action<double> onProgressUpdate = null)
+        public LsmcStorageValuationResults<T> Calculate<T>(LsmcValuationParameters<T> lsmcParams)
             where T : ITimePeriod<T>
         {
             // TODO check spotSims is consistent with storage
-            if (startingInventory < 0)
-                throw new ArgumentException("Inventory cannot be negative.", nameof(startingInventory));
+            if (lsmcParams.Inventory < 0)
+                throw new ArgumentException("Inventory cannot be negative.", nameof(lsmcParams.Inventory));
 
-            if (currentPeriod.CompareTo(storage.EndPeriod) > 0)
+            if (lsmcParams.CurrentPeriod.CompareTo(lsmcParams.Storage.EndPeriod) > 0)
             {
-                onProgressUpdate?.Invoke(1.0);
+                lsmcParams.OnProgressUpdate?.Invoke(1.0);
                 return LsmcStorageValuationResults<T>.CreateExpiredResults();
             }
 
-            if (currentPeriod.Equals(storage.EndPeriod))
+            if (lsmcParams.CurrentPeriod.Equals(lsmcParams.Storage.EndPeriod))
             {
-                if (storage.MustBeEmptyAtEnd)
+                if (lsmcParams.Storage.MustBeEmptyAtEnd)
                 {
-                    if (startingInventory > 0)
+                    if (lsmcParams.Inventory > 0)
                         throw new InventoryConstraintsCannotBeFulfilledException("Storage must be empty at end, but inventory is greater than zero.");
-                    onProgressUpdate?.Invoke(1.0);
+                    lsmcParams.OnProgressUpdate?.Invoke(1.0);
                     return LsmcStorageValuationResults<T>.CreateExpiredResults();
                 }
                 // Potentially P&L at end
-                double spotPrice = forwardCurve[currentPeriod];
-                double npv = storage.TerminalStorageNpv(spotPrice, startingInventory);
-                onProgressUpdate?.Invoke(1.0);
+                double spotPrice = lsmcParams.ForwardCurve[lsmcParams.CurrentPeriod];
+                double npv = lsmcParams.Storage.TerminalStorageNpv(spotPrice, lsmcParams.Inventory);
+                lsmcParams.OnProgressUpdate?.Invoke(1.0);
                 return LsmcStorageValuationResults<T>.CreateEndPeriodResults(npv);
             }
 
-            var basisFunctionList = basisFunctions.ToList();
+            var basisFunctionList = lsmcParams.BasisFunctions.ToList();
 
-            TimeSeries<T, InventoryRange> inventorySpace = StorageHelper.CalculateInventorySpace(storage, startingInventory, currentPeriod);
+            TimeSeries<T, InventoryRange> inventorySpace = StorageHelper.CalculateInventorySpace(lsmcParams.Storage, lsmcParams.Inventory, lsmcParams.CurrentPeriod);
 
-            if (forwardCurve.Start.CompareTo(currentPeriod) > 0)
-                throw new ArgumentException("Forward curve starts too late. Must start on or before the current period.", nameof(forwardCurve));
+            if (lsmcParams.ForwardCurve.Start.CompareTo(lsmcParams.CurrentPeriod) > 0)
+                throw new ArgumentException("Forward curve starts too late. Must start on or before the current period.", nameof(lsmcParams.ForwardCurve));
 
-            if (forwardCurve.End.CompareTo(inventorySpace.End) < 0)
-                throw new ArgumentException("Forward curve does not extend until storage end period.", nameof(forwardCurve));
+            if (lsmcParams.ForwardCurve.End.CompareTo(inventorySpace.End) < 0)
+                throw new ArgumentException("Forward curve does not extend until storage end period.", nameof(lsmcParams.ForwardCurve));
 
             // Perform backward induction
+            _logger?.LogInformation("Starting spot price simulation.");
+            ISpotSimResults<T> spotSims = lsmcParams.SpotSimsGenerator();
+            _logger?.LogInformation("Spot price simulation complete.");
+
             int numPeriods = inventorySpace.Count + 1; // +1 as inventorySpaceGrid doesn't contain first period
             var storageRegressValuesByPeriod = new Vector<double>[numPeriods][]; // 1st dimension is period, 2nd is inventory, 3rd is simulation number
             var inventorySpaceGrids = new double[numPeriods][];
 
             // Calculate NPVs at end period
-            var endInventorySpace = inventorySpace[storage.EndPeriod]; // TODO this will probably break!
-            var endInventorySpaceGrid = gridCalc.GetGridPoints(endInventorySpace.MinInventory, endInventorySpace.MaxInventory)
+            var endInventorySpace = inventorySpace[lsmcParams.Storage.EndPeriod]; // TODO this will probably break!
+            var endInventorySpaceGrid = lsmcParams.GridCalc.GetGridPoints(endInventorySpace.MinInventory, endInventorySpace.MaxInventory)
                                             .ToArray();
             inventorySpaceGrids[numPeriods - 1] = endInventorySpaceGrid;
 
             var storageActualValuesNextPeriod = new Vector<double>[endInventorySpaceGrid.Length];
-            ReadOnlySpan<double> endPeriodSimSpotPrices = spotSims.SpotPricesForPeriod(storage.EndPeriod).Span;
+            ReadOnlySpan<double> endPeriodSimSpotPrices = spotSims.SpotPricesForPeriod(lsmcParams.Storage.EndPeriod).Span;
 
             int numSims = spotSims.NumSims;
 
@@ -234,13 +117,13 @@ namespace Cmdty.Storage
                 for (int simIndex = 0; simIndex < numSims; simIndex++)
                 {
                     double simSpotPrice = endPeriodSimSpotPrices[simIndex];
-                    storageValueBySim[simIndex] = storage.TerminalStorageNpv(simSpotPrice, inventory);
+                    storageValueBySim[simIndex] = lsmcParams.Storage.TerminalStorageNpv(simSpotPrice, inventory);
                 }
                 storageActualValuesNextPeriod[i] = storageValueBySim;
             }
             
             // Calculate discount factor function
-            Day dayToDiscountTo = currentPeriod.First<Day>(); // TODO IMPORTANT, this needs to change
+            Day dayToDiscountTo = lsmcParams.CurrentPeriod.First<Day>(); // TODO IMPORTANT, this needs to change
             
             // Memoize the discount factor
             var discountFactorCache = new Dictionary<Day, double>(); // TODO do this in more elegant way and share with intrinsic calc
@@ -248,7 +131,7 @@ namespace Cmdty.Storage
             {
                 if (!discountFactorCache.TryGetValue(cashFlowDate, out double discountFactor))
                 {
-                    discountFactor = discountFactors(dayToDiscountTo, cashFlowDate);
+                    discountFactor = lsmcParams.DiscountFactors(dayToDiscountTo, cashFlowDate);
                     discountFactorCache[cashFlowDate] = discountFactor;
                 }
                 return discountFactor;
@@ -273,7 +156,7 @@ namespace Cmdty.Storage
                 double[] nextPeriodInventorySpaceGrid = inventorySpaceGrids[backCounter + 1];
                 Vector<double>[] storageRegressValuesNextPeriod = new Vector<double>[nextPeriodInventorySpaceGrid.Length];
 
-                if (period.Equals(currentPeriod))
+                if (period.Equals(lsmcParams.CurrentPeriod))
                 {
                     // Current period, for which the price isn't random so expected storage values are just the average of the values for all sims
                     for (int i = 0; i < nextPeriodInventorySpaceGrid.Length; i++) // TODO parallelise?
@@ -301,24 +184,24 @@ namespace Cmdty.Storage
                 
                 double[] inventorySpaceGrid;
                 if (period.Equals(startActiveStorage))
-                    inventorySpaceGrid = new[] { startingInventory };
+                    inventorySpaceGrid = new[] { lsmcParams.Inventory };
                 else
                 {
                     (double inventorySpaceMin, double inventorySpaceMax) = inventorySpace[period];
-                    inventorySpaceGrid = gridCalc.GetGridPoints(inventorySpaceMin, inventorySpaceMax)
+                    inventorySpaceGrid = lsmcParams.GridCalc.GetGridPoints(inventorySpaceMin, inventorySpaceMax)
                                                 .ToArray();
                 }
                 (double nextStepInventorySpaceMin, double nextStepInventorySpaceMax) = inventorySpace[period.Offset(1)];
 
                 var storageActualValuesThisPeriod = new Vector<double>[inventorySpaceGrid.Length]; // TODO change type to DenseVector?
 
-                Day cmdtySettlementDate = settleDateRule(period);
+                Day cmdtySettlementDate = lsmcParams.SettleDateRule(period);
                 double discountFactorFromCmdtySettlement = DiscountToCurrentDay(cmdtySettlementDate);
 
                 ReadOnlySpan<double> simulatedPrices;
-                if (period.Equals(currentPeriod))
+                if (period.Equals(lsmcParams.CurrentPeriod))
                 {
-                    double spotPrice = forwardCurve[period];
+                    double spotPrice = lsmcParams.ForwardCurve[period];
                     simulatedPrices = Enumerable.Repeat(spotPrice, numSims).ToArray(); // TODO inefficient - review.
                 }                
                 else
@@ -327,11 +210,11 @@ namespace Cmdty.Storage
                 for (int inventoryIndex = 0; inventoryIndex < inventorySpaceGrid.Length; inventoryIndex++)
                 {
                     double inventory = inventorySpaceGrid[inventoryIndex];
-                    InjectWithdrawRange injectWithdrawRange = storage.GetInjectWithdrawRange(period, inventory);
-                    double inventoryLoss = storage.CmdtyInventoryPercentLoss(period) * inventory;
+                    InjectWithdrawRange injectWithdrawRange = lsmcParams.Storage.GetInjectWithdrawRange(period, inventory);
+                    double inventoryLoss = lsmcParams.Storage.CmdtyInventoryPercentLoss(period) * inventory;
                     double[] decisionSet = StorageHelper.CalculateBangBangDecisionSet(injectWithdrawRange, inventory, inventoryLoss,
-                        nextStepInventorySpaceMin, nextStepInventorySpaceMax, numericalTolerance);
-                    IReadOnlyList<DomesticCashFlow> inventoryCostCashFlows = storage.CmdtyInventoryCost(period, inventory);
+                        nextStepInventorySpaceMin, nextStepInventorySpaceMax, lsmcParams.NumericalTolerance);
+                    IReadOnlyList<DomesticCashFlow> inventoryCostCashFlows = lsmcParams.Storage.CmdtyInventoryCost(period, inventory);
                     double inventoryCostNpv = inventoryCostCashFlows.Sum(cashFlow => cashFlow.Amount * DiscountToCurrentDay(cashFlow.Date));
 
                     double[] injectWithdrawCostNpvs = new double[decisionSet.Length];
@@ -344,10 +227,10 @@ namespace Cmdty.Storage
                         double decisionVolume = decisionSet[decisionIndex];
 
                         // Inject/Withdraw cost (same for all price sims)
-                        injectWithdrawCostNpvs[decisionIndex] = InjectWithdrawCostNpv(storage, decisionVolume, period, inventory, DiscountToCurrentDay);
+                        injectWithdrawCostNpvs[decisionIndex] = InjectWithdrawCostNpv(lsmcParams.Storage, decisionVolume, period, inventory, DiscountToCurrentDay);
 
                         // Cmdty Used For Inject/Withdraw (same for all price sims)
-                        cmdtyUsedForInjectWithdrawVolume[decisionIndex] = CmdtyVolumeConsumedOnDecision(storage, decisionVolume, period, inventory);
+                        cmdtyUsedForInjectWithdrawVolume[decisionIndex] = CmdtyVolumeConsumedOnDecision(lsmcParams.Storage, decisionVolume, period, inventory);
 
                         // Calculate continuation values
                         double inventoryAfterDecision = inventory + decisionVolume - inventoryLoss;
@@ -428,8 +311,8 @@ namespace Cmdty.Storage
                 storageActualValuesNextPeriod = storageActualValuesThisPeriod;
                 backCounter--;
                 progress += backStepProgressPcnt;
-                onProgressUpdate?.Invoke(progress);
-                cancellationToken.ThrowIfCancellationRequested();
+                lsmcParams.OnProgressUpdate?.Invoke(progress);
+                lsmcParams.CancellationToken.ThrowIfCancellationRequested();
             }
             _logger?.LogInformation("Completed backward induction.");
 
@@ -445,7 +328,7 @@ namespace Cmdty.Storage
 
             var startingInventories = inventoryBySim[0];
             for (int i = 0; i < numSims; i++)
-                startingInventories[i] = startingInventory;
+                startingInventories[i] = lsmcParams.Inventory;
 
             double forwardStepProgressPcnt = (1.0 - BackwardPcntTime) / periodsForResultsTimeSeries.Length;
             _logger?.LogInformation("Starting forward simulation.");
@@ -456,15 +339,15 @@ namespace Cmdty.Storage
 
                 Vector<double>[] regressContinuationValues = storageRegressValuesByPeriod[periodIndex + 1];
                 double[] inventoryGridNexPeriod = inventorySpaceGrids[periodIndex + 1];
-                Day cmdtySettlementDate = settleDateRule(period);
+                Day cmdtySettlementDate = lsmcParams.SettleDateRule(period);
                 double discountFactorFromCmdtySettlement = DiscountToCurrentDay(cmdtySettlementDate);
 
                 double sumSpotPriceTimesVolume = 0.0;
 
                 ReadOnlySpan<double> simulatedPrices;
-                if (period.Equals(currentPeriod))
+                if (period.Equals(lsmcParams.CurrentPeriod))
                 {
-                    double spotPrice = forwardCurve[period];
+                    double spotPrice = lsmcParams.ForwardCurve[period];
                     simulatedPrices = Enumerable.Repeat(spotPrice, numSims).ToArray(); // TODO inefficient - review, and share code with backward induction
                 }
                 else
@@ -481,11 +364,11 @@ namespace Cmdty.Storage
                     double simulatedSpotPrice = simulatedPrices[simIndex];
                     double inventory = thisPeriodInventories[simIndex];
 
-                    InjectWithdrawRange injectWithdrawRange = storage.GetInjectWithdrawRange(period, inventory);
-                    double inventoryLoss = storage.CmdtyInventoryPercentLoss(period) * inventory;
+                    InjectWithdrawRange injectWithdrawRange = lsmcParams.Storage.GetInjectWithdrawRange(period, inventory);
+                    double inventoryLoss = lsmcParams.Storage.CmdtyInventoryPercentLoss(period) * inventory;
                     double[] decisionSet = StorageHelper.CalculateBangBangDecisionSet(injectWithdrawRange, inventory,
-                        inventoryLoss, nextStepInventorySpaceMin, nextStepInventorySpaceMax, numericalTolerance);
-                    IReadOnlyList<DomesticCashFlow> inventoryCostCashFlows = storage.CmdtyInventoryCost(period, inventory);
+                        inventoryLoss, nextStepInventorySpaceMin, nextStepInventorySpaceMax, lsmcParams.NumericalTolerance);
+                    IReadOnlyList<DomesticCashFlow> inventoryCostCashFlows = lsmcParams.Storage.CmdtyInventoryCost(period, inventory);
                     double inventoryCostNpv = inventoryCostCashFlows.Sum(cashFlow => cashFlow.Amount * DiscountToCurrentDay(cashFlow.Date));
 
                     var decisionNpvsRegress = new double[decisionSet.Length];
@@ -495,12 +378,12 @@ namespace Cmdty.Storage
                         double decisionVolume = decisionSet[decisionIndex];
                         double inventoryAfterDecision = inventory + decisionVolume - inventoryLoss;
 
-                        double cmdtyUsedForInjectWithdrawVolume = CmdtyVolumeConsumedOnDecision(storage, decisionVolume, period, inventory);
+                        double cmdtyUsedForInjectWithdrawVolume = CmdtyVolumeConsumedOnDecision(lsmcParams.Storage, decisionVolume, period, inventory);
 
                         double injectWithdrawNpv = -decisionVolume * simulatedSpotPrice * discountFactorFromCmdtySettlement;
                         double cmdtyUsedForInjectWithdrawNpv = -cmdtyUsedForInjectWithdrawVolume * simulatedSpotPrice * discountFactorFromCmdtySettlement;
 
-                        double injectWithdrawCostNpv = InjectWithdrawCostNpv(storage, decisionVolume, period, inventory, DiscountToCurrentDay);
+                        double injectWithdrawCostNpv = InjectWithdrawCostNpv(lsmcParams.Storage, decisionVolume, period, inventory, DiscountToCurrentDay);
 
                         double immediateNpv = injectWithdrawNpv - injectWithdrawCostNpv + cmdtyUsedForInjectWithdrawNpv;
 
@@ -528,12 +411,12 @@ namespace Cmdty.Storage
 
                 storageProfiles[periodIndex] = new StorageProfile(Average(thisPeriodInventories), Average(thisPeriodInjectWithdrawVolumes),
                     Average(thisPeriodCmdtyConsumed), Average(thisPeriodInventoryLoss), Average(thisPeriodNetVolume));
-                double forwardPrice = forwardCurve[period];
+                double forwardPrice = lsmcParams.ForwardCurve[period];
                 double periodDelta = sumSpotPriceTimesVolume / forwardPrice / numSims;
                 deltas[periodIndex] = periodDelta;
                 progress += forwardStepProgressPcnt;
-                onProgressUpdate?.Invoke(progress);
-                cancellationToken.ThrowIfCancellationRequested();
+                lsmcParams.OnProgressUpdate?.Invoke(progress);
+                lsmcParams.CancellationToken.ThrowIfCancellationRequested();
             }
             _logger?.LogInformation("Completed forward simulation.");
 
@@ -561,15 +444,15 @@ namespace Cmdty.Storage
                 Vector<double>[] regressContinuationValues = storageRegressValuesByPeriod[periodIndex + 1];
                 double[] inventoryGridNexPeriod = inventorySpaceGrids[periodIndex + 1];
 
-                Day cmdtySettlementDate = settleDateRule(period);
+                Day cmdtySettlementDate = lsmcParams.SettleDateRule(period);
                 double discountFactorFromCmdtySettlement = DiscountToCurrentDay(cmdtySettlementDate);
 
                 double expectedInventory = storageProfileSeries[period].Inventory;
                 (double nextStepInventorySpaceMin, double nextStepInventorySpaceMax) = inventorySpace[period.Offset(1)];
-                InjectWithdrawRange injectWithdrawRange = storage.GetInjectWithdrawRange(period, expectedInventory);
-                double inventoryLoss = storage.CmdtyInventoryPercentLoss(period) * expectedInventory;
+                InjectWithdrawRange injectWithdrawRange = lsmcParams.Storage.GetInjectWithdrawRange(period, expectedInventory);
+                double inventoryLoss = lsmcParams.Storage.CmdtyInventoryPercentLoss(period) * expectedInventory;
                 double[] decisionSet = StorageHelper.CalculateBangBangDecisionSet(injectWithdrawRange, expectedInventory,
-                    inventoryLoss, nextStepInventorySpaceMin, nextStepInventorySpaceMax, numericalTolerance);
+                    inventoryLoss, nextStepInventorySpaceMin, nextStepInventorySpaceMax, lsmcParams.NumericalTolerance);
 
                 double maxInjectVolume = decisionSet.Max();
                 var injectTriggerPrices = new List<TriggerPricePoint>();
@@ -580,12 +463,12 @@ namespace Cmdty.Storage
                     if (maxInjectVolume > alternativeVolume)
                     {
                         (double alternativeContinuationValue, double alternativeDecisionCost, double alternativeCmdtyConsumed) = 
-                            CalcAlternatives(storage, expectedInventory, alternativeVolume, inventoryLoss, inventoryGridNexPeriod, regressContinuationValues, period, DiscountToCurrentDay);
+                            CalcAlternatives(lsmcParams.Storage, expectedInventory, alternativeVolume, inventoryLoss, inventoryGridNexPeriod, regressContinuationValues, period, DiscountToCurrentDay);
                         double[] triggerPriceVolumes = CalcInjectTriggerPriceVolumes<T>(maxInjectVolume, alternativeVolume, numTriggerPriceVolumes);
 
                         foreach (double triggerVolume in triggerPriceVolumes)
                         {
-                            double injectTriggerPrice = CalcTriggerPrice(storage, expectedInventory, triggerVolume, inventoryLoss, inventoryGridNexPeriod, 
+                            double injectTriggerPrice = CalcTriggerPrice(lsmcParams.Storage, expectedInventory, triggerVolume, inventoryLoss, inventoryGridNexPeriod, 
                                 regressContinuationValues, alternativeContinuationValue, alternativeVolume, period, alternativeDecisionCost, 
                                 alternativeCmdtyConsumed, discountFactorFromCmdtySettlement, DiscountToCurrentDay);
                             injectTriggerPrices.Add(new TriggerPricePoint(triggerVolume, injectTriggerPrice));
@@ -604,12 +487,12 @@ namespace Cmdty.Storage
                     if (maxWithdrawVolume < alternativeVolume)
                     {
                         (double alternativeContinuationValue, double alternativeDecisionCost, double alternativeCmdtyConsumed) =
-                            CalcAlternatives(storage, expectedInventory, alternativeVolume, inventoryLoss, inventoryGridNexPeriod, regressContinuationValues, period, DiscountToCurrentDay);
+                            CalcAlternatives(lsmcParams.Storage, expectedInventory, alternativeVolume, inventoryLoss, inventoryGridNexPeriod, regressContinuationValues, period, DiscountToCurrentDay);
                         double[] triggerPriceVolumes = CalcWithdrawTriggerPriceVolumes<T>(maxWithdrawVolume, alternativeVolume, numTriggerPriceVolumes);
 
                         foreach (double triggerVolume in triggerPriceVolumes.Reverse())
                         {
-                            double withdrawTriggerPrice = CalcTriggerPrice(storage, expectedInventory, triggerVolume, inventoryLoss, inventoryGridNexPeriod,
+                            double withdrawTriggerPrice = CalcTriggerPrice(lsmcParams.Storage, expectedInventory, triggerVolume, inventoryLoss, inventoryGridNexPeriod,
                                 regressContinuationValues, alternativeContinuationValue, alternativeVolume, period, alternativeDecisionCost,
                                 alternativeCmdtyConsumed, discountFactorFromCmdtySettlement, DiscountToCurrentDay);
                             withdrawTriggerPrices.Add(new TriggerPricePoint(triggerVolume, withdrawTriggerPrice));
@@ -629,7 +512,7 @@ namespace Cmdty.Storage
 
 
             var spotPricePanel = Panel.UseRawDataArray(spotSims.SpotPrices, spotSims.SimulatedPeriods, numSims);
-            onProgressUpdate?.Invoke(1.0); // Progress with approximately 1.0 should have occured already, but might have been a bit off because of floating-point error.
+            lsmcParams.OnProgressUpdate?.Invoke(1.0); // Progress with approximately 1.0 should have occured already, but might have been a bit off because of floating-point error.
 
             return new LsmcStorageValuationResults<T>(storageNpv, deltasSeries, storageProfileSeries, spotPricePanel, 
                 inventoryBySim, injectWithdrawVolumeBySim, cmdtyConsumedBySim, inventoryLossBySim, netVolumeBySim, triggerPrices, triggerPriceVolumeProfiles);
