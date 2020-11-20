@@ -25,7 +25,10 @@
 
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.Globalization;
 using System.Linq;
+using System.Text;
 using Cmdty.Core.Common;
 using Cmdty.Core.Simulation;
 using Cmdty.TimePeriodValueTypes;
@@ -54,6 +57,8 @@ namespace Cmdty.Storage
         public LsmcStorageValuationResults<T> Calculate<T>(LsmcValuationParameters<T> lsmcParams)
             where T : ITimePeriod<T>
         {
+            var stopwatches = new Stopwatches();
+            stopwatches.All.Start();
             // TODO check spotSims is consistent with storage
             if (lsmcParams.Inventory < 0)
                 throw new ArgumentException("Inventory cannot be negative.", nameof(lsmcParams.Inventory));
@@ -92,7 +97,9 @@ namespace Cmdty.Storage
 
             // Perform backward induction
             _logger?.LogInformation("Starting spot price simulation.");
+            stopwatches.PriceSimulation.Start();
             ISpotSimResults<T> spotSims = lsmcParams.SpotSimsGenerator();
+            stopwatches.PriceSimulation.Stop();
             _logger?.LogInformation("Spot price simulation complete.");
 
             int numPeriods = inventorySpace.Count + 1; // +1 as inventorySpaceGrid doesn't contain first period
@@ -151,6 +158,7 @@ namespace Cmdty.Storage
             double backStepProgressPcnt = BackwardPcntTime / (periodsForResultsTimeSeries.Length - 1);
 
             _logger?.LogInformation("Starting backward induction.");
+            stopwatches.BackwardInduction.Start();
             foreach (T period in periodsForResultsTimeSeries.Reverse().Skip(1))
             {
                 double[] nextPeriodInventorySpaceGrid = inventorySpaceGrids[backCounter + 1];
@@ -169,7 +177,9 @@ namespace Cmdty.Storage
                 else
                 {
                     PopulateDesignMatrix(designMatrix, period, spotSims, basisFunctionList);
+                    stopwatches.PseudoInverse.Start();
                     Matrix<double> pseudoInverse = designMatrix.PseudoInverse();
+                    stopwatches.PseudoInverse.Stop();
 
                     // TODO doing the regressions for all next inventory could be inefficient as they might not all be needed
                     for (int i = 0; i < nextPeriodInventorySpaceGrid.Length; i++) // TODO parallelise?
@@ -314,9 +324,9 @@ namespace Cmdty.Storage
                 lsmcParams.OnProgressUpdate?.Invoke(progress);
                 lsmcParams.CancellationToken.ThrowIfCancellationRequested();
             }
+            stopwatches.BackwardInduction.Stop();
             _logger?.LogInformation("Completed backward induction.");
-
-
+            
             var inventoryBySim = new Panel<T, double>(periodsForResultsTimeSeries, numSims);
             var injectWithdrawVolumeBySim = new Panel<T, double>(periodsForResultsTimeSeries, numSims);
             var cmdtyConsumedBySim = new Panel<T, double>(periodsForResultsTimeSeries, numSims);
@@ -332,6 +342,7 @@ namespace Cmdty.Storage
 
             double forwardStepProgressPcnt = (1.0 - BackwardPcntTime) / periodsForResultsTimeSeries.Length;
             _logger?.LogInformation("Starting forward simulation.");
+            stopwatches.ForwardSimulation.Start();
             for (int periodIndex = 0; periodIndex < periodsForResultsTimeSeries.Length - 1; periodIndex++) // TODO more clearly handle this -1
             {
                 T period = periodsForResultsTimeSeries[periodIndex];
@@ -418,6 +429,7 @@ namespace Cmdty.Storage
                 lsmcParams.OnProgressUpdate?.Invoke(progress);
                 lsmcParams.CancellationToken.ThrowIfCancellationRequested();
             }
+            stopwatches.ForwardSimulation.Stop();
             _logger?.LogInformation("Completed forward simulation.");
 
             double expectedFinalInventory = Average(inventoryBySim[inventoryBySim.NumRows - 1]);
@@ -435,7 +447,7 @@ namespace Cmdty.Storage
             // Calculate trigger prices
             _logger?.LogInformation("Started trigger price calculation.");
             int numTriggerPriceVolumes = 10; // TODO move to parameters?
-
+            stopwatches.TriggerPriceCalc.Start();
             var triggerVolumeProfilesArray = new TriggerPriceVolumeProfiles[periodsForResultsTimeSeries.Length - 1];
             var triggerPricesArray = new TriggerPrices[periodsForResultsTimeSeries.Length - 1];
             for (int periodIndex = 0; periodIndex < periodsForResultsTimeSeries.Length - 1; periodIndex++)
@@ -508,11 +520,20 @@ namespace Cmdty.Storage
             }
             var triggerPriceVolumeProfiles = new TimeSeries<T, TriggerPriceVolumeProfiles>(periodsForResultsTimeSeries.First(), triggerVolumeProfilesArray);
             var triggerPrices = new TimeSeries<T, TriggerPrices>(periodsForResultsTimeSeries.First(), triggerPricesArray);
+            stopwatches.TriggerPriceCalc.Stop();
             _logger?.LogInformation("Completed trigger price calculation.");
 
 
             var spotPricePanel = Panel.UseRawDataArray(spotSims.SpotPrices, spotSims.SimulatedPeriods, numSims);
             lsmcParams.OnProgressUpdate?.Invoke(1.0); // Progress with approximately 1.0 should have occured already, but might have been a bit off because of floating-point error.
+
+            stopwatches.All.Stop();
+            if (_logger != null)
+            {
+                string profilingReport = stopwatches.GenerateProfileReport();
+                _logger.LogInformation("Profiling Report:");
+                _logger.LogInformation(Environment.NewLine + profilingReport);
+            }
 
             return new LsmcStorageValuationResults<T>(storageNpv, deltasSeries, storageProfileSeries, spotPricePanel, 
                 inventoryBySim, injectWithdrawVolumeBySim, cmdtyConsumedBySim, inventoryLossBySim, netVolumeBySim, triggerPrices, triggerPriceVolumeProfiles);
@@ -680,6 +701,58 @@ namespace Cmdty.Storage
                 BasisFunction basisFunction = basisFunctions[basisIndex];
                 basisFunction(markovFactors, spotPrices, designMatrixColumn);
             }
+        }
+
+        private sealed class Stopwatches
+        {
+            public Stopwatch All { get; }
+            public Stopwatch PriceSimulation { get; }
+            public Stopwatch BackwardInduction { get; }
+            public Stopwatch PseudoInverse { get; }
+            public Stopwatch ForwardSimulation { get; }
+            public Stopwatch TriggerPriceCalc { get; }
+
+            public Stopwatches()
+            {
+                All = new Stopwatch();
+                PriceSimulation = new Stopwatch();
+                BackwardInduction = new Stopwatch();
+                PseudoInverse = new Stopwatch();
+                ForwardSimulation = new Stopwatch();
+                TriggerPriceCalc = new Stopwatch();
+            }
+
+            public string GenerateProfileReport()
+            {
+                var stringBuilder = new StringBuilder();
+                TimeSpan otherAll = All.Elapsed - PriceSimulation.Elapsed - BackwardInduction.Elapsed -
+                                 ForwardSimulation.Elapsed - TriggerPriceCalc.Elapsed;
+                TimeSpan otherBackwardInduction = BackwardInduction.Elapsed - PseudoInverse.Elapsed;
+
+                string priceSimPercent =
+                    (PriceSimulation.Elapsed.Ticks / (double) All.Elapsed.Ticks).ToString("P2", CultureInfo.InvariantCulture);
+                string pseudoInversePercent =
+                    (PseudoInverse.Elapsed.Ticks / (double)All.Elapsed.Ticks).ToString("P2", CultureInfo.InvariantCulture);
+                string otherBackInductionPercent =
+                    (otherBackwardInduction.Ticks / (double)All.Elapsed.Ticks).ToString("P2", CultureInfo.InvariantCulture);
+                string forwardSimPercent =
+                    (ForwardSimulation.Elapsed.Ticks / (double)All.Elapsed.Ticks).ToString("P2", CultureInfo.InvariantCulture);
+                string triggerPricePercent =
+                    (TriggerPriceCalc.Elapsed.Ticks / (double)All.Elapsed.Ticks).ToString("P2", CultureInfo.InvariantCulture);
+                string otherPercent = (otherAll.Ticks / (double)All.Elapsed.Ticks).ToString("P2", CultureInfo.InvariantCulture);
+
+
+                stringBuilder.AppendLine("Total:\t\t" + All.Elapsed.ToString("g", CultureInfo.InvariantCulture));
+                stringBuilder.AppendLine($"Price sim:\t{PriceSimulation.Elapsed.ToString("g", CultureInfo.InvariantCulture)}\t({priceSimPercent})");
+                stringBuilder.AppendLine($"Pseudo-inverse:\t{PseudoInverse.Elapsed.ToString("g", CultureInfo.InvariantCulture)}\t({pseudoInversePercent})");
+                stringBuilder.AppendLine($"Other back ind:\t{otherBackwardInduction.ToString("g", CultureInfo.InvariantCulture)}\t({otherBackInductionPercent})");
+                stringBuilder.AppendLine($"Fwd sim:\t{ForwardSimulation.Elapsed.ToString("g", CultureInfo.InvariantCulture)}\t({forwardSimPercent})");
+                stringBuilder.AppendLine($"Trigger prices:\t{TriggerPriceCalc.Elapsed.ToString("g", CultureInfo.InvariantCulture)}\t({triggerPricePercent})");
+                stringBuilder.AppendLine($"Other:\t\t{otherAll.ToString("g", CultureInfo.InvariantCulture)}\t({otherPercent})");
+
+                return stringBuilder.ToString();
+            }
+
         }
 
     }
