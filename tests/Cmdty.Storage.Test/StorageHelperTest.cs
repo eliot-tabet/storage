@@ -35,51 +35,113 @@ namespace Cmdty.Storage.Test
         private const double NumericalTolerance = 1E-10;
 
         [Fact]
-        public void CalculateBangBangDecisionSet_InjectWithdrawRangeUnconstrained_ReturnsMinAndMaxRateWithZero()
+        [Trait("Category", "Helper.BangBangDecisions")]
+        public void CalculateBangBangDecisionSet_InjectWithdrawRangeUnconstrainedNoExtraDecisions_ReturnsMinAndMaxRateWithZero()
         {
             var injectWithdrawRange = new InjectWithdrawRange(-15.5, 65.685);
             const double currentInventory = 1010.0;
             const double inventoryLoss = 10.0;
             const double nextStepMinInventory = 900.0;
             const double nextStepMaxInventory = 1070.0;
+            const int numExtraDecisions = 0;
 
             double[] decisionSet = StorageHelper.CalculateBangBangDecisionSet(injectWithdrawRange, currentInventory, inventoryLoss,
-                                nextStepMinInventory, nextStepMaxInventory, NumericalTolerance);
+                                nextStepMinInventory, nextStepMaxInventory, NumericalTolerance, numExtraDecisions);
             double[] expectedDecisionSet = new[] { injectWithdrawRange.MinInjectWithdrawRate, 0.0, injectWithdrawRange.MaxInjectWithdrawRate};
             Assert.Equal(expectedDecisionSet, decisionSet);
         }
 
         [Fact]
-        public void CalculateBangBangDecisionSet_InjectWithdrawRangeBothPositiveUnconstrained_ReturnsMinAndMaxRate()
+        [Trait("Category", "Helper.BangBangDecisions")]
+        public void CalculateBangBangDecisionSet_InjectWithdrawRangeUnconstrainedWithExtraDecisions_ReturnsMinMaxRateZeroAndExtraDecisions()
+        {
+            var injectWithdrawRange = new InjectWithdrawRange(-15.5, 65.685);
+            const double currentInventory = 1010.0;
+            const double inventoryLoss = 10.0;
+            const double nextStepMinInventory = 900.0;
+            const double nextStepMaxInventory = 1070.0;
+            const int numExtraDecisions = 1;
+
+            double[] decisionSet = StorageHelper.CalculateBangBangDecisionSet(injectWithdrawRange, currentInventory, inventoryLoss,
+                nextStepMinInventory, nextStepMaxInventory, NumericalTolerance, numExtraDecisions);
+            double[] expectedDecisionSet = new[] { injectWithdrawRange.MinInjectWithdrawRate, injectWithdrawRange.MinInjectWithdrawRate/2.0, 0.0,
+                injectWithdrawRange.MaxInjectWithdrawRate/2.0, injectWithdrawRange.MaxInjectWithdrawRate };
+            Assert.Equal(expectedDecisionSet, decisionSet);
+        }
+
+
+        [Fact]
+        [Trait("Category", "Helper.BangBangDecisions")]
+        public void CalculateBangBangDecisionSet_InjectWithdrawRangeBothPositiveUnconstrainedNoExtraDecisions_ReturnsMinAndMaxRate()
         {
             var injectWithdrawRange = new InjectWithdrawRange(15.5, 65.685);
             const double currentInventory = 1010.0;
             const double inventoryLoss = 10.0;
             const double nextStepMinInventory = 900.0;
             const double nextStepMaxInventory = 1070.0;
+            const int numExtraDecisions = 0;
 
             double[] decisionSet = StorageHelper.CalculateBangBangDecisionSet(injectWithdrawRange, currentInventory, inventoryLoss,
-                                        nextStepMinInventory, nextStepMaxInventory, NumericalTolerance);
+                                        nextStepMinInventory, nextStepMaxInventory, NumericalTolerance, numExtraDecisions);
             double[] expectedDecisionSet = new[] { injectWithdrawRange.MinInjectWithdrawRate, injectWithdrawRange.MaxInjectWithdrawRate };
             Assert.Equal(expectedDecisionSet, decisionSet);
         }
 
         [Fact]
-        public void CalculateBangBangDecisionSet_InjectWithdrawRangeBothNegativeUnconstrained_ReturnsMinAndMaxRate()
+        [Trait("Category", "Helper.BangBangDecisions")]
+        public void CalculateBangBangDecisionSet_InjectWithdrawRangeBothPositiveUnconstrainedWithExtraDecisions_ReturnsMinAndMaxRateWithExtraDecisions()
+        {
+            var injectWithdrawRange = new InjectWithdrawRange(15.5, 65.685);
+            const double currentInventory = 1010.0;
+            const double inventoryLoss = 10.0;
+            const double nextStepMinInventory = 900.0;
+            const double nextStepMaxInventory = 1070.0;
+            const int numExtraDecisions = 1;
+            
+            double[] decisionSet = StorageHelper.CalculateBangBangDecisionSet(injectWithdrawRange, currentInventory, inventoryLoss,
+                nextStepMinInventory, nextStepMaxInventory, NumericalTolerance, numExtraDecisions);
+            double[] expectedDecisionSet = new[] { injectWithdrawRange.MinInjectWithdrawRate, 
+                (injectWithdrawRange.MinInjectWithdrawRate + injectWithdrawRange.MaxInjectWithdrawRate)/2.0 , injectWithdrawRange.MaxInjectWithdrawRate };
+            Assert.Equal(expectedDecisionSet, decisionSet);
+        }
+
+        [Fact]
+        [Trait("Category", "Helper.BangBangDecisions")]
+        public void CalculateBangBangDecisionSet_InjectWithdrawRangeBothNegativeUnconstrainedNoExtraDecisions_ReturnsMinAndMaxRate()
         {
             var injectWithdrawRange = new InjectWithdrawRange(-65.685, -41.5);
             const double currentInventory = 1000.0;
             const double inventoryLoss = 10.0;
             const double nextStepMinInventory = 900.0;
             const double nextStepMaxInventory = 950.0;
-
+            const int numExtraDecisions = 0;
+            
             double[] decisionSet = StorageHelper.CalculateBangBangDecisionSet(injectWithdrawRange, currentInventory, inventoryLoss,
-                                        nextStepMinInventory, nextStepMaxInventory, NumericalTolerance);
+                                        nextStepMinInventory, nextStepMaxInventory, NumericalTolerance, numExtraDecisions);
             double[] expectedDecisionSet = new[] { injectWithdrawRange.MinInjectWithdrawRate, injectWithdrawRange.MaxInjectWithdrawRate };
             Assert.Equal(expectedDecisionSet, decisionSet);
         }
 
         [Fact]
+        [Trait("Category", "Helper.BangBangDecisions")]
+        public void CalculateBangBangDecisionSet_InjectWithdrawRangeBothNegativeUnconstrainedWithExtraDecisions_ReturnsMinAndMaxRateWithExtraDecisions()
+        {
+            var injectWithdrawRange = new InjectWithdrawRange(-65.685, -41.5);
+            const double currentInventory = 1000.0;
+            const double inventoryLoss = 10.0;
+            const double nextStepMinInventory = 900.0;
+            const double nextStepMaxInventory = 950.0;
+            const int numExtraDecisions = 1;
+
+            double[] decisionSet = StorageHelper.CalculateBangBangDecisionSet(injectWithdrawRange, currentInventory, inventoryLoss,
+                nextStepMinInventory, nextStepMaxInventory, NumericalTolerance, numExtraDecisions);
+            double extraDecision = (injectWithdrawRange.MinInjectWithdrawRate + injectWithdrawRange.MaxInjectWithdrawRate) / 2.0;
+            double[] expectedDecisionSet = new[] { injectWithdrawRange.MinInjectWithdrawRate, extraDecision, injectWithdrawRange.MaxInjectWithdrawRate };
+            Assert.Equal(expectedDecisionSet, decisionSet);
+        }
+
+        [Fact]
+        [Trait("Category", "Helper.BangBangDecisions")]
         public void
             CalculateBangBangDecisionSet_NextStepInventoryConstrainsInjectionAndWithdrawalAroundCurrentInventory_ReturnsAdjustedInjectWithdrawRangeAndZero() // TODO rename!
         {
@@ -88,9 +150,10 @@ namespace Cmdty.Storage.Test
             const double inventoryLoss = 10.0;
             const double nextStepMinInventory = 991.87;
             const double nextStepMaxInventory = 1051.8;
+            const int numExtraDecisions = 0;
 
             double[] decisionSet = StorageHelper.CalculateBangBangDecisionSet(injectWithdrawRange, currentInventory, inventoryLoss,
-                                        nextStepMinInventory, nextStepMaxInventory, NumericalTolerance);
+                                        nextStepMinInventory, nextStepMaxInventory, NumericalTolerance, numExtraDecisions);
             double expectedWithdrawalRate = nextStepMaxInventory - currentInventory + inventoryLoss; 
             double expectedInjectionRate = nextStepMinInventory - currentInventory + inventoryLoss;
             double[] expectedDecisionSet = new[] { expectedInjectionRate, 0.0, expectedWithdrawalRate };
@@ -98,16 +161,38 @@ namespace Cmdty.Storage.Test
         }
 
         [Fact]
-        public void CalculateBangBangDecisionSet_NextStepInventoryConstrainsInjectionLowerThanCurrent_ReturnsArrayWithTwoValuesNoneZero()
+        [Trait("Category", "Helper.BangBangDecisions")]
+        public void
+            CalculateBangBangDecisionSet_NextStepInventoryConstrainsInjectionAndWithdrawalAroundCurrentInventoryExtraDecisions_ReturnsAdjustedInjectWithdrawRangeZeroAndExtraDecisions() // TODO rename!
+        {
+            var injectWithdrawRange = new InjectWithdrawRange(-15.5, 65.685);
+            const double currentInventory = 1010.0;
+            const double inventoryLoss = 10.0;
+            const double nextStepMinInventory = 991.87;
+            const double nextStepMaxInventory = 1051.8;
+            const int numExtraDecisions = 1;
+
+            double[] decisionSet = StorageHelper.CalculateBangBangDecisionSet(injectWithdrawRange, currentInventory, inventoryLoss,
+                nextStepMinInventory, nextStepMaxInventory, NumericalTolerance, numExtraDecisions);
+            double expectedWithdrawalRate = nextStepMaxInventory - currentInventory + inventoryLoss;
+            double expectedInjectionRate = nextStepMinInventory - currentInventory + inventoryLoss;
+            double[] expectedDecisionSet = new[] { expectedInjectionRate, expectedInjectionRate/2.0, 0.0, expectedWithdrawalRate/2.0, expectedWithdrawalRate };
+            Assert.Equal(expectedDecisionSet, decisionSet);
+        }
+
+        [Fact]
+        [Trait("Category", "Helper.BangBangDecisions")]
+        public void CalculateBangBangDecisionSet_NextStepInventoryConstrainsInjectionLowerThanCurrentNoExtraDecisions_ReturnsArrayWithTwoValuesNoneZero()
         {
             var injectWithdrawRange = new InjectWithdrawRange(-15.5, 65.685);
             const double currentInventory = 1010.0;
             const double inventoryLoss = 10.0;
             const double nextStepMinInventory = 900.00;
             const double nextStepMaxInventory = 995.8;
+            const int numExtraDecisions = 0;
 
             double[] decisionSet = StorageHelper.CalculateBangBangDecisionSet(injectWithdrawRange, currentInventory, inventoryLoss,
-                                        nextStepMinInventory, nextStepMaxInventory, NumericalTolerance);
+                                        nextStepMinInventory, nextStepMaxInventory, NumericalTolerance, numExtraDecisions);
             double expectedWithdrawalRate = injectWithdrawRange.MinInjectWithdrawRate;
             double expectedInjectionRate = nextStepMaxInventory - currentInventory + inventoryLoss;     // Negative injection, i.e. withdrawal
             double[] expectedDecisionSet = new[] { expectedWithdrawalRate, expectedInjectionRate };
@@ -115,25 +200,67 @@ namespace Cmdty.Storage.Test
         }
 
         [Fact]
-        public void CalculateBangBangDecisionSet_NextStepInventoryConstrainsWithdrawalHigherThanCurrent_ReturnsArrayWithTwoValuesNoneZero()
+        [Trait("Category", "Helper.BangBangDecisions")]
+        public void CalculateBangBangDecisionSet_NextStepInventoryConstrainsInjectionLowerThanCurrentWithExtraDecisions_ReturnsArrayWithThreeValuesNoneZero()
+        {
+            var injectWithdrawRange = new InjectWithdrawRange(-15.5, 65.685);
+            const double currentInventory = 1010.0;
+            const double inventoryLoss = 10.0;
+            const double nextStepMinInventory = 900.00;
+            const double nextStepMaxInventory = 995.8;
+            const int numExtraDecisions = 1;
+
+            double[] decisionSet = StorageHelper.CalculateBangBangDecisionSet(injectWithdrawRange, currentInventory, inventoryLoss,
+                nextStepMinInventory, nextStepMaxInventory, NumericalTolerance, numExtraDecisions);
+            double expectedWithdrawalRate = injectWithdrawRange.MinInjectWithdrawRate;
+            double expectedInjectionRate = nextStepMaxInventory - currentInventory + inventoryLoss;     // Negative injection, i.e. withdrawal
+            double extraDecision = (expectedWithdrawalRate + expectedInjectionRate) / 2.0;
+            double[] expectedDecisionSet = new[] { expectedWithdrawalRate, extraDecision, expectedInjectionRate };
+            Assert.Equal(expectedDecisionSet, decisionSet);
+        }
+
+        [Fact]
+        [Trait("Category", "Helper.BangBangDecisions")]
+        public void CalculateBangBangDecisionSet_NextStepInventoryConstrainsWithdrawalHigherThanCurrentNoExtraDecisions_ReturnsArrayWithTwoValuesNoneZero()
         {
             var injectWithdrawRange = new InjectWithdrawRange(-15.5, 65.685);
             const double currentInventory = 1010.0;
             const double inventoryLoss = 10.0;
             const double nextStepMinInventory = 1001.8;
             const double nextStepMaxInventory= 1009.51;
+            const int numExtraDecisions = 0;
 
             double[] decisionSet = StorageHelper.CalculateBangBangDecisionSet(injectWithdrawRange, currentInventory, inventoryLoss,
-                                    nextStepMinInventory, nextStepMaxInventory, NumericalTolerance);
+                                    nextStepMinInventory, nextStepMaxInventory, NumericalTolerance, numExtraDecisions);
             double expectedWithdrawalRate = nextStepMaxInventory - currentInventory + inventoryLoss;
             double expectedInjectionRate = nextStepMinInventory - currentInventory + inventoryLoss;     // Negative injection, i.e. withdrawal
             double[] expectedDecisionSet = new[] { expectedInjectionRate, expectedWithdrawalRate };
             Assert.Equal(expectedDecisionSet, decisionSet);
         }
 
+        [Fact]
+        [Trait("Category", "Helper.BangBangDecisions")]
+        public void CalculateBangBangDecisionSet_NextStepInventoryConstrainsWithdrawalHigherThanCurrentWihtExtraDecisions_ReturnsArrayWithThreeValuesNoneZero()
+        {
+            var injectWithdrawRange = new InjectWithdrawRange(-15.5, 65.685);
+            const double currentInventory = 1010.0;
+            const double inventoryLoss = 10.0;
+            const double nextStepMinInventory = 1001.8;
+            const double nextStepMaxInventory = 1009.51;
+            const int numExtraDecisions = 1;
+
+            double[] decisionSet = StorageHelper.CalculateBangBangDecisionSet(injectWithdrawRange, currentInventory, inventoryLoss,
+                nextStepMinInventory, nextStepMaxInventory, NumericalTolerance, numExtraDecisions);
+            double expectedWithdrawalRate = nextStepMaxInventory - currentInventory + inventoryLoss;
+            double expectedInjectionRate = nextStepMinInventory - currentInventory + inventoryLoss;     // Negative injection, i.e. withdrawal
+            double extraDecision = (expectedWithdrawalRate + expectedInjectionRate) / 2.0;
+            double[] expectedDecisionSet = new[] { expectedInjectionRate, extraDecision, expectedWithdrawalRate };
+            Assert.Equal(expectedDecisionSet, decisionSet);
+        }
         // TODO throws exception if constraints cannot be met
 
         [Fact]
+        [Trait("Category", "Helper.MaxValueAndIndex")]
         public void MaxValueAndIndex_ReturnsMaxValueAndIndex()
         {
             double[] array = {4.5, -1.2, 6.8, 3.2};
@@ -144,12 +271,14 @@ namespace Cmdty.Storage.Test
         }
 
         [Fact]
+        [Trait("Category", "Helper.MaxValueAndIndex")]
         public void MaxValueAndIndex_ArrayOfZeroLength_ThrowsIndexOutOfRangeException()
         {
             Assert.Throws<IndexOutOfRangeException>(() => StorageHelper.MaxValueAndIndex(new double[0]));
         }
 
         [Fact]
+        [Trait("Category", "Helper.CalculateInventorySpace")]
         public void CalculateInventorySpace_CurrentPeriodAfterStorageStartPeriod_AsExpected()
         {
             const double injectionRate = 5.0;
@@ -219,6 +348,7 @@ namespace Cmdty.Storage.Test
         }
         
         [Fact]
+        [Trait("Category", "Helper.CalculateInventorySpace")]
         public void CalculateInventorySpace_CurrentPeriodBeforeStorageStartPeriod_AsExpected()
         {
             const double injectionRate = 5.0;
@@ -297,6 +427,7 @@ namespace Cmdty.Storage.Test
         }
 
         [Fact]
+        [Trait("Category", "Helper.BisectInventorySpace")]
         public void BisectInventorySpace_InventoryEqualsHighestGridValue_ReturnsTopIndexMinusOneAndTopIndex()
         {
             var inventoryGrid = new[] { 0.0, 5.3, 9.5, 15.63, 25.8};
@@ -310,6 +441,7 @@ namespace Cmdty.Storage.Test
         }
 
         [Fact]
+        [Trait("Category", "Helper.BisectInventorySpace")]
         public void BisectInventorySpace_InventoryEqualsLowestGridValue_ReturnsBottomIndexAndBottomIndexPlusOne()
         {
             var inventoryGrid = new[] { 0.0, 5.3, 9.5, 15.63, 25.8 };
@@ -323,6 +455,7 @@ namespace Cmdty.Storage.Test
         }
 
         [Fact]
+        [Trait("Category", "Helper.BisectInventorySpace")]
         public void BisectInventorySpace_InventoryBetweenTopTwoValues_ReturnsTopIndexMinusOneAndTopIndex()
         {
             var inventoryGrid = new[] { 0.0, 5.3, 9.5, 15.63, 25.8 };
@@ -336,6 +469,7 @@ namespace Cmdty.Storage.Test
         }
 
         [Fact]
+        [Trait("Category", "Helper.BisectInventorySpace")]
         public void BisectInventorySpace_InventoryBetweenBottomTwoValues_ReturnsBottomIndexAndBottomIndexPlusOne()
         {
             var inventoryGrid = new[] { 0.0, 5.3, 9.5, 15.63, 25.8 };
@@ -349,6 +483,7 @@ namespace Cmdty.Storage.Test
         }
 
         [Fact]
+        [Trait("Category", "Helper.BisectInventorySpace")]
         public void BisectInventorySpace_InventoryEqualsSecondLowestValue_ReturnsBottomIndexPlusOneAndBottomIndexPlusTwo()
         {
             var inventoryGrid = new[] { 0.0, 5.3, 9.5, 15.63, 25.8 };
@@ -362,6 +497,7 @@ namespace Cmdty.Storage.Test
         }
 
         [Fact]
+        [Trait("Category", "Helper.BisectInventorySpace")]
         public void BisectInventorySpace_InventoryWithinGrid_AsExpected()
         {
             var inventoryGrid = new[] { 0.0, 5.3, 9.5, 15.63, 25.8 };
@@ -374,6 +510,7 @@ namespace Cmdty.Storage.Test
         }
 
         [Fact]
+        [Trait("Category", "Helper.BisectInventorySpace")]
         public void BisectInventorySpace_GridWithTwoPointsInventoryWithin_ReturnsZeroAndOne()
         {
             var inventoryGrid = new[] { 1.3, 2.8 };
@@ -386,6 +523,7 @@ namespace Cmdty.Storage.Test
         }
 
         [Fact]
+        [Trait("Category", "Helper.BisectInventorySpace")]
         public void BisectInventorySpace_GridWithTwoPointsInventoryEqualsLowestPoint_ReturnsZeroAndOne()
         {
             var inventoryGrid = new[] { 1.3, 2.8 };
@@ -398,6 +536,7 @@ namespace Cmdty.Storage.Test
         }
 
         [Fact]
+        [Trait("Category", "Helper.BisectInventorySpace")]
         public void BisectInventorySpace_GridWithTwoPointsInventoryEqualsUpperPoint_ReturnsZeroAndOne()
         {
             var inventoryGrid = new[] { 1.3, 2.8 };
@@ -410,6 +549,7 @@ namespace Cmdty.Storage.Test
         }
 
         [Fact]
+        [Trait("Category", "Helper.BisectInventorySpace")]
         public void BisectInventorySpace_SingleItemGridEqualsInventory_ReturnsTwoZeros()
         {
             var inventoryGrid = new[] { 1.3 };
@@ -422,6 +562,7 @@ namespace Cmdty.Storage.Test
         }
 
         [Fact]
+        [Trait("Category", "Helper.BisectInventorySpace")]
         public void BisectInventorySpace_InventoryHigherThanRange_Throws()
         {
             var inventoryGrid = new[] { 0.0, 5.3, 9.5, 15.63, 25.8 };
@@ -431,6 +572,7 @@ namespace Cmdty.Storage.Test
         }
 
         [Fact]
+        [Trait("Category", "Helper.BisectInventorySpace")]
         public void BisectInventorySpace_InventoryLowerThanRange_Throws()
         {
             var inventoryGrid = new[] { 0.0, 5.3, 9.5, 15.63, 25.8 };

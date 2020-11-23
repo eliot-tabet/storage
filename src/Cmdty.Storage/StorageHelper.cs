@@ -107,10 +107,12 @@ namespace Cmdty.Storage
         }
 
         public static double[] CalculateBangBangDecisionSet(InjectWithdrawRange injectWithdrawRange, double currentInventory, double inventoryLoss,
-                                        double nextStepMinInventory, double nextStepMaxInventory, double numericalTolerance)
+                                        double nextStepMinInventory, double nextStepMaxInventory, double numericalTolerance, int numExtraDecisions=0) // TODO remove default value of zero
         {
             if (nextStepMinInventory > nextStepMaxInventory)
-                throw new ArgumentException($"Parameter {nameof(nextStepMinInventory)} value cannot be higher than parameter {nameof(nextStepMaxInventory)} value");
+                throw new ArgumentException($"Parameter {nameof(nextStepMinInventory)} value cannot be higher than parameter {nameof(nextStepMaxInventory)} value.");
+            if (numExtraDecisions < 0)
+                throw new ArgumentException($"Parameter {nameof(numExtraDecisions)} must be non-negative.", nameof(numExtraDecisions));
 
             double inventoryAfterLoss = currentInventory - inventoryLoss;
 
@@ -165,18 +167,42 @@ namespace Cmdty.Storage
             double[] decisionSet;
             if (yieldedWithdrawalRate >= 0.0 || yieldedInjectionRate <= 0.0) // No zero decision
             {
-                decisionSet = new double[] {yieldedWithdrawalRate, yieldedInjectionRate};
+                if (numExtraDecisions > 0)
+                {
+                    decisionSet = new double[numExtraDecisions + 2];
+                    decisionSet[0] = yieldedWithdrawalRate;
+                    decisionSet[decisionSet.Length - 1] = yieldedInjectionRate;
+                    PopulateExtraDecisions(yieldedWithdrawalRate, yieldedInjectionRate, numExtraDecisions, new Span<double>(decisionSet, 1, numExtraDecisions));
+                }
+                else
+                    decisionSet = new double[] {yieldedWithdrawalRate, yieldedInjectionRate};
             }
             else
             {
-                decisionSet = new double[] { yieldedWithdrawalRate, 0.0, yieldedInjectionRate };
+                if (numExtraDecisions > 0)
+                {
+                    decisionSet = new double[numExtraDecisions * 2 + 3];
+                    decisionSet[0] = yieldedWithdrawalRate;
+                    decisionSet[decisionSet.Length - 1] = yieldedInjectionRate;
+                    PopulateExtraDecisions(yieldedWithdrawalRate, 0, numExtraDecisions, new Span<double>(decisionSet, 1, numExtraDecisions));
+                    PopulateExtraDecisions(0, yieldedInjectionRate, numExtraDecisions, new Span<double>(decisionSet, numExtraDecisions + 2, numExtraDecisions));
+                }
+                else
+                    decisionSet = new double[] { yieldedWithdrawalRate, 0.0, yieldedInjectionRate };
             }
 
             return decisionSet;
 
             // TODO case of yieldedWithdrawalRate equals to yieldedInjectionRate?
         }
-        
+
+        private static void PopulateExtraDecisions(double min, double max, int extraDecisions, Span<double> results)
+        {
+            double increment = (max - min) / (extraDecisions + 1);
+            for (int i = 0; i < extraDecisions; i++)
+                results[i] = (i + 1) * increment + min;
+        }
+
         public static (double Max, int IndexOfMax) MaxValueAndIndex(double[] array)
         {
             double max = array[0];
