@@ -223,7 +223,7 @@ namespace Cmdty.Storage
                     InjectWithdrawRange injectWithdrawRange = lsmcParams.Storage.GetInjectWithdrawRange(period, inventory);
                     double inventoryLoss = lsmcParams.Storage.CmdtyInventoryPercentLoss(period) * inventory;
                     double[] decisionSet = StorageHelper.CalculateBangBangDecisionSet(injectWithdrawRange, inventory, inventoryLoss,
-                        nextStepInventorySpaceMin, nextStepInventorySpaceMax, lsmcParams.NumericalTolerance);
+                        nextStepInventorySpaceMin, nextStepInventorySpaceMax, lsmcParams.NumericalTolerance, lsmcParams.ExtraDecisions);
                     IReadOnlyList<DomesticCashFlow> inventoryCostCashFlows = lsmcParams.Storage.CmdtyInventoryCost(period, inventory);
                     double inventoryCostNpv = inventoryCostCashFlows.Sum(cashFlow => cashFlow.Amount * DiscountToCurrentDay(cashFlow.Date));
 
@@ -382,7 +382,7 @@ namespace Cmdty.Storage
                     InjectWithdrawRange injectWithdrawRange = lsmcParams.Storage.GetInjectWithdrawRange(period, inventory);
                     double inventoryLoss = lsmcParams.Storage.CmdtyInventoryPercentLoss(period) * inventory;
                     double[] decisionSet = StorageHelper.CalculateBangBangDecisionSet(injectWithdrawRange, inventory,
-                        inventoryLoss, nextStepInventorySpaceMin, nextStepInventorySpaceMax, lsmcParams.NumericalTolerance);
+                        inventoryLoss, nextStepInventorySpaceMin, nextStepInventorySpaceMax, lsmcParams.NumericalTolerance, lsmcParams.ExtraDecisions);
                     IReadOnlyList<DomesticCashFlow> inventoryCostCashFlows = lsmcParams.Storage.CmdtyInventoryCost(period, inventory);
                     double inventoryCostNpv = inventoryCostCashFlows.Sum(cashFlow => cashFlow.Amount * DiscountToCurrentDay(cashFlow.Date));
 
@@ -496,14 +496,17 @@ namespace Cmdty.Storage
                 InjectWithdrawRange injectWithdrawRange = lsmcParams.Storage.GetInjectWithdrawRange(period, expectedInventory);
                 double inventoryLoss = lsmcParams.Storage.CmdtyInventoryPercentLoss(period) * expectedInventory;
                 double[] decisionSet = StorageHelper.CalculateBangBangDecisionSet(injectWithdrawRange, expectedInventory,
-                    inventoryLoss, nextStepInventorySpaceMin, nextStepInventorySpaceMax, lsmcParams.NumericalTolerance);
+                    inventoryLoss, nextStepInventorySpaceMin, nextStepInventorySpaceMax, lsmcParams.NumericalTolerance, lsmcParams.ExtraDecisions);
 
                 double maxInjectVolume = decisionSet.Max();
                 var injectTriggerPrices = new List<TriggerPricePoint>();
                 var triggerPricesBuilder = new TriggerPrices.Builder();
                 if (maxInjectVolume > 0)
                 {
-                    double alternativeVolume = decisionSet.OrderByDescending(d => d).ElementAt(1); // Second highest decision volume, usually will be zero, but might not due to forced injection
+                    double alternativeVolume = decisionSet
+                        .Where(d => d >= 0)
+                        .OrderBy(d => d)
+                        .First(); // Probably zero, but might not due to forced injection, in which case the lowest injection rate
                     if (maxInjectVolume > alternativeVolume)
                     {
                         (double alternativeContinuationValue, double alternativeDecisionCost, double alternativeCmdtyConsumed) = 
@@ -527,7 +530,10 @@ namespace Cmdty.Storage
                 var withdrawTriggerPrices = new List<TriggerPricePoint>();
                 if (maxWithdrawVolume < 0)
                 {
-                    double alternativeVolume = decisionSet.OrderBy(d => d).ElementAt(1); // Second lowest decision volume, usually will be zero, but might not due to forced withdrawal
+                    double alternativeVolume = decisionSet
+                        .Where(d => d <= 0)
+                        .OrderByDescending(d => d)
+                        .First(); // Probably zero, but might not due to forced withdrawal, in which case lowest withdrawal
                     if (maxWithdrawVolume < alternativeVolume)
                     {
                         (double alternativeContinuationValue, double alternativeDecisionCost, double alternativeCmdtyConsumed) =

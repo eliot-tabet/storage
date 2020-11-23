@@ -52,11 +52,12 @@ namespace Cmdty.Storage
         public CancellationToken CancellationToken { get; }
         public Action<double> OnProgressUpdate { get; }
         public bool DiscountDeltas { get; }
-        
+        public int ExtraDecisions { get; }
+
         private LsmcValuationParameters(T currentPeriod, double inventory, TimeSeries<T, double> forwardCurve, 
             ICmdtyStorage<T> storage, Func<T, Day> settleDateRule, Func<Day, Day, double> discountFactors, IDoubleStateSpaceGridCalc gridCalc, 
             double numericalTolerance, SimulateSpotPrice spotSims, IEnumerable<BasisFunction> basisFunctions, CancellationToken cancellationToken, 
-            bool discountDeltas, Action<double> onProgressUpdate = null)
+            bool discountDeltas, int extraDecisions, Action<double> onProgressUpdate = null)
         {
             CurrentPeriod = currentPeriod;
             Inventory = inventory;
@@ -70,6 +71,7 @@ namespace Cmdty.Storage
             BasisFunctions = basisFunctions.ToArray();
             CancellationToken = cancellationToken;
             DiscountDeltas = discountDeltas;
+            ExtraDecisions = extraDecisions;
             OnProgressUpdate = onProgressUpdate;
         }
 
@@ -89,6 +91,8 @@ namespace Cmdty.Storage
             public IEnumerable<BasisFunction> BasisFunctions { get; set; }
             public CancellationToken CancellationToken { get; set; }
             public Action<double> OnProgressUpdate { get; set; }
+            public int ExtraDecisions { get; set; }
+
             public bool DiscountDeltas { get; set; }
             private T _currentPeriod;
             private bool _currentPeriodSet;
@@ -121,11 +125,13 @@ namespace Cmdty.Storage
                 ThrowIfNotSet(GridCalc, nameof(GridCalc));
                 ThrowIfNotSet(SpotSimsGenerator, nameof(SpotSimsGenerator));
                 ThrowIfNotSet(BasisFunctions, nameof(BasisFunctions));
+                if (ExtraDecisions < 0)
+                    throw new InvalidOperationException(nameof(ExtraDecisions) + " must be non-negative.");
 
                 // ReSharper disable once PossibleInvalidOperationException
                 return new LsmcValuationParameters<T>(CurrentPeriod, Inventory.Value, ForwardCurve, Storage, SettleDateRule, 
                     DiscountFactors, GridCalc, NumericalTolerance, SpotSimsGenerator, BasisFunctions, CancellationToken, 
-                    DiscountDeltas, OnProgressUpdate);
+                    DiscountDeltas, ExtraDecisions, OnProgressUpdate);
             }
 
             // ReSharper disable once ParameterOnlyUsedForPreconditionCheck.Local

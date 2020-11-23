@@ -209,6 +209,7 @@ btn_plot_vol.on_click(btn_plot_vol_clicked)
 
 # Technical Parameters
 num_sims_wgt = ipw.IntText(description='Num Sims', value=1000, step=500)
+extra_decisions_wgt = ipw.IntText(description='Extra Decisions', value=0, step=1)
 seed_is_random_wgt = ipw.Checkbox(description='Seed is Random', value=False)
 random_seed_wgt = ipw.IntText(description='Seed', value=11)
 grid_points_wgt = ipw.IntText(description='Grid Points', value=100, step=10)
@@ -233,7 +234,7 @@ def on_seed_is_random_change(change):
 
 seed_is_random_wgt.observe(on_seed_is_random_change, names='value')
 
-tech_params_wgt = ipw.HBox([ipw.VBox([num_sims_wgt, seed_is_random_wgt, random_seed_wgt, grid_points_wgt, 
+tech_params_wgt = ipw.HBox([ipw.VBox([num_sims_wgt, extra_decisions_wgt, seed_is_random_wgt, random_seed_wgt, grid_points_wgt, 
                             num_tol_wgt]), basis_func_wgt])
 
 tab_in_titles = ['Valuation Data', 'Forward Curve', 'Storage Details', 'Volatility Params', 'Technical Params']
@@ -324,7 +325,7 @@ def btn_clicked(b):
                                     long_term_vol=lt_vol_wgt.value, seasonal_vol=seas_vol_wgt.value,
                                     num_sims=num_sims_wgt.value, 
                                     basis_funcs=basis_funcs_input_wgt.value, discount_deltas = discount_deltas_wgt.value,
-                                    seed=seed,
+                                    seed=seed, extra_decisions=extra_decisions_wgt.value,
                                     num_inventory_grid_points=grid_points_wgt.value, on_progress_update=on_progress,
                                     numerical_tolerance=num_tol_wgt.value)
         logger.info('Valuation completed without error.')
