@@ -213,18 +213,19 @@ class TestMultiFactorValue(unittest.TestCase):
         num_sims = 500
         seed = 11
         basis_funcs = '1 + x0 + x0**2 + x1 + x1*x1'
+        discount_deltas = False
 
         multi_factor_val = multi_factor_value(cmdty_storage, val_date, inventory, forward_curve,
                                               interest_rate_curve, twentieth_of_next_month,
                                               factors, factor_corrs, num_sims,
-                                              basis_funcs, seed,
+                                              basis_funcs, discount_deltas, seed,
                                               on_progress_update=on_progress)
         self.assertAlmostEqual(multi_factor_val.npv, 1779708.1119639324, places=6)
         self.assertEqual(123, len(multi_factor_val.deltas)) # TODO look into why deltas is longer the intrinsic profile
         self.assertEqual(123, len(multi_factor_val.expected_profile))
         self.assertEqual(progresses[-1], 1.0)
         self.assertEqual(245, len(progresses))
-        self.assertEqual(1704932.469750808, multi_factor_val.intrinsic_npv)
+        self.assertEqual(1704932.4697508093, multi_factor_val.intrinsic_npv)
         self.assertEqual(122, len(multi_factor_val.intrinsic_profile))
         self.assertEqual((123, num_sims), multi_factor_val.sim_spot.shape)
         self.assertEqual((123, num_sims), multi_factor_val.sim_inventory.shape)
@@ -277,20 +278,23 @@ class TestMultiFactorValue(unittest.TestCase):
         num_sims = 500
         seed = 11
         basis_funcs = '1 + x_st + x_sw + x_lt + x_st**2 + x_sw**2 + x_lt**2'
+        discount_deltas = False
 
         multi_factor_val = three_factor_seasonal_value(cmdty_storage, val_date, inventory, forward_curve,
                                                        interest_rate_curve, twentieth_of_next_month,
                                                        spot_mean_reversion, spot_volatility, long_term_vol,
                                                        seasonal_volatility,
                                                        num_sims,
-                                                       basis_funcs, seed,
+                                                       basis_funcs,
+                                                       discount_deltas,
+                                                       seed=seed,
                                                        on_progress_update=on_progress)
         self.assertAlmostEqual(multi_factor_val.npv, 1766157.090481408, places=6)
         self.assertEqual(123, len(multi_factor_val.deltas))  # TODO look into why deltas is longer the intrinsic profile
         self.assertEqual(123, len(multi_factor_val.expected_profile))
         self.assertEqual(progresses[-1], 1.0)
         self.assertEqual(245, len(progresses))
-        self.assertEqual(1704932.469750808, multi_factor_val.intrinsic_npv)
+        self.assertEqual(1704932.4697508093, multi_factor_val.intrinsic_npv)
         self.assertEqual(122, len(multi_factor_val.intrinsic_profile))
         self.assertEqual((123, num_sims), multi_factor_val.sim_spot.shape)
         self.assertEqual((123, num_sims), multi_factor_val.sim_inventory.shape)

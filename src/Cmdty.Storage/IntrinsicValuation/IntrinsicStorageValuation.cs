@@ -232,7 +232,7 @@ namespace Cmdty.Storage
                 double cmdtyPrice = forwardCurve[periodLoop];
                 Func<double, double> continuationValueByInventory = storageValueByInventory[i];
                 (double nextStepInventorySpaceMin, double nextStepInventorySpaceMax) = inventorySpace[periodLoop.Offset(1)];
-                (double storageNpvLoop, double optimalInjectWithdraw, double cmdtyConsumedOnAction, double inventoryLoss) = 
+                (double storageNpvLoop, double optimalInjectWithdraw, double cmdtyConsumedOnAction, double inventoryLoss, double optimalPeriodPv) = 
                                         OptimalDecisionAndValue(storage, periodLoop, inventoryLoop, nextStepInventorySpaceMin,
                                             nextStepInventorySpaceMax, cmdtyPrice, continuationValueByInventory, discountFactorFromCmdtySettlement,
                                             DiscountToCurrentDay, numericalTolerance);
@@ -242,7 +242,7 @@ namespace Cmdty.Storage
                     storageNpv = storageNpvLoop;
 
                 double netVolume = -optimalInjectWithdraw - cmdtyConsumedOnAction;
-                var storageProfile = new StorageProfile(inventoryLoop, optimalInjectWithdraw, cmdtyConsumedOnAction, inventoryLoss, netVolume);
+                var storageProfile = new StorageProfile(inventoryLoop, optimalInjectWithdraw, cmdtyConsumedOnAction, inventoryLoss, netVolume, optimalPeriodPv);
                 storageProfiles[i] = storageProfile;
                 periods[i] = periodLoop;
             }
@@ -250,7 +250,7 @@ namespace Cmdty.Storage
             return new IntrinsicStorageValuationResults<T>(storageNpv, new TimeSeries<T, StorageProfile>(periods, storageProfiles));
         }
 
-        private static (double StorageNpv, double OptimalInjectWithdraw, double CmdtyConsumedOnAction, double InventoryLoss) 
+        private static (double StorageNpv, double OptimalInjectWithdraw, double CmdtyConsumedOnAction, double InventoryLoss, double PeriodPv) 
             OptimalDecisionAndValue(ICmdtyStorage<T> storage, T period, double inventory,
             double nextStepInventorySpaceMin, double nextStepInventorySpaceMax, double cmdtyPrice,
             Func<double, double> continuationValueByInventory, double discountFactorFromCmdtySettlement, 
@@ -262,21 +262,24 @@ namespace Cmdty.Storage
                                                     nextStepInventorySpaceMin, nextStepInventorySpaceMax, numericalTolerance);
             var valuesForDecision = new double[decisionSet.Length];
             var cmdtyConsumedForDecision = new double[decisionSet.Length];
+            var periodPvForDecision = new double[decisionSet.Length];
+
             for (var j = 0; j < decisionSet.Length; j++)
             {
                 double decisionInjectWithdraw = decisionSet[j];
-                (valuesForDecision[j], cmdtyConsumedForDecision[j]) = StorageValueForDecision(storage, period, inventory, inventoryLoss,
+                (valuesForDecision[j], cmdtyConsumedForDecision[j], periodPvForDecision[j]) = StorageValueForDecision(storage, period, inventory, inventoryLoss,
                     decisionInjectWithdraw, cmdtyPrice, continuationValueByInventory, discountFactorFromCmdtySettlement, discountFactors);
             }
 
             (double storageNpv, int indexOfOptimalDecision) = StorageHelper.MaxValueAndIndex(valuesForDecision);
 
             return (StorageNpv: storageNpv, OptimalInjectWithdraw: decisionSet[indexOfOptimalDecision], 
-                    CmdtyConsumedOnAction: cmdtyConsumedForDecision[indexOfOptimalDecision], InventoryLoss: inventoryLoss);
+                    CmdtyConsumedOnAction: cmdtyConsumedForDecision[indexOfOptimalDecision], 
+                    InventoryLoss: inventoryLoss, PeriodPv: periodPvForDecision[indexOfOptimalDecision]);
         }
 
 
-        private static (double StorageNpv, double CmdtyConsumed) StorageValueForDecision(
+        private static (double StorageNpv, double CmdtyConsumed, double PeriodPv) StorageValueForDecision(
                         ICmdtyStorage<T> storage, T period, double inventory, double inventoryLoss,
                         double injectWithdrawVolume, double cmdtyPrice, Func<double, double> continuationValueInterpolated, 
                         double discountFactorFromCmdtySettlement, Func<Day, double> discountFactors)
@@ -303,9 +306,10 @@ namespace Cmdty.Storage
             // Note that calculations assume that decision volumes do NOT include volumes consumed, and that these volumes are purchased in the market
             double cmdtyUsedForInjectWithdrawNpv = -cmdtyUsedForInjectWithdrawVolume * cmdtyPrice * discountFactorFromCmdtySettlement;
 
-            double storageNpv = continuationFutureNpv + injectWithdrawNpv - decisionCostNpv + cmdtyUsedForInjectWithdrawNpv - inventoryCostNpv;
+            double periodPv = injectWithdrawNpv - decisionCostNpv + cmdtyUsedForInjectWithdrawNpv - inventoryCostNpv;
+            double storageNpv = continuationFutureNpv + periodPv;
 
-            return (StorageNpv: storageNpv, CmdtyConsumed: cmdtyUsedForInjectWithdrawVolume);
+            return (StorageNpv: storageNpv, CmdtyConsumed: cmdtyUsedForInjectWithdrawVolume, PeriodPv: periodPv);
         }
     }
 }

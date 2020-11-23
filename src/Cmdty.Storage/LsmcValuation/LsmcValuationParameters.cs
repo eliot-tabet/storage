@@ -51,11 +51,12 @@ namespace Cmdty.Storage
         public IEnumerable<BasisFunction> BasisFunctions { get; }
         public CancellationToken CancellationToken { get; }
         public Action<double> OnProgressUpdate { get; }
+        public bool DiscountDeltas { get; }
         
         private LsmcValuationParameters(T currentPeriod, double inventory, TimeSeries<T, double> forwardCurve, 
             ICmdtyStorage<T> storage, Func<T, Day> settleDateRule, Func<Day, Day, double> discountFactors, IDoubleStateSpaceGridCalc gridCalc, 
             double numericalTolerance, SimulateSpotPrice spotSims, IEnumerable<BasisFunction> basisFunctions, CancellationToken cancellationToken, 
-            Action<double> onProgressUpdate = null)
+            bool discountDeltas, Action<double> onProgressUpdate = null)
         {
             CurrentPeriod = currentPeriod;
             Inventory = inventory;
@@ -68,6 +69,7 @@ namespace Cmdty.Storage
             SpotSimsGenerator = () => spotSims(CurrentPeriod, storage.StartPeriod, storage.EndPeriod, forwardCurve);
             BasisFunctions = basisFunctions.ToArray();
             CancellationToken = cancellationToken;
+            DiscountDeltas = discountDeltas;
             OnProgressUpdate = onProgressUpdate;
         }
 
@@ -87,6 +89,7 @@ namespace Cmdty.Storage
             public IEnumerable<BasisFunction> BasisFunctions { get; set; }
             public CancellationToken CancellationToken { get; set; }
             public Action<double> OnProgressUpdate { get; set; }
+            public bool DiscountDeltas { get; set; }
             private T _currentPeriod;
             private bool _currentPeriodSet;
 
@@ -121,7 +124,8 @@ namespace Cmdty.Storage
 
                 // ReSharper disable once PossibleInvalidOperationException
                 return new LsmcValuationParameters<T>(CurrentPeriod, Inventory.Value, ForwardCurve, Storage, SettleDateRule, 
-                    DiscountFactors, GridCalc, NumericalTolerance, SpotSimsGenerator, BasisFunctions, CancellationToken, OnProgressUpdate);
+                    DiscountFactors, GridCalc, NumericalTolerance, SpotSimsGenerator, BasisFunctions, CancellationToken, 
+                    DiscountDeltas, OnProgressUpdate);
             }
 
             // ReSharper disable once ParameterOnlyUsedForPreconditionCheck.Local
@@ -133,6 +137,12 @@ namespace Cmdty.Storage
 
             public Builder SimulateWithMultiFactorModel(
                 IStandardNormalGenerator normalGenerator, [NotNull] MultiFactorParameters<T> modelParameters, int numSims)
+            {
+                return SimulateWithMultiFactorModel(() => normalGenerator, modelParameters, numSims);
+            }
+
+            public Builder SimulateWithMultiFactorModel(
+                Func<IStandardNormalGenerator> normalGenerator, [NotNull] MultiFactorParameters<T> modelParameters, int numSims)
             {
                 if (modelParameters == null) throw new ArgumentNullException(nameof(modelParameters));
                 SpotSimsGenerator = (currentPeriod, storageStart, storageEnd, forwardCurve) =>
@@ -148,20 +158,21 @@ namespace Cmdty.Storage
                     T simStart = new[] { currentPeriod.Offset(1), storageStart }.Max();
                     var simulatedPeriods = simStart.EnumerateTo(storageEnd);
                     var simulator = new MultiFactorSpotPriceSimulator<T>(modelParameters, currentDate, 
-                        forwardCurve, simulatedPeriods, TimeFunctions.Act365, normalGenerator);
+                        forwardCurve, simulatedPeriods, TimeFunctions.Act365, normalGenerator());
                     return simulator.Simulate(numSims);
                 };
-
                 return this;
             }
 
             public Builder SimulateWithMultiFactorModelAndMersenneTwister(
-                MultiFactorParameters<T> modelParameters,
-                int numSims, int? seed = null)
+                                        MultiFactorParameters<T> modelParameters, int numSims, int? seed = null)
             {
-                var normalGenerator = seed == null ? new MersenneTwisterGenerator(true) :
-                    new MersenneTwisterGenerator(seed.Value, true);
-                return SimulateWithMultiFactorModel(normalGenerator, modelParameters, numSims);
+                IStandardNormalGenerator CreateMersenneTwister()
+                {
+                    var normalGenerator = seed == null ? new MersenneTwisterGenerator(true) : new MersenneTwisterGenerator(seed.Value, true);
+                    return normalGenerator;
+                }                
+                return SimulateWithMultiFactorModel(CreateMersenneTwister, modelParameters, numSims);
             }
 
             public Builder Clone()

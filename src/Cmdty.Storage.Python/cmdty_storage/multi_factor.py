@@ -311,6 +311,7 @@ class MultiFactorValuationResults(tp.NamedTuple):
     sim_cmdty_consumed: pd.DataFrame
     sim_inventory_loss: pd.DataFrame
     sim_net_volume: pd.DataFrame
+    sim_pv: pd.DataFrame
     trigger_prices: pd.DataFrame
     trigger_profiles: pd.Series
 
@@ -331,6 +332,7 @@ def three_factor_seasonal_value(cmdty_storage: CmdtyStorage,
                                 seasonal_vol: float,
                                 num_sims: int,
                                 basis_funcs: str,
+                                discount_deltas: bool,
                                 seed: tp.Optional[int] = None,
                                 num_inventory_grid_points: int = 100,
                                 numerical_tolerance: float = 1E-12,
@@ -346,7 +348,7 @@ def three_factor_seasonal_value(cmdty_storage: CmdtyStorage,
     return _net_multi_factor_calc(cmdty_storage, fwd_curve, interest_rates, inventory, net_multi_factor_params,
                                   num_inventory_grid_points, num_sims, numerical_tolerance, on_progress_update,
                                   basis_func_transformed, seed, settlement_rule, time_period_type,
-                                  val_date)
+                                  val_date, discount_deltas)
 
 
 def multi_factor_value(cmdty_storage: CmdtyStorage,
@@ -359,6 +361,7 @@ def multi_factor_value(cmdty_storage: CmdtyStorage,
                        factor_corrs: FactorCorrsType,
                        num_sims: int,
                        basis_funcs: str,
+                       discount_deltas: bool,
                        seed: tp.Optional[int] = None,
                        num_inventory_grid_points: int = 100,
                        numerical_tolerance: float = 1E-12,
@@ -372,13 +375,13 @@ def multi_factor_value(cmdty_storage: CmdtyStorage,
     return _net_multi_factor_calc(cmdty_storage, fwd_curve, interest_rates, inventory, net_multi_factor_params,
                                   num_inventory_grid_points, num_sims, numerical_tolerance, on_progress_update,
                                   basis_funcs, seed, settlement_rule, time_period_type,
-                                  val_date)
+                                  val_date, discount_deltas)
 
 
 def _net_multi_factor_calc(cmdty_storage, fwd_curve, interest_rates, inventory, net_multi_factor_params,
                            num_inventory_grid_points, num_sims, numerical_tolerance, on_progress_update,
                            basis_funcs, seed, settlement_rule, time_period_type,
-                           val_date):
+                           val_date, discount_deltas):
     # Convert inputs to .NET types
     net_forward_curve = utils.series_to_double_time_series(fwd_curve, time_period_type)
     net_current_period = utils.from_datetime_like(val_date, time_period_type)
@@ -417,6 +420,7 @@ def _net_multi_factor_calc(cmdty_storage, fwd_curve, interest_rates, inventory, 
     net_lsmc_params_builder.BasisFunctions = net_basis_functions
     if net_on_progress is not None:
         net_lsmc_params_builder.OnProgressUpdate = net_on_progress
+    net_lsmc_params_builder.DiscountDeltas = discount_deltas
     net_lsmc_params_builder.SimulateWithMultiFactorModelAndMersenneTwister(net_multi_factor_params, num_sims, seed)
     net_lsmc_params = net_lsmc_params_builder.Build()
     net_val_results = lsmc.Calculate[time_period_type](net_lsmc_params)
@@ -433,12 +437,13 @@ def _net_multi_factor_calc(cmdty_storage, fwd_curve, interest_rates, inventory, 
     sim_cmdty_consumed = utils.net_panel_to_data_frame(net_val_results.CmdtyConsumedBySim, cmdty_storage.freq)
     sim_inventory_loss = utils.net_panel_to_data_frame(net_val_results.InventoryLossBySim, cmdty_storage.freq)
     sim_net_volume = utils.net_panel_to_data_frame(net_val_results.NetVolumeBySim, cmdty_storage.freq)
+    sim_pv = utils.net_panel_to_data_frame(net_val_results.PvByPeriodAndSim, cmdty_storage.freq)
 
     return MultiFactorValuationResults(net_val_results.Npv, deltas, expected_profile,
                                        intrinsic_result.npv,
                                        intrinsic_result.profile, sim_spot, sim_inventory, sim_inject_withdraw,
-                                       sim_cmdty_consumed, sim_inventory_loss, sim_net_volume, trigger_prices,
-                                       trigger_profiles)
+                                       sim_cmdty_consumed, sim_inventory_loss, sim_net_volume, sim_pv,
+                                       trigger_prices, trigger_profiles)
 
 
 def _trigger_prices_to_data_frame(freq, net_trigger_prices) -> pd.DataFrame:

@@ -837,6 +837,32 @@ namespace Cmdty.Storage.Test
         }
 
         [Fact]
+        [Trait("Category", "Lsmc.Deltas")]
+        public void Calculate_DiscountDeltasTrue_DeltasEqualUndiscountedDeltasTimeDiscountFactor()
+        {
+            const int numSims = 100;
+            var paramsBuilder = _1FactorParamsBuilder.Clone()
+                .SimulateWithMultiFactorModelAndMersenneTwister(MultiFactorParameters.For1Factor(16.5, _oneFactorFlatSpotVols), numSims, RandomSeed);
+            paramsBuilder.Storage = _simpleDailyStorage;
+            LsmcValuationParameters<Day> lsmcParamsDiscountDeltasFalse = paramsBuilder.Build();
+            paramsBuilder.DiscountDeltas = true;
+            LsmcValuationParameters<Day> lsmcDiscountDeltasTrue = paramsBuilder.Build();
+
+            LsmcStorageValuationResults<Day> lsmcResultsDeltasNotDiscounted = LsmcStorageValuation.WithNoLogger.Calculate(lsmcParamsDiscountDeltasFalse);
+            LsmcStorageValuationResults<Day> lsmcResultsDeltasDiscounted = LsmcStorageValuation.WithNoLogger.Calculate(lsmcDiscountDeltasTrue);
+
+            foreach (Day day in lsmcResultsDeltasNotDiscounted.Deltas.Indices)
+            {
+                double deltaDiscounted = lsmcResultsDeltasDiscounted.Deltas[day];
+                double deltaNotDiscounted = lsmcResultsDeltasNotDiscounted.Deltas[day];
+                Day settleDate = paramsBuilder.SettleDateRule(day);
+                double discountFactor = paramsBuilder.DiscountFactors(paramsBuilder.CurrentPeriod, settleDate);
+                double expectedDiscountedDelta = deltaNotDiscounted * discountFactor;
+                Assert.Equal(expectedDiscountedDelta, deltaDiscounted);
+            }
+        }
+
+        [Fact]
         [Trait("Category", "Lsmc.Ancillary")]
         public void Calculate_OnProgressCalledWithArgumentsInAscendingOrderBetweenZeroAndOne()
         {
@@ -848,6 +874,7 @@ namespace Cmdty.Storage.Test
             paramsBuilder.OnProgressUpdate = progressPcnt => progresses.Add(progressPcnt);
             var lsmcParams = paramsBuilder.Build();
 
+            // ReSharper disable once UnusedVariable
             LsmcStorageValuationResults<Day> lsmcResults = LsmcStorageValuation.WithNoLogger.Calculate(lsmcParams);
 
             Assert.InRange(progresses[0], 0.0, 1.0);

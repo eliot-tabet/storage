@@ -23,6 +23,8 @@
 // OTHER DEALINGS IN THE SOFTWARE.
 #endregion
 
+using System.Collections.Generic;
+using System.Linq;
 using Cmdty.Core.Common;
 using Cmdty.TimePeriodValueTypes;
 using Cmdty.TimeSeries;
@@ -41,6 +43,8 @@ namespace Cmdty.Storage
         public Panel<T, double> CmdtyConsumedBySim { get; }
         public Panel<T, double> InventoryLossBySim { get; }
         public Panel<T, double> NetVolumeBySim { get; }
+        public Panel<T, double> PvByPeriodAndSim { get; }
+        public IReadOnlyList<double> PvBySim { get; }
         public TimeSeries<T, TriggerPriceVolumeProfiles> TriggerPriceVolumeProfiles { get; }
         public TimeSeries<T, TriggerPrices> TriggerPrices { get; }
 
@@ -48,7 +52,7 @@ namespace Cmdty.Storage
             Panel<T, double> spotPriceBySim, 
             Panel<T, double> inventoryBySim, Panel<T, double> injectWithdrawVolumeBySim, Panel<T, double> cmdtyConsumedBySim, 
             Panel<T, double> inventoryLossBySim, Panel<T, double> netVolumeBySim, TimeSeries<T, TriggerPrices> triggerPrices,
-            TimeSeries<T, TriggerPriceVolumeProfiles> triggerPriceVolumeProfiles)
+            TimeSeries<T, TriggerPriceVolumeProfiles> triggerPriceVolumeProfiles, Panel<T, double> pvByPeriodAndSim, IEnumerable<double> pvBySim)
         {
             Npv = npv;
             Deltas = deltas;
@@ -61,6 +65,8 @@ namespace Cmdty.Storage
             NetVolumeBySim = netVolumeBySim;
             TriggerPrices = triggerPrices;
             TriggerPriceVolumeProfiles = triggerPriceVolumeProfiles;
+            PvByPeriodAndSim = pvByPeriodAndSim;
+            PvBySim = pvBySim.ToArray();
         }
 
         public static LsmcStorageValuationResults<T> CreateExpiredResults()
@@ -70,7 +76,8 @@ namespace Cmdty.Storage
                 Panel<T, double>.CreateEmpty(), 
                 Panel<T, double>.CreateEmpty(), Panel<T, double>.CreateEmpty(),
                 Panel<T, double>.CreateEmpty(), TimeSeries <T, TriggerPrices >.Empty,
-                        TimeSeries<T, TriggerPriceVolumeProfiles>.Empty);
+                        TimeSeries<T, TriggerPriceVolumeProfiles>.Empty, Panel<T, double>.CreateEmpty(), 
+                    new double[0]);
         }
 
         public static LsmcStorageValuationResults<T> CreateEndPeriodResults(double npv)
@@ -80,7 +87,8 @@ namespace Cmdty.Storage
                 Panel<T, double>.CreateEmpty(),
                 Panel<T, double>.CreateEmpty(), Panel<T, double>.CreateEmpty(),
                 Panel<T, double>.CreateEmpty(), TimeSeries<T, TriggerPrices>.Empty, 
-                TimeSeries<T, TriggerPriceVolumeProfiles>.Empty);
+                TimeSeries<T, TriggerPriceVolumeProfiles>.Empty, Panel<T, double>.CreateEmpty(),
+                new double[0]);
         }
 
     }

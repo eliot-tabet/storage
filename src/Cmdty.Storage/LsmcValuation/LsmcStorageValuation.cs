@@ -332,7 +332,9 @@ namespace Cmdty.Storage
             var cmdtyConsumedBySim = new Panel<T, double>(periodsForResultsTimeSeries, numSims);
             var inventoryLossBySim = new Panel<T, double>(periodsForResultsTimeSeries, numSims);
             var netVolumeBySim = new Panel<T, double>(periodsForResultsTimeSeries, numSims);
+            var pvByPeriodAndSim = new Panel<T, double>(periodsForResultsTimeSeries, numSims);
             var storageProfiles = new StorageProfile[periodsForResultsTimeSeries.Length];
+            var pvBySim = new double[numSims];
 
             var deltas = new double[periodsForResultsTimeSeries.Length];
 
@@ -352,7 +354,7 @@ namespace Cmdty.Storage
                 double[] inventoryGridNexPeriod = inventorySpaceGrids[periodIndex + 1];
                 Day cmdtySettlementDate = lsmcParams.SettleDateRule(period);
                 double discountFactorFromCmdtySettlement = DiscountToCurrentDay(cmdtySettlementDate);
-
+                double discountForDeltas = lsmcParams.DiscountDeltas ? discountFactorFromCmdtySettlement : 1.0;
                 double sumSpotPriceTimesVolume = 0.0;
 
                 ReadOnlySpan<double> simulatedPrices;
@@ -370,6 +372,8 @@ namespace Cmdty.Storage
                 Span<double> thisPeriodCmdtyConsumed = cmdtyConsumedBySim[periodIndex];
                 Span<double> thisPeriodInventoryLoss = inventoryLossBySim[periodIndex];
                 Span<double> thisPeriodNetVolume = netVolumeBySim[periodIndex];
+                Span<double> thisPeriodPv = pvByPeriodAndSim[periodIndex];
+
                 for (int simIndex = 0; simIndex < numSims; simIndex++)
                 {
                     double simulatedSpotPrice = simulatedPrices[simIndex];
@@ -384,6 +388,8 @@ namespace Cmdty.Storage
 
                     var decisionNpvsRegress = new double[decisionSet.Length];
                     var cmdtyUsedForInjectWithdrawVolumes = new double[decisionSet.Length];
+                    var immediatePv = new double[decisionSet.Length];
+
                     for (var decisionIndex = 0; decisionIndex < decisionSet.Length; decisionIndex++)
                     {
                         double decisionVolume = decisionSet[decisionIndex];
@@ -396,14 +402,15 @@ namespace Cmdty.Storage
 
                         double injectWithdrawCostNpv = InjectWithdrawCostNpv(lsmcParams.Storage, decisionVolume, period, inventory, DiscountToCurrentDay);
 
-                        double immediateNpv = injectWithdrawNpv - injectWithdrawCostNpv + cmdtyUsedForInjectWithdrawNpv;
+                        double immediateNpv = injectWithdrawNpv - injectWithdrawCostNpv + cmdtyUsedForInjectWithdrawNpv - inventoryCostNpv; // TODO IMPORTANT check if inventoryCostNpv should be subtracted
 
                         double continuationValue =
                             InterpolateContinuationValue(inventoryAfterDecision, inventoryGridNexPeriod, regressContinuationValues, simIndex);
 
-                        double totalNpv = immediateNpv + continuationValue - inventoryCostNpv; // TODO IMPORTANT check if inventoryCostNpv should be subtracted;
+                        double totalNpv = immediateNpv + continuationValue; 
                         decisionNpvsRegress[decisionIndex] = totalNpv;
                         cmdtyUsedForInjectWithdrawVolumes[decisionIndex] = cmdtyUsedForInjectWithdrawVolume;
+                        immediatePv[decisionIndex] = immediateNpv;
                     }
                     (double _, int indexOfOptimalDecision) = StorageHelper.MaxValueAndIndex(decisionNpvsRegress);
                     double optimalDecisionVolume = decisionSet[indexOfOptimalDecision];
@@ -418,28 +425,53 @@ namespace Cmdty.Storage
                     thisPeriodCmdtyConsumed[simIndex] = optimalCmdtyUsedForInjectWithdrawVolume;
                     thisPeriodInventoryLoss[simIndex] = inventoryLoss;
                     thisPeriodNetVolume[simIndex] = -optimalDecisionVolume - optimalCmdtyUsedForInjectWithdrawVolume;
+                    double optimalImmediatePv = immediatePv[indexOfOptimalDecision];
+                    thisPeriodPv[simIndex] = optimalImmediatePv;
+                    pvBySim[simIndex] += optimalImmediatePv;
                 }
 
                 storageProfiles[periodIndex] = new StorageProfile(Average(thisPeriodInventories), Average(thisPeriodInjectWithdrawVolumes),
-                    Average(thisPeriodCmdtyConsumed), Average(thisPeriodInventoryLoss), Average(thisPeriodNetVolume));
+                    Average(thisPeriodCmdtyConsumed), Average(thisPeriodInventoryLoss), Average(thisPeriodNetVolume), Average(thisPeriodPv));
                 double forwardPrice = lsmcParams.ForwardCurve[period];
-                double periodDelta = sumSpotPriceTimesVolume / forwardPrice / numSims;
+                double periodDelta = (sumSpotPriceTimesVolume / forwardPrice / numSims) * discountForDeltas;
                 deltas[periodIndex] = periodDelta;
                 progress += forwardStepProgressPcnt;
                 lsmcParams.OnProgressUpdate?.Invoke(progress);
                 lsmcParams.CancellationToken.ThrowIfCancellationRequested();
             }
+            // Pv on final period
+            double endPeriodPv = 0.0;
+            if (!lsmcParams.Storage.MustBeEmptyAtEnd)
+            {
+                ReadOnlySpan<double> storageEndPeriodSpotPrices = spotSims.SpotPricesForPeriod(lsmcParams.Storage.EndPeriod).Span;
+                Span<double> storageEndInventory = inventoryBySim[lsmcParams.Storage.EndPeriod];
+                Span<double> storageEndPv = pvByPeriodAndSim[periodsForResultsTimeSeries.Length-1];
+                for (int simIndex = 0; simIndex < numSims; simIndex++)
+                {
+                    double inventory = storageEndInventory[simIndex];
+                    double spotPrice = storageEndPeriodSpotPrices[simIndex];
+                    double terminalPv = lsmcParams.Storage.TerminalStorageNpv(spotPrice, inventory);
+                    storageEndPv[simIndex] = terminalPv;
+                    pvBySim[simIndex] += terminalPv;
+                }
+                endPeriodPv = Average(storageEndPv);
+            }
+
             stopwatches.ForwardSimulation.Stop();
             _logger?.LogInformation("Completed forward simulation.");
 
-            double expectedFinalInventory = Average(inventoryBySim[inventoryBySim.NumRows - 1]);
-            // Profile at storage end when no decisions can happen
-            storageProfiles[storageProfiles.Length - 1] = new StorageProfile(expectedFinalInventory, 0.0, 0.0, 0.0, 0.0);
+            double forwardNpv = pvBySim.Average();
+            _logger?.LogInformation("Forward Pv: " + forwardNpv.ToString("N", CultureInfo.InvariantCulture));
 
-            // TODO calculate PV from forward loop and compare?
             // Calculate NPVs for first active period using current inventory
             // TODO this is unnecessarily introducing floating point error if the val date is during the storage active period and there should not be a Vector of simulated spot prices
             double storageNpv = storageActualValuesNextPeriod[0].Average();
+
+            _logger?.LogInformation("Backward Pv: " + storageNpv.ToString("N", CultureInfo.InvariantCulture));
+
+            double expectedFinalInventory = Average(inventoryBySim[inventoryBySim.NumRows - 1]);
+            // Profile at storage end when no decisions can happen
+            storageProfiles[storageProfiles.Length - 1] = new StorageProfile(expectedFinalInventory, 0.0, 0.0, 0.0, 0.0, endPeriodPv);
 
             var deltasSeries = new DoubleTimeSeries<T>(periodsForResultsTimeSeries[0], deltas);
             var storageProfileSeries = new TimeSeries<T, StorageProfile>(periodsForResultsTimeSeries[0], storageProfiles);
@@ -536,7 +568,8 @@ namespace Cmdty.Storage
             }
 
             return new LsmcStorageValuationResults<T>(storageNpv, deltasSeries, storageProfileSeries, spotPricePanel, 
-                inventoryBySim, injectWithdrawVolumeBySim, cmdtyConsumedBySim, inventoryLossBySim, netVolumeBySim, triggerPrices, triggerPriceVolumeProfiles);
+                inventoryBySim, injectWithdrawVolumeBySim, cmdtyConsumedBySim, inventoryLossBySim, netVolumeBySim, 
+                triggerPrices, triggerPriceVolumeProfiles, pvByPeriodAndSim, pvBySim);
         }
 
         private static double CalcTriggerPrice<T>(ICmdtyStorage<T> storage, double expectedInventory, double triggerVolume, double inventoryLoss,

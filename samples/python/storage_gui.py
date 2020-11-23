@@ -101,7 +101,8 @@ def read_ratchets():
 val_date_wgt = ipw.DatePicker(description='Val Date', value=date.today())
 inventory_wgt = ipw.FloatText(description='Inventory')
 ir_wgt = ipw.FloatText(description='Intrst Rate %', step=0.005)
-val_inputs_wgt = ipw.VBox([val_date_wgt, inventory_wgt, ir_wgt])
+discount_deltas_wgt = ipw.Checkbox(description='Discount Deltas', value=False)
+val_inputs_wgt = ipw.VBox([val_date_wgt, inventory_wgt, ir_wgt, discount_deltas_wgt])
 
 # Forward curve
 fwd_input_sheet = ips.sheet(rows=num_fwd_rows, columns=2, column_headers=['fwd_start', 'price'])
@@ -322,7 +323,8 @@ def btn_clicked(b):
                                     spot_mean_reversion=spot_mr_wgt.value, spot_vol=spot_vol_wgt.value,
                                     long_term_vol=lt_vol_wgt.value, seasonal_vol=seas_vol_wgt.value,
                                     num_sims=num_sims_wgt.value, 
-                                    basis_funcs=basis_funcs_input_wgt.value, seed=seed,
+                                    basis_funcs=basis_funcs_input_wgt.value, discount_deltas = discount_deltas_wgt.value,
+                                    seed=seed,
                                     num_inventory_grid_points=grid_points_wgt.value, on_progress_update=on_progress,
                                     numerical_tolerance=num_tol_wgt.value)
         logger.info('Valuation completed without error.')

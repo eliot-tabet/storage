@@ -96,13 +96,16 @@ def profile_to_data_frame(freq, net_profile):
     cmdty_consumed = [None] * net_profile.Count
     inventory_loss = [None] * net_profile.Count
     net_volume = [None] * net_profile.Count
+    period_pv = [None] * net_profile.Count
     for i, profile_data in enumerate(net_profile.Data):
         inventories[i] = profile_data.Inventory
         inject_withdraw_volumes[i] = profile_data.InjectWithdrawVolume
         cmdty_consumed[i] = profile_data.CmdtyConsumed
         inventory_loss[i] = profile_data.InventoryLoss
         net_volume[i] = profile_data.NetVolume
+        period_pv[i] = profile_data.PeriodPv
     data_frame_data = {'inventory': inventories, 'inject_withdraw_volume': inject_withdraw_volumes,
-                       'cmdty_consumed': cmdty_consumed, 'inventory_loss': inventory_loss, 'net_volume': net_volume}
+                       'cmdty_consumed': cmdty_consumed, 'inventory_loss': inventory_loss, 'net_volume': net_volume,
+                       'period_pv': period_pv}
     data_frame = pd.DataFrame(data=data_frame_data, index=index)
     return data_frame
