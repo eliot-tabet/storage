@@ -47,6 +47,8 @@ namespace Cmdty.Storage
         public IReadOnlyList<double> PvBySim { get; }
         public TimeSeries<T, TriggerPriceVolumeProfiles> TriggerPriceVolumeProfiles { get; }
         public TimeSeries<T, TriggerPrices> TriggerPrices { get; }
+        public TimeSeries<T, Panel<int, double>> RegressionCoefficients { get; } // TODO create matrix type and use instead of Panel
+        public TimeSeries<T, IReadOnlyList<double>> InventoryGrids { get; }
 
         public LsmcStorageValuationResults(double npv, DoubleTimeSeries<T> deltas, TimeSeries<T, StorageProfile> expectedStorageProfile, 
             Panel<T, double> spotPriceBySim, 

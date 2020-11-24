@@ -334,6 +334,7 @@ def three_factor_seasonal_value(cmdty_storage: CmdtyStorage,
                                 basis_funcs: str,
                                 discount_deltas: bool,
                                 seed: tp.Optional[int] = None,
+                                fwd_sim_seed: tp.Optional[int] = None,
                                 extra_decisions: tp.Optional[int] = None,
                                 num_inventory_grid_points: int = 100,
                                 numerical_tolerance: float = 1E-12,
@@ -348,7 +349,7 @@ def three_factor_seasonal_value(cmdty_storage: CmdtyStorage,
     basis_func_transformed = basis_funcs.replace('x_st', 'x0').replace('x_lt', 'x1').replace('x_sw', 'x2')
     return _net_multi_factor_calc(cmdty_storage, fwd_curve, interest_rates, inventory, net_multi_factor_params,
                                   num_inventory_grid_points, num_sims, numerical_tolerance, on_progress_update,
-                                  basis_func_transformed, seed, settlement_rule, time_period_type,
+                                  basis_func_transformed, seed, fwd_sim_seed, settlement_rule, time_period_type,
                                   val_date, discount_deltas, extra_decisions)
 
 
@@ -364,6 +365,7 @@ def multi_factor_value(cmdty_storage: CmdtyStorage,
                        basis_funcs: str,
                        discount_deltas: bool,
                        seed: tp.Optional[int] = None,
+                       fwd_sim_seed: tp.Optional[int] = None,
                        extra_decisions: tp.Optional[int] = None,
                        num_inventory_grid_points: int = 100,
                        numerical_tolerance: float = 1E-12,
@@ -376,13 +378,13 @@ def multi_factor_value(cmdty_storage: CmdtyStorage,
     net_multi_factor_params = _create_net_multi_factor_params(factor_corrs, factors, time_period_type)
     return _net_multi_factor_calc(cmdty_storage, fwd_curve, interest_rates, inventory, net_multi_factor_params,
                                   num_inventory_grid_points, num_sims, numerical_tolerance, on_progress_update,
-                                  basis_funcs, seed, settlement_rule, time_period_type,
+                                  basis_funcs, seed, fwd_sim_seed, settlement_rule, time_period_type,
                                   val_date, discount_deltas, extra_decisions)
 
 
 def _net_multi_factor_calc(cmdty_storage, fwd_curve, interest_rates, inventory, net_multi_factor_params,
                            num_inventory_grid_points, num_sims, numerical_tolerance, on_progress_update,
-                           basis_funcs, seed, settlement_rule, time_period_type,
+                           basis_funcs, seed, fwd_sim_seed, settlement_rule, time_period_type,
                            val_date, discount_deltas, extra_decisions):
     # Convert inputs to .NET types
     net_forward_curve = utils.series_to_double_time_series(fwd_curve, time_period_type)
@@ -425,7 +427,8 @@ def _net_multi_factor_calc(cmdty_storage, fwd_curve, interest_rates, inventory, 
     net_lsmc_params_builder.DiscountDeltas = discount_deltas
     if extra_decisions is not None:
         net_lsmc_params_builder.ExtraDecisions = extra_decisions
-    net_lsmc_params_builder.SimulateWithMultiFactorModelAndMersenneTwister(net_multi_factor_params, num_sims, seed)
+    net_lsmc_params_builder.SimulateWithMultiFactorModelAndMersenneTwister(net_multi_factor_params, num_sims, seed,
+                                                                           fwd_sim_seed)
     net_lsmc_params = net_lsmc_params_builder.Build()
     net_val_results = lsmc.Calculate[time_period_type](net_lsmc_params)
     logger.debug('Calculation of LSMC value complete.')

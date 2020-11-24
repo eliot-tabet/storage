@@ -47,7 +47,8 @@ namespace Cmdty.Storage
         public Func<Day, Day, double> DiscountFactors { get; }
         public IDoubleStateSpaceGridCalc GridCalc { get; }
         public double NumericalTolerance { get; }
-        public Func<ISpotSimResults<T>> SpotSimsGenerator { get; }
+        public Func<ISpotSimResults<T>> RegressionSpotSimsGenerator { get; }
+        public Func<ISpotSimResults<T>> ValuationSpotSimsGenerator { get; }
         public IEnumerable<BasisFunction> BasisFunctions { get; }
         public CancellationToken CancellationToken { get; }
         public Action<double> OnProgressUpdate { get; }
@@ -56,8 +57,8 @@ namespace Cmdty.Storage
 
         private LsmcValuationParameters(T currentPeriod, double inventory, TimeSeries<T, double> forwardCurve, 
             ICmdtyStorage<T> storage, Func<T, Day> settleDateRule, Func<Day, Day, double> discountFactors, IDoubleStateSpaceGridCalc gridCalc, 
-            double numericalTolerance, SimulateSpotPrice spotSims, IEnumerable<BasisFunction> basisFunctions, CancellationToken cancellationToken, 
-            bool discountDeltas, int extraDecisions, Action<double> onProgressUpdate = null)
+            double numericalTolerance, SimulateSpotPrice regressionSpotSims, SimulateSpotPrice valuationSpotSims, IEnumerable<BasisFunction> basisFunctions, 
+            CancellationToken cancellationToken, bool discountDeltas, int extraDecisions, Action<double> onProgressUpdate = null)
         {
             CurrentPeriod = currentPeriod;
             Inventory = inventory;
@@ -67,7 +68,8 @@ namespace Cmdty.Storage
             DiscountFactors = discountFactors;
             GridCalc = gridCalc;
             NumericalTolerance = numericalTolerance;
-            SpotSimsGenerator = () => spotSims(CurrentPeriod, storage.StartPeriod, storage.EndPeriod, forwardCurve);
+            RegressionSpotSimsGenerator = () => regressionSpotSims(CurrentPeriod, storage.StartPeriod, storage.EndPeriod, forwardCurve);
+            ValuationSpotSimsGenerator = () => valuationSpotSims(CurrentPeriod, storage.StartPeriod, storage.EndPeriod, forwardCurve);
             BasisFunctions = basisFunctions.ToArray();
             CancellationToken = cancellationToken;
             DiscountDeltas = discountDeltas;
@@ -87,7 +89,8 @@ namespace Cmdty.Storage
             public Func<Day, Day, double> DiscountFactors { get; set; }
             public IDoubleStateSpaceGridCalc GridCalc { get; set; }
             public double NumericalTolerance { get; set; }
-            public SimulateSpotPrice SpotSimsGenerator { get; set; }
+            public SimulateSpotPrice RegressionSpotSimsGenerator { get; set; }
+            public SimulateSpotPrice ValuationSpotSimsGenerator { get; set; }
             public IEnumerable<BasisFunction> BasisFunctions { get; set; }
             public CancellationToken CancellationToken { get; set; }
             public Action<double> OnProgressUpdate { get; set; }
@@ -123,15 +126,16 @@ namespace Cmdty.Storage
                 ThrowIfNotSet(SettleDateRule, nameof(SettleDateRule));
                 ThrowIfNotSet(DiscountFactors, nameof(DiscountFactors));
                 ThrowIfNotSet(GridCalc, nameof(GridCalc));
-                ThrowIfNotSet(SpotSimsGenerator, nameof(SpotSimsGenerator));
+                ThrowIfNotSet(RegressionSpotSimsGenerator, nameof(RegressionSpotSimsGenerator));
+                ThrowIfNotSet(ValuationSpotSimsGenerator, nameof(ValuationSpotSimsGenerator));
                 ThrowIfNotSet(BasisFunctions, nameof(BasisFunctions));
                 if (ExtraDecisions < 0)
                     throw new InvalidOperationException(nameof(ExtraDecisions) + " must be non-negative.");
 
                 // ReSharper disable once PossibleInvalidOperationException
                 return new LsmcValuationParameters<T>(CurrentPeriod, Inventory.Value, ForwardCurve, Storage, SettleDateRule, 
-                    DiscountFactors, GridCalc, NumericalTolerance, SpotSimsGenerator, BasisFunctions, CancellationToken, 
-                    DiscountDeltas, ExtraDecisions, OnProgressUpdate);
+                    DiscountFactors, GridCalc, NumericalTolerance, RegressionSpotSimsGenerator, ValuationSpotSimsGenerator, 
+                    BasisFunctions, CancellationToken, DiscountDeltas, ExtraDecisions, OnProgressUpdate);
             }
 
             // ReSharper disable once ParameterOnlyUsedForPreconditionCheck.Local
@@ -142,16 +146,19 @@ namespace Cmdty.Storage
             }
 
             public Builder SimulateWithMultiFactorModel(
-                IStandardNormalGenerator normalGenerator, [NotNull] MultiFactorParameters<T> modelParameters, int numSims)
-            {
-                return SimulateWithMultiFactorModel(() => normalGenerator, modelParameters, numSims);
-            }
-
-            public Builder SimulateWithMultiFactorModel(
-                Func<IStandardNormalGenerator> normalGenerator, [NotNull] MultiFactorParameters<T> modelParameters, int numSims)
+                IStandardNormalGenerator regressionSimNormalGenerator, IStandardNormalGenerator valuationSimNormalGenerator, 
+                [NotNull] MultiFactorParameters<T> modelParameters, int numSims)
             {
                 if (modelParameters == null) throw new ArgumentNullException(nameof(modelParameters));
-                SpotSimsGenerator = (currentPeriod, storageStart, storageEnd, forwardCurve) =>
+                RegressionSpotSimsGenerator = CreateSimulationSpotPrice(regressionSimNormalGenerator, modelParameters, numSims);
+                ValuationSpotSimsGenerator = CreateSimulationSpotPrice(valuationSimNormalGenerator, modelParameters, numSims);
+                return this;
+            }
+
+            private static SimulateSpotPrice CreateSimulationSpotPrice(IStandardNormalGenerator randomNumberGenerator, 
+                [NotNull] MultiFactorParameters<T> modelParameters, int numSims)
+            {
+                return (currentPeriod, storageStart, storageEnd, forwardCurve) =>
                 {
                     if (currentPeriod.Equals(storageEnd))
                     {
@@ -163,22 +170,23 @@ namespace Cmdty.Storage
                     DateTime currentDate = currentPeriod.Start; // TODO IMPORTANT, this needs to change;
                     T simStart = new[] { currentPeriod.Offset(1), storageStart }.Max();
                     var simulatedPeriods = simStart.EnumerateTo(storageEnd);
-                    var simulator = new MultiFactorSpotPriceSimulator<T>(modelParameters, currentDate, 
-                        forwardCurve, simulatedPeriods, TimeFunctions.Act365, normalGenerator());
+                    var simulator = new MultiFactorSpotPriceSimulator<T>(modelParameters, currentDate,
+                        forwardCurve, simulatedPeriods, TimeFunctions.Act365, randomNumberGenerator);
                     return simulator.Simulate(numSims);
                 };
-                return this;
             }
 
             public Builder SimulateWithMultiFactorModelAndMersenneTwister(
-                                        MultiFactorParameters<T> modelParameters, int numSims, int? seed = null)
+                                        MultiFactorParameters<T> modelParameters, int numSims, int? simSeed = null, 
+                                        int? valuationSimSeed = null)
             {
-                IStandardNormalGenerator CreateMersenneTwister()
-                {
-                    var normalGenerator = seed == null ? new MersenneTwisterGenerator(true) : new MersenneTwisterGenerator(seed.Value, true);
-                    return normalGenerator;
-                }                
-                return SimulateWithMultiFactorModel(CreateMersenneTwister, modelParameters, numSims);
+                MersenneTwisterGenerator regressionSimNormalGenerator = simSeed == null ? new MersenneTwisterGenerator(true) :
+                            new MersenneTwisterGenerator(simSeed.Value, true);
+                // If valuationSimSeed is null then use the same random number generator as regression, which will continue the sequence
+                MersenneTwisterGenerator valuationSimNormalGenerator = valuationSimSeed == null ? regressionSimNormalGenerator : 
+                    new MersenneTwisterGenerator(valuationSimSeed.Value, true);
+
+                return SimulateWithMultiFactorModel(regressionSimNormalGenerator, valuationSimNormalGenerator, modelParameters, numSims);
             }
 
             public Builder Clone()
@@ -196,8 +204,10 @@ namespace Cmdty.Storage
                     OnProgressUpdate = this.OnProgressUpdate,
                     Inventory = this.Inventory,
                     SettleDateRule = this.SettleDateRule,
-                    SpotSimsGenerator = this.SpotSimsGenerator,
-                    Storage = this.Storage
+                    RegressionSpotSimsGenerator = this.RegressionSpotSimsGenerator,
+                    ValuationSpotSimsGenerator = this.ValuationSpotSimsGenerator,
+                    Storage = this.Storage,
+                    ExtraDecisions = this.ExtraDecisions
                 };
             }
 

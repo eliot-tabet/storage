@@ -212,13 +212,16 @@ class TestMultiFactorValue(unittest.TestCase):
         # Simulation parameter
         num_sims = 500
         seed = 11
+        fwd_sim_seed = seed # Temporarily set to pass regression tests
         basis_funcs = '1 + x0 + x0**2 + x1 + x1*x1'
         discount_deltas = False
 
         multi_factor_val = multi_factor_value(cmdty_storage, val_date, inventory, forward_curve,
                                               interest_rate_curve, twentieth_of_next_month,
                                               factors, factor_corrs, num_sims,
-                                              basis_funcs, discount_deltas, seed,
+                                              basis_funcs, discount_deltas,
+                                              seed=seed,
+                                              fwd_sim_seed=fwd_sim_seed,
                                               on_progress_update=on_progress)
         self.assertAlmostEqual(multi_factor_val.npv, 1779708.1119639324, places=6)
         self.assertEqual(123, len(multi_factor_val.deltas)) # TODO look into why deltas is longer the intrinsic profile
@@ -277,6 +280,7 @@ class TestMultiFactorValue(unittest.TestCase):
         # Simulation parameter
         num_sims = 500
         seed = 11
+        fwd_sim_seed = seed # Temporarily set to pass regression tests
         basis_funcs = '1 + x_st + x_sw + x_lt + x_st**2 + x_sw**2 + x_lt**2'
         discount_deltas = False
 
@@ -288,6 +292,7 @@ class TestMultiFactorValue(unittest.TestCase):
                                                        basis_funcs,
                                                        discount_deltas,
                                                        seed=seed,
+                                                       fwd_sim_seed=fwd_sim_seed,
                                                        on_progress_update=on_progress)
         self.assertAlmostEqual(multi_factor_val.npv, 1766157.090481408, places=6)
         self.assertEqual(123, len(multi_factor_val.deltas))  # TODO look into why deltas is longer the intrinsic profile

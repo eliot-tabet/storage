@@ -25,10 +25,8 @@
 
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
-using System.Text;
 using Cmdty.Core.Common;
 using Cmdty.Core.Simulation;
 using Cmdty.TimePeriodValueTypes;
@@ -96,11 +94,11 @@ namespace Cmdty.Storage
                 throw new ArgumentException("Forward curve does not extend until storage end period.", nameof(lsmcParams.ForwardCurve));
 
             // Perform backward induction
-            _logger?.LogInformation("Starting spot price simulation.");
-            stopwatches.PriceSimulation.Start();
-            ISpotSimResults<T> spotSims = lsmcParams.SpotSimsGenerator();
-            stopwatches.PriceSimulation.Stop();
-            _logger?.LogInformation("Spot price simulation complete.");
+            _logger?.LogInformation("Starting regression spot price simulation.");
+            stopwatches.RegressionPriceSimulation.Start();
+            ISpotSimResults<T> regressionSpotSims = lsmcParams.RegressionSpotSimsGenerator();
+            stopwatches.RegressionPriceSimulation.Stop();
+            _logger?.LogInformation("Spot regression price simulation complete.");
 
             int numPeriods = inventorySpace.Count + 1; // +1 as inventorySpaceGrid doesn't contain first period
             var storageRegressValuesByPeriod = new Vector<double>[numPeriods][]; // 1st dimension is period, 2nd is inventory, 3rd is simulation number
@@ -113,9 +111,9 @@ namespace Cmdty.Storage
             inventorySpaceGrids[numPeriods - 1] = endInventorySpaceGrid;
 
             var storageActualValuesNextPeriod = new Vector<double>[endInventorySpaceGrid.Length];
-            ReadOnlySpan<double> endPeriodSimSpotPrices = spotSims.SpotPricesForPeriod(lsmcParams.Storage.EndPeriod).Span;
+            ReadOnlySpan<double> endPeriodSimSpotPrices = regressionSpotSims.SpotPricesForPeriod(lsmcParams.Storage.EndPeriod).Span;
 
-            int numSims = spotSims.NumSims;
+            int numSims = regressionSpotSims.NumSims;
 
             for (int i = 0; i < endInventorySpaceGrid.Length; i++)
             {
@@ -145,18 +143,21 @@ namespace Cmdty.Storage
             }
 
             Matrix<double> designMatrix = Matrix<double>.Build.Dense(numSims, basisFunctionList.Count);
-            for (int i = 0; i < numSims; i++) // TODO see if Math.Net has simpler way of setting whole column to constant
+            for (int i = 0; i < numSims; i++)
                 designMatrix[i, 0] = 1.0;
             
             // Loop back through other periods
             T startActiveStorage = inventorySpace.Start.Offset(-1);
             T[] periodsForResultsTimeSeries = startActiveStorage.EnumerateTo(inventorySpace.End).ToArray();
 
+            var regressCoeffsBuilder = new TimeSeries<T, Panel<int, double>>.Builder(periodsForResultsTimeSeries.Length - 1);
+
             int backCounter = numPeriods - 2;
             Vector<double> numSimsMemoryBuffer = Vector<double>.Build.Dense(numSims);
             double progress = 0.0;
             double backStepProgressPcnt = BackwardPcntTime / (periodsForResultsTimeSeries.Length - 1);
 
+            double[] currentPeriodContinuationValues = null;
             _logger?.LogInformation("Starting backward induction.");
             stopwatches.BackwardInduction.Start();
             foreach (T period in periodsForResultsTimeSeries.Reverse().Skip(1))
@@ -166,21 +167,24 @@ namespace Cmdty.Storage
 
                 if (period.Equals(lsmcParams.CurrentPeriod))
                 {
+                    currentPeriodContinuationValues = new double[nextPeriodInventorySpaceGrid.Length];
                     // Current period, for which the price isn't random so expected storage values are just the average of the values for all sims
                     for (int i = 0; i < nextPeriodInventorySpaceGrid.Length; i++) // TODO parallelise?
                     {
                         Vector<double> storageValuesBySimNextPeriod = storageActualValuesNextPeriod[i];
                         double expectedStorageValueNextPeriod = storageValuesBySimNextPeriod.Average();
                         storageRegressValuesNextPeriod[i] = Vector<double>.Build.Dense(numSims, expectedStorageValueNextPeriod); // TODO this is a bit inefficent, review
+                        currentPeriodContinuationValues[i] = expectedStorageValueNextPeriod;
                     }
                 }
                 else
                 {
-                    PopulateDesignMatrix(designMatrix, period, spotSims, basisFunctionList);
+                    PopulateDesignMatrix(designMatrix, period, regressionSpotSims, basisFunctionList);
                     stopwatches.PseudoInverse.Start();
                     Matrix<double> pseudoInverse = designMatrix.PseudoInverse();
                     stopwatches.PseudoInverse.Stop();
 
+                    var thisPeriodRegressCoeffs = new Panel<int, double>(Enumerable.Range(0, nextPeriodInventorySpaceGrid.Length), basisFunctionList.Count);
                     // TODO doing the regressions for all next inventory could be inefficient as they might not all be needed
                     for (int i = 0; i < nextPeriodInventorySpaceGrid.Length; i++) // TODO parallelise?
                     {
@@ -188,7 +192,12 @@ namespace Cmdty.Storage
                         Vector<double> regressResults = pseudoInverse.Multiply(storageValuesBySimNextPeriod);
                         Vector<double> estimatedContinuationValues = designMatrix.Multiply(regressResults);
                         storageRegressValuesNextPeriod[i] = estimatedContinuationValues;
+                        // Save regression coeffs for later use
+                        Span<double> regressCoeffsSpan = thisPeriodRegressCoeffs[i];
+                        for (int j = 0; j < regressCoeffsSpan.Length; j++)
+                            regressCoeffsSpan[j] = regressResults[j];
                     }
+                    regressCoeffsBuilder.Add(period, thisPeriodRegressCoeffs); // Key for regressCoeffs is period of simulated prices/factors, i.e. the regressor, which is the period before the period of continuation value being approximated
                 }
                 storageRegressValuesByPeriod[backCounter + 1] = storageRegressValuesNextPeriod;
                 
@@ -215,7 +224,7 @@ namespace Cmdty.Storage
                     simulatedPrices = Enumerable.Repeat(spotPrice, numSims).ToArray(); // TODO inefficient - review.
                 }                
                 else
-                    simulatedPrices = spotSims.SpotPricesForPeriod(period).Span;
+                    simulatedPrices = regressionSpotSims.SpotPricesForPeriod(period).Span;
 
                 for (int inventoryIndex = 0; inventoryIndex < inventorySpaceGrid.Length; inventoryIndex++)
                 {
@@ -327,6 +336,13 @@ namespace Cmdty.Storage
             stopwatches.BackwardInduction.Stop();
             _logger?.LogInformation("Completed backward induction.");
             
+            _logger?.LogInformation("Starting valuation spot price simulation.");
+            stopwatches.ValuationPriceSimulation.Start();
+            ISpotSimResults<T> valuationSpotSims = lsmcParams.ValuationSpotSimsGenerator();
+            stopwatches.ValuationPriceSimulation.Stop();
+            _logger?.LogInformation("Spot forward price simulation complete.");
+
+            TimeSeries<T, Panel<int, double>> regressCoeffs = regressCoeffsBuilder.Build();
             var inventoryBySim = new Panel<T, double>(periodsForResultsTimeSeries, numSims);
             var injectWithdrawVolumeBySim = new Panel<T, double>(periodsForResultsTimeSeries, numSims);
             var cmdtyConsumedBySim = new Panel<T, double>(periodsForResultsTimeSeries, numSims);
@@ -350,8 +366,31 @@ namespace Cmdty.Storage
                 T period = periodsForResultsTimeSeries[periodIndex];
                 Span<double> nextPeriodInventories = inventoryBySim[periodIndex + 1];
 
-                Vector<double>[] regressContinuationValues = storageRegressValuesByPeriod[periodIndex + 1];
-                double[] inventoryGridNexPeriod = inventorySpaceGrids[periodIndex + 1];
+                double[] nextPeriodInventorySpaceGrid = inventorySpaceGrids[periodIndex + 1];
+                //Vector<double>[] regressContinuationValues = storageRegressValuesByPeriod[periodIndex + 1];
+                Vector<double>[] regressContinuationValues = new Vector<double>[nextPeriodInventorySpaceGrid.Length];
+                if (period.Equals(lsmcParams.CurrentPeriod))
+                {
+                    // Current period, for which the price isn't random so expected storage values are just the average of the values for all sims
+                    for (int i = 0; i < nextPeriodInventorySpaceGrid.Length; i++)
+                    {
+                        double expectedStorageValueNextPeriod = currentPeriodContinuationValues[i];
+                        regressContinuationValues[i] = Vector<double>.Build.Dense(numSims, expectedStorageValueNextPeriod); // TODO this is a bit inefficent, review
+                    }
+                }
+                else
+                {
+                    PopulateDesignMatrix(designMatrix, period, valuationSpotSims, basisFunctionList);
+                    Panel<int, double> regressCoeffsThisPeriod = regressCoeffs[period];
+                    for (int i = 0; i < nextPeriodInventorySpaceGrid.Length; i++)
+                    {
+                        // TODO add own MKL wrapping to do matrix multiplication on Span<double>
+                        Span<double> regressCoeffsSpan = regressCoeffsThisPeriod[i];
+                        var regressCoeffsVector = Vector<double>.Build.DenseOfArray(regressCoeffsSpan.ToArray());
+                        regressContinuationValues[i] = designMatrix * regressCoeffsVector;
+                    }
+                }
+
                 Day cmdtySettlementDate = lsmcParams.SettleDateRule(period);
                 double discountFactorFromCmdtySettlement = DiscountToCurrentDay(cmdtySettlementDate);
                 double discountForDeltas = lsmcParams.DiscountDeltas ? discountFactorFromCmdtySettlement : 1.0;
@@ -364,7 +403,7 @@ namespace Cmdty.Storage
                     simulatedPrices = Enumerable.Repeat(spotPrice, numSims).ToArray(); // TODO inefficient - review, and share code with backward induction
                 }
                 else
-                    simulatedPrices = spotSims.SpotPricesForPeriod(period).Span;
+                    simulatedPrices = valuationSpotSims.SpotPricesForPeriod(period).Span;
                 
                 (double nextStepInventorySpaceMin, double nextStepInventorySpaceMax) = inventorySpace[period.Offset(1)];
                 Span<double> thisPeriodInventories = inventoryBySim[periodIndex];
@@ -405,7 +444,7 @@ namespace Cmdty.Storage
                         double immediateNpv = injectWithdrawNpv - injectWithdrawCostNpv + cmdtyUsedForInjectWithdrawNpv - inventoryCostNpv; // TODO IMPORTANT check if inventoryCostNpv should be subtracted
 
                         double continuationValue =
-                            InterpolateContinuationValue(inventoryAfterDecision, inventoryGridNexPeriod, regressContinuationValues, simIndex);
+                            InterpolateContinuationValue(inventoryAfterDecision, nextPeriodInventorySpaceGrid, regressContinuationValues, simIndex);
 
                         double totalNpv = immediateNpv + continuationValue; 
                         decisionNpvsRegress[decisionIndex] = totalNpv;
@@ -443,7 +482,7 @@ namespace Cmdty.Storage
             double endPeriodPv = 0.0;
             if (!lsmcParams.Storage.MustBeEmptyAtEnd)
             {
-                ReadOnlySpan<double> storageEndPeriodSpotPrices = spotSims.SpotPricesForPeriod(lsmcParams.Storage.EndPeriod).Span;
+                ReadOnlySpan<double> storageEndPeriodSpotPrices = regressionSpotSims.SpotPricesForPeriod(lsmcParams.Storage.EndPeriod).Span;
                 Span<double> storageEndInventory = inventoryBySim[lsmcParams.Storage.EndPeriod];
                 Span<double> storageEndPv = pvByPeriodAndSim[periodsForResultsTimeSeries.Length-1];
                 for (int simIndex = 0; simIndex < numSims; simIndex++)
@@ -562,7 +601,7 @@ namespace Cmdty.Storage
             _logger?.LogInformation("Completed trigger price calculation.");
 
 
-            var spotPricePanel = Panel.UseRawDataArray(spotSims.SpotPrices, spotSims.SimulatedPeriods, numSims);
+            var spotPricePanel = Panel.UseRawDataArray(regressionSpotSims.SpotPrices, regressionSpotSims.SimulatedPeriods, numSims);
             lsmcParams.OnProgressUpdate?.Invoke(1.0); // Progress with approximately 1.0 should have occured already, but might have been a bit off because of floating-point error.
 
             stopwatches.All.Stop();
@@ -741,58 +780,6 @@ namespace Cmdty.Storage
                 basisFunction(markovFactors, spotPrices, designMatrixColumn);
             }
         }
-
-        private sealed class Stopwatches
-        {
-            public Stopwatch All { get; }
-            public Stopwatch PriceSimulation { get; }
-            public Stopwatch BackwardInduction { get; }
-            public Stopwatch PseudoInverse { get; }
-            public Stopwatch ForwardSimulation { get; }
-            public Stopwatch TriggerPriceCalc { get; }
-
-            public Stopwatches()
-            {
-                All = new Stopwatch();
-                PriceSimulation = new Stopwatch();
-                BackwardInduction = new Stopwatch();
-                PseudoInverse = new Stopwatch();
-                ForwardSimulation = new Stopwatch();
-                TriggerPriceCalc = new Stopwatch();
-            }
-
-            public string GenerateProfileReport()
-            {
-                var stringBuilder = new StringBuilder();
-                TimeSpan otherAll = All.Elapsed - PriceSimulation.Elapsed - BackwardInduction.Elapsed -
-                                 ForwardSimulation.Elapsed - TriggerPriceCalc.Elapsed;
-                TimeSpan otherBackwardInduction = BackwardInduction.Elapsed - PseudoInverse.Elapsed;
-
-                string priceSimPercent =
-                    (PriceSimulation.Elapsed.Ticks / (double) All.Elapsed.Ticks).ToString("P2", CultureInfo.InvariantCulture);
-                string pseudoInversePercent =
-                    (PseudoInverse.Elapsed.Ticks / (double)All.Elapsed.Ticks).ToString("P2", CultureInfo.InvariantCulture);
-                string otherBackInductionPercent =
-                    (otherBackwardInduction.Ticks / (double)All.Elapsed.Ticks).ToString("P2", CultureInfo.InvariantCulture);
-                string forwardSimPercent =
-                    (ForwardSimulation.Elapsed.Ticks / (double)All.Elapsed.Ticks).ToString("P2", CultureInfo.InvariantCulture);
-                string triggerPricePercent =
-                    (TriggerPriceCalc.Elapsed.Ticks / (double)All.Elapsed.Ticks).ToString("P2", CultureInfo.InvariantCulture);
-                string otherPercent = (otherAll.Ticks / (double)All.Elapsed.Ticks).ToString("P2", CultureInfo.InvariantCulture);
-
-
-                stringBuilder.AppendLine("Total:\t\t" + All.Elapsed.ToString("g", CultureInfo.InvariantCulture));
-                stringBuilder.AppendLine($"Price sim:\t{PriceSimulation.Elapsed.ToString("g", CultureInfo.InvariantCulture)}\t({priceSimPercent})");
-                stringBuilder.AppendLine($"Pseudo-inverse:\t{PseudoInverse.Elapsed.ToString("g", CultureInfo.InvariantCulture)}\t({pseudoInversePercent})");
-                stringBuilder.AppendLine($"Other back ind:\t{otherBackwardInduction.ToString("g", CultureInfo.InvariantCulture)}\t({otherBackInductionPercent})");
-                stringBuilder.AppendLine($"Fwd sim:\t{ForwardSimulation.Elapsed.ToString("g", CultureInfo.InvariantCulture)}\t({forwardSimPercent})");
-                stringBuilder.AppendLine($"Trigger prices:\t{TriggerPriceCalc.Elapsed.ToString("g", CultureInfo.InvariantCulture)}\t({triggerPricePercent})");
-                stringBuilder.AppendLine($"Other:\t\t{otherAll.ToString("g", CultureInfo.InvariantCulture)}\t({otherPercent})");
-
-                return stringBuilder.ToString();
-            }
-
-        }
-
+        
     }
 }

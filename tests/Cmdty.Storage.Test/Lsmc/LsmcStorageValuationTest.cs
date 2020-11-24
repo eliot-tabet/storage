@@ -300,9 +300,9 @@ namespace Cmdty.Storage.Test
             Assert.Equal(lsmcParams.Inventory, lsmcResults.Deltas[lsmcParams.CurrentPeriod], 10);
         }
 
-        //// TODO same unit test as above, but testing the other output data, decision, simulated prices etc.
+        // TODO same unit test as above, but testing the other output data, decision, simulated prices etc.
 
-        //// TODO terminal value looks like call option payoff, value day before equals call value
+        // TODO terminal value looks like call option payoff, value day before equals call value
 
         [Fact]
         [Trait("Category", "Lsmc.LikeCalls")]
@@ -845,6 +845,7 @@ namespace Cmdty.Storage.Test
                 .SimulateWithMultiFactorModelAndMersenneTwister(MultiFactorParameters.For1Factor(16.5, _oneFactorFlatSpotVols), numSims, RandomSeed);
             paramsBuilder.Storage = _simpleDailyStorage;
             LsmcValuationParameters<Day> lsmcParamsDiscountDeltasFalse = paramsBuilder.Build();
+            paramsBuilder.SimulateWithMultiFactorModelAndMersenneTwister(MultiFactorParameters.For1Factor(16.5, _oneFactorFlatSpotVols), numSims, RandomSeed);
             paramsBuilder.DiscountDeltas = true;
             LsmcValuationParameters<Day> lsmcDiscountDeltasTrue = paramsBuilder.Build();
 

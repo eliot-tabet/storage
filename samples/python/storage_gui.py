@@ -212,6 +212,8 @@ num_sims_wgt = ipw.IntText(description='Num Sims', value=1000, step=500)
 extra_decisions_wgt = ipw.IntText(description='Extra Decisions', value=0, step=1)
 seed_is_random_wgt = ipw.Checkbox(description='Seed is Random', value=False)
 random_seed_wgt = ipw.IntText(description='Seed', value=11)
+fwd_sim_seed_set_wgt = ipw.Checkbox(description='Set fwd sim seed', value=False)
+fwd_sim_seed_wgt = ipw.IntText(description='Fwd Sim Seed', value=12, disabled=True)
 grid_points_wgt = ipw.IntText(description='Grid Points', value=100, step=10)
 basis_funcs_label_wgt = ipw.Label('Basis Functions')
 basis_funcs_legend_wgt = ipw.VBox([ipw.Label('1=Constant'),
@@ -227,15 +229,17 @@ basis_func_wgt = ipw.HBox([ipw.VBox([basis_funcs_label_wgt, basis_funcs_legend_w
 num_tol_wgt = ipw.FloatText(description='Numerical Tol', value=1E-10, step=1E-9)
 
 def on_seed_is_random_change(change):
-    if change['new']:
-        random_seed_wgt.disabled = True
-    else:
-        random_seed_wgt.disabled = False
+    random_seed_wgt.disabled = change['new']
 
 seed_is_random_wgt.observe(on_seed_is_random_change, names='value')
 
-tech_params_wgt = ipw.HBox([ipw.VBox([num_sims_wgt, extra_decisions_wgt, seed_is_random_wgt, random_seed_wgt, grid_points_wgt, 
-                            num_tol_wgt]), basis_func_wgt])
+def on_fwd_sim_seed_set_change(change):
+    fwd_sim_seed_wgt.disabled = not change['new']
+
+fwd_sim_seed_set_wgt.observe(on_fwd_sim_seed_set_change, names='value')
+
+tech_params_wgt = ipw.HBox([ipw.VBox([num_sims_wgt, extra_decisions_wgt, seed_is_random_wgt, random_seed_wgt, fwd_sim_seed_set_wgt, 
+    fwd_sim_seed_wgt, grid_points_wgt, num_tol_wgt]), basis_func_wgt])
 
 tab_in_titles = ['Valuation Data', 'Forward Curve', 'Storage Details', 'Volatility Params', 'Technical Params']
 tab_in_children = [val_inputs_wgt, fwd_data_wgt, storage_details_wgt, vol_params_wgt, tech_params_wgt]
@@ -318,6 +322,7 @@ def btn_clicked(b):
                                   twentieth_of_next_month(pd.Period(end_wgt.value, freq='D')), freq='D'), dtype='float64')
         interest_rate_curve[:] = ir_wgt.value
         seed = None if seed_is_random_wgt.value else random_seed_wgt.value
+        fwd_sim_seed = fwd_sim_seed_wgt.value if fwd_sim_seed_set_wgt.value else None
         logger.info('Valuation started.')
         val_results_3f = three_factor_seasonal_value(storage, val_date_wgt.value, inventory_wgt.value, fwd_curve=fwd_curve,
                                      interest_rates=interest_rate_curve, settlement_rule=twentieth_of_next_month,
@@ -325,7 +330,7 @@ def btn_clicked(b):
                                     long_term_vol=lt_vol_wgt.value, seasonal_vol=seas_vol_wgt.value,
                                     num_sims=num_sims_wgt.value, 
                                     basis_funcs=basis_funcs_input_wgt.value, discount_deltas = discount_deltas_wgt.value,
-                                    seed=seed, extra_decisions=extra_decisions_wgt.value,
+                                    seed=seed, fwd_sim_seed=fwd_sim_seed, extra_decisions=extra_decisions_wgt.value,
                                     num_inventory_grid_points=grid_points_wgt.value, on_progress_update=on_progress,
                                     numerical_tolerance=num_tol_wgt.value)
         logger.info('Valuation completed without error.')
