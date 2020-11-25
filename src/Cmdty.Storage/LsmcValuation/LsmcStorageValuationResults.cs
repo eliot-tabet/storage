@@ -37,7 +37,8 @@ namespace Cmdty.Storage
         public double Npv { get; }
         public DoubleTimeSeries<T> Deltas {get;}
         public TimeSeries<T, StorageProfile> ExpectedStorageProfile { get; }
-        public Panel<T, double> SpotPriceBySim { get; }
+        public Panel<T, double> RegressionSpotPriceSim { get; }
+        public Panel<T, double> ValuationSpotPriceSim { get; }
         public Panel<T, double> InventoryBySim { get; }
         public Panel<T, double> InjectWithdrawVolumeBySim { get; }
         public Panel<T, double> CmdtyConsumedBySim { get; }
@@ -49,9 +50,10 @@ namespace Cmdty.Storage
         public TimeSeries<T, TriggerPrices> TriggerPrices { get; }
         public TimeSeries<T, Panel<int, double>> RegressionCoefficients { get; } // TODO create matrix type and use instead of Panel
         public TimeSeries<T, IReadOnlyList<double>> InventoryGrids { get; }
+        // TODO add spot simulation Markov factors
 
         public LsmcStorageValuationResults(double npv, DoubleTimeSeries<T> deltas, TimeSeries<T, StorageProfile> expectedStorageProfile, 
-            Panel<T, double> spotPriceBySim, 
+            Panel<T, double> regressionSpotPriceSim, Panel<T, double> valuationSpotPriceSim,
             Panel<T, double> inventoryBySim, Panel<T, double> injectWithdrawVolumeBySim, Panel<T, double> cmdtyConsumedBySim, 
             Panel<T, double> inventoryLossBySim, Panel<T, double> netVolumeBySim, TimeSeries<T, TriggerPrices> triggerPrices,
             TimeSeries<T, TriggerPriceVolumeProfiles> triggerPriceVolumeProfiles, Panel<T, double> pvByPeriodAndSim, IEnumerable<double> pvBySim)
@@ -59,7 +61,8 @@ namespace Cmdty.Storage
             Npv = npv;
             Deltas = deltas;
             ExpectedStorageProfile = expectedStorageProfile;
-            SpotPriceBySim = spotPriceBySim;
+            RegressionSpotPriceSim = regressionSpotPriceSim;
+            ValuationSpotPriceSim = valuationSpotPriceSim;
             InventoryBySim = inventoryBySim;
             InjectWithdrawVolumeBySim = injectWithdrawVolumeBySim;
             CmdtyConsumedBySim = cmdtyConsumedBySim;
@@ -75,7 +78,7 @@ namespace Cmdty.Storage
         {
             return new LsmcStorageValuationResults<T>(0.0, DoubleTimeSeries<T>.Empty, TimeSeries<T, StorageProfile>.Empty,
                 Panel<T, double>.CreateEmpty(), Panel<T, double>.CreateEmpty(),
-                Panel<T, double>.CreateEmpty(), 
+                Panel<T, double>.CreateEmpty(), Panel<T, double>.CreateEmpty(),
                 Panel<T, double>.CreateEmpty(), Panel<T, double>.CreateEmpty(),
                 Panel<T, double>.CreateEmpty(), TimeSeries <T, TriggerPrices >.Empty,
                         TimeSeries<T, TriggerPriceVolumeProfiles>.Empty, Panel<T, double>.CreateEmpty(), 
@@ -86,7 +89,7 @@ namespace Cmdty.Storage
         {
             return new LsmcStorageValuationResults<T>(npv, DoubleTimeSeries<T>.Empty, TimeSeries<T, StorageProfile>.Empty,
                 Panel<T, double>.CreateEmpty(), Panel<T, double>.CreateEmpty(), 
-                Panel<T, double>.CreateEmpty(),
+                Panel<T, double>.CreateEmpty(), Panel<T, double>.CreateEmpty(),
                 Panel<T, double>.CreateEmpty(), Panel<T, double>.CreateEmpty(),
                 Panel<T, double>.CreateEmpty(), TimeSeries<T, TriggerPrices>.Empty, 
                 TimeSeries<T, TriggerPriceVolumeProfiles>.Empty, Panel<T, double>.CreateEmpty(),

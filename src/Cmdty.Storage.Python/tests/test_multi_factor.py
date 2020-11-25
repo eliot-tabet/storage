@@ -223,14 +223,15 @@ class TestMultiFactorValue(unittest.TestCase):
                                               seed=seed,
                                               fwd_sim_seed=fwd_sim_seed,
                                               on_progress_update=on_progress)
-        self.assertAlmostEqual(multi_factor_val.npv, 1779708.1119639324, places=6)
+        self.assertAlmostEqual(multi_factor_val.npv, 1780380.7581833513, places=6)
         self.assertEqual(123, len(multi_factor_val.deltas)) # TODO look into why deltas is longer the intrinsic profile
         self.assertEqual(123, len(multi_factor_val.expected_profile))
         self.assertEqual(progresses[-1], 1.0)
         self.assertEqual(245, len(progresses))
         self.assertEqual(1704932.4697508093, multi_factor_val.intrinsic_npv)
         self.assertEqual(122, len(multi_factor_val.intrinsic_profile))
-        self.assertEqual((123, num_sims), multi_factor_val.sim_spot.shape)
+        self.assertEqual((123, num_sims), multi_factor_val.sim_spot_regress.shape)
+        self.assertEqual((123, num_sims), multi_factor_val.sim_spot_valuation.shape)
         self.assertEqual((123, num_sims), multi_factor_val.sim_inventory.shape)
         self.assertEqual((123, num_sims), multi_factor_val.sim_inject_withdraw.shape)
         self.assertEqual((123, num_sims), multi_factor_val.sim_cmdty_consumed.shape)
@@ -294,14 +295,15 @@ class TestMultiFactorValue(unittest.TestCase):
                                                        seed=seed,
                                                        fwd_sim_seed=fwd_sim_seed,
                                                        on_progress_update=on_progress)
-        self.assertAlmostEqual(multi_factor_val.npv, 1766157.090481408, places=6)
+        self.assertAlmostEqual(multi_factor_val.npv, 1766460.137569665, places=6)
         self.assertEqual(123, len(multi_factor_val.deltas))  # TODO look into why deltas is longer the intrinsic profile
         self.assertEqual(123, len(multi_factor_val.expected_profile))
         self.assertEqual(progresses[-1], 1.0)
         self.assertEqual(245, len(progresses))
         self.assertEqual(1704932.4697508093, multi_factor_val.intrinsic_npv)
         self.assertEqual(122, len(multi_factor_val.intrinsic_profile))
-        self.assertEqual((123, num_sims), multi_factor_val.sim_spot.shape)
+        self.assertEqual((123, num_sims), multi_factor_val.sim_spot_regress.shape)
+        self.assertEqual((123, num_sims), multi_factor_val.sim_spot_valuation.shape)
         self.assertEqual((123, num_sims), multi_factor_val.sim_inventory.shape)
         self.assertEqual((123, num_sims), multi_factor_val.sim_inject_withdraw.shape)
         self.assertEqual((123, num_sims), multi_factor_val.sim_cmdty_consumed.shape)

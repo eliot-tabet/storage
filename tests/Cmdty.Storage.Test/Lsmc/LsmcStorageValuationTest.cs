@@ -172,7 +172,7 @@ namespace Cmdty.Storage.Test
                 GridCalc = gridCalc,
                 BasisFunctions = _oneFactorBasisFunctions,
             }
-            .SimulateWithMultiFactorModelAndMersenneTwister(oneFactorDailyMultiFactorParams, NumSims, RandomSeed);
+            .SimulateWithMultiFactorModelAndMersenneTwister(oneFactorDailyMultiFactorParams, NumSims, RandomSeed, RandomSeed * 2);
 
             const int triggerPriceTestNumSims = 500;
             _triggerPriceTestParamsBuilder = new LsmcValuationParameters<Day>.Builder
@@ -315,7 +315,8 @@ namespace Cmdty.Storage.Test
             };
             const int numInventorySpacePoints = 100;
             const int numSims = 2_000;
-            const int seed = 13;
+            const int seed = 11;
+            const int forwardSeed = 13;
 
             (DoubleTimeSeries<Day> forwardCurve, DoubleTimeSeries<Day> spotVolCurve) =
                 TestHelper.CreateDailyTestForwardAndSpotVolCurves(paramsBuilder.CurrentPeriod, new Day(2020, 4, 1));
@@ -329,7 +330,7 @@ namespace Cmdty.Storage.Test
 
             var multiFactorParams = MultiFactorParameters.For1Factor(meanReversion, spotVolCurve);
 
-            paramsBuilder.SimulateWithMultiFactorModelAndMersenneTwister(multiFactorParams, numSims, seed);
+            paramsBuilder.SimulateWithMultiFactorModelAndMersenneTwister(multiFactorParams, numSims, seed, forwardSeed);
 
             paramsBuilder.SettleDateRule = settleDate => testData.SettleDates[Month.FromDateTime(settleDate.Start)];
             paramsBuilder.DiscountFactors = StorageHelper.CreateAct65ContCompDiscounter(interestRate);
@@ -355,6 +356,7 @@ namespace Cmdty.Storage.Test
             const double percentErrorLowerBound = -0.02; // Calculated value cannot be more than 2% lower than call options
             const double percentErrorUpperBound = 0.0; // Calculate value will not be higher than call options as LSMC is a lower bound approximation
 
+            _testOutputHelper.WriteLine(percentError.ToString("P5"));
             Assert.InRange(percentError, percentErrorLowerBound, percentErrorUpperBound);
         }
 
@@ -369,7 +371,8 @@ namespace Cmdty.Storage.Test
             };
             const int numInventorySpacePoints = 100;
             const int numSims = 2_000;
-            const int seed = 8;
+            const int seed = 11;
+            const int forwardSeed = 14;
 
             (DoubleTimeSeries<Day> forwardCurve, DoubleTimeSeries<Day> spotVolCurve) =
                 TestHelper.CreateDailyTestForwardAndSpotVolCurves(paramsBuilder.CurrentPeriod, new Day(2020, 4, 1));
@@ -383,7 +386,7 @@ namespace Cmdty.Storage.Test
 
             var multiFactorParams = MultiFactorParameters.For1Factor(meanReversion, spotVolCurve);
 
-            paramsBuilder.SimulateWithMultiFactorModelAndMersenneTwister(multiFactorParams, numSims, seed);
+            paramsBuilder.SimulateWithMultiFactorModelAndMersenneTwister(multiFactorParams, numSims, seed,  forwardSeed);
 
             paramsBuilder.SettleDateRule = settleDate => testData.SettleDates[Month.FromDateTime(settleDate.Start)];
             paramsBuilder.DiscountFactors = StorageHelper.CreateAct65ContCompDiscounter(interestRate);
@@ -393,7 +396,7 @@ namespace Cmdty.Storage.Test
             var lsmcParams = paramsBuilder.Build();
             LsmcStorageValuationResults<Day> results = LsmcStorageValuation.WithNoLogger.Calculate(lsmcParams);
 
-            const double tol = 0.04; // 4% tolerance
+            const double tol = 0.02; // 2% tolerance
 
             foreach ((Day day, double delta) in results.Deltas)
             {
@@ -418,6 +421,7 @@ namespace Cmdty.Storage.Test
         [Trait("Category", "Lsmc.LikeTrinomial")]
         public void Calculate_OneFactorSimpleStorage_NpvApproximatelyEqualsTrinomialNpv()
         {
+            const int trinomialNumInventorySpacePoints = 500; // Finer grid for trinomial as this model misses out on some convexity without a forward simulation.
             var builder = _1FactorParamsBuilder.Clone();
             builder.Storage = _simpleDailyStorage;
             var lsmcParams = builder.Build();
@@ -430,7 +434,7 @@ namespace Cmdty.Storage.Test
                 .WithOneFactorTrinomialTree(_oneFactorFlatSpotVols, OneFactorMeanReversion, TrinomialTimeDelta)
                 .WithCmdtySettlementRule(lsmcParams.SettleDateRule)
                 .WithDiscountFactorFunc(lsmcParams.DiscountFactors)
-                .WithFixedNumberOfPointsOnGlobalInventoryRange(NumInventorySpacePoints)
+                .WithFixedNumberOfPointsOnGlobalInventoryRange(trinomialNumInventorySpacePoints)
                 .WithLinearInventorySpaceInterpolation()
                 .WithNumericalTolerance(lsmcParams.NumericalTolerance)
                 .Calculate();
@@ -447,6 +451,7 @@ namespace Cmdty.Storage.Test
         [Trait("Category", "Lsmc.LikeTrinomial")]
         public void Calculate_OneFactorStorageWithRatchets_NpvApproximatelyEqualsTrinomialNpv()
         {
+            const int trinomialNumInventorySpacePoints = 500; // Finer grid for trinomial as this model misses out on some convexity without a forward simulation.
             var builder = _1FactorParamsBuilder.Clone();
             builder.Storage = _dailyStorageWithRatchets;
             var lsmcParams = builder.Build();
@@ -459,7 +464,7 @@ namespace Cmdty.Storage.Test
                 .WithOneFactorTrinomialTree(_oneFactorFlatSpotVols, OneFactorMeanReversion, TrinomialTimeDelta)
                 .WithCmdtySettlementRule(lsmcParams.SettleDateRule)
                 .WithDiscountFactorFunc(lsmcParams.DiscountFactors)
-                .WithFixedNumberOfPointsOnGlobalInventoryRange(NumInventorySpacePoints)
+                .WithFixedNumberOfPointsOnGlobalInventoryRange(trinomialNumInventorySpacePoints)
                 .WithLinearInventorySpaceInterpolation()
                 .WithNumericalTolerance(lsmcParams.NumericalTolerance)
                 .Calculate();
@@ -510,7 +515,7 @@ namespace Cmdty.Storage.Test
                                             .WithForwardCurve(lsmcParams.ForwardCurve)
                                             .WithCmdtySettlementRule(lsmcParams.SettleDateRule)
                                             .WithDiscountFactorFunc(lsmcParams.DiscountFactors)
-                                            .WithFixedNumberOfPointsOnGlobalInventoryRange(NumInventorySpacePoints)
+                                            .WithFixedNumberOfPointsOnGlobalInventoryRange(NumInventorySpacePoints*5) // Finer grid for intrinsic as intrinsic valuation currently doesn't use a forward loop for TODO remove this once forward loop valuation implemented for intrinsic
                                             .WithLinearInventorySpaceInterpolation()
                                             .WithNumericalTolerance(lsmcParams.NumericalTolerance)
                                             .Calculate();

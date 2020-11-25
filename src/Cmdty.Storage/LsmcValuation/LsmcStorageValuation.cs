@@ -601,8 +601,9 @@ namespace Cmdty.Storage
             _logger?.LogInformation("Completed trigger price calculation.");
 
 
-            var spotPricePanel = Panel.UseRawDataArray(regressionSpotSims.SpotPrices, regressionSpotSims.SimulatedPeriods, numSims);
-            lsmcParams.OnProgressUpdate?.Invoke(1.0); // Progress with approximately 1.0 should have occured already, but might have been a bit off because of floating-point error.
+            var regressionSpotPricePanel = Panel.UseRawDataArray(regressionSpotSims.SpotPrices, regressionSpotSims.SimulatedPeriods, numSims);
+            var valuationSpotPricePanel = Panel.UseRawDataArray(valuationSpotSims.SpotPrices, valuationSpotSims.SimulatedPeriods, numSims);
+            lsmcParams.OnProgressUpdate?.Invoke(1.0); // Progress with approximately 1.0 should have occurred already, but might have been a bit off because of floating-point error.
 
             stopwatches.All.Stop();
             if (_logger != null)
@@ -612,8 +613,8 @@ namespace Cmdty.Storage
                 _logger.LogInformation(Environment.NewLine + profilingReport);
             }
 
-            return new LsmcStorageValuationResults<T>(storageNpv, deltasSeries, storageProfileSeries, spotPricePanel, 
-                inventoryBySim, injectWithdrawVolumeBySim, cmdtyConsumedBySim, inventoryLossBySim, netVolumeBySim, 
+            return new LsmcStorageValuationResults<T>(forwardNpv, deltasSeries, storageProfileSeries, regressionSpotPricePanel,
+                valuationSpotPricePanel, inventoryBySim, injectWithdrawVolumeBySim, cmdtyConsumedBySim, inventoryLossBySim, netVolumeBySim, 
                 triggerPrices, triggerPriceVolumeProfiles, pvByPeriodAndSim, pvBySim);
         }
 
