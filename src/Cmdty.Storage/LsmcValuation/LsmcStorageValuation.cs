@@ -57,7 +57,7 @@ namespace Cmdty.Storage
         {
             var stopwatches = new Stopwatches();
             stopwatches.All.Start();
-            // TODO check spotSims is consistent with storage
+
             if (lsmcParams.Inventory < 0)
                 throw new ArgumentException("Inventory cannot be negative.", nameof(lsmcParams.Inventory));
 
@@ -101,7 +101,6 @@ namespace Cmdty.Storage
             _logger?.LogInformation("Spot regression price simulation complete.");
 
             int numPeriods = inventorySpace.Count + 1; // +1 as inventorySpaceGrid doesn't contain first period
-            var storageRegressValuesByPeriod = new Vector<double>[numPeriods][]; // 1st dimension is period, 2nd is inventory, 3rd is simulation number
             var inventorySpaceGrids = new double[numPeriods][];
 
             // Calculate NPVs at end period
@@ -199,7 +198,6 @@ namespace Cmdty.Storage
                     }
                     regressCoeffsBuilder.Add(period, thisPeriodRegressCoeffs); // Key for regressCoeffs is period of simulated prices/factors, i.e. the regressor, which is the period before the period of continuation value being approximated
                 }
-                storageRegressValuesByPeriod[backCounter + 1] = storageRegressValuesNextPeriod;
                 
                 double[] inventorySpaceGrid;
                 if (period.Equals(startActiveStorage))
@@ -358,6 +356,11 @@ namespace Cmdty.Storage
             for (int i = 0; i < numSims; i++)
                 startingInventories[i] = lsmcParams.Inventory;
 
+            // Trigger price variables
+            int numTriggerPriceVolumes = 10; // TODO move to parameters?
+            var triggerVolumeProfilesArray = new TriggerPriceVolumeProfiles[periodsForResultsTimeSeries.Length - 1];
+            var triggerPricesArray = new TriggerPrices[periodsForResultsTimeSeries.Length - 1];
+
             double forwardStepProgressPcnt = (1.0 - BackwardPcntTime) / periodsForResultsTimeSeries.Length;
             _logger?.LogInformation("Starting forward simulation.");
             stopwatches.ForwardSimulation.Start();
@@ -469,7 +472,8 @@ namespace Cmdty.Storage
                     pvBySim[simIndex] += optimalImmediatePv;
                 }
 
-                storageProfiles[periodIndex] = new StorageProfile(Average(thisPeriodInventories), Average(thisPeriodInjectWithdrawVolumes),
+                double expectedInventory = Average(thisPeriodInventories);
+                storageProfiles[periodIndex] = new StorageProfile(expectedInventory, Average(thisPeriodInjectWithdrawVolumes),
                     Average(thisPeriodCmdtyConsumed), Average(thisPeriodInventoryLoss), Average(thisPeriodNetVolume), Average(thisPeriodPv));
                 double forwardPrice = lsmcParams.ForwardCurve[period];
                 double periodDelta = (sumSpotPriceTimesVolume / forwardPrice / numSims) * discountForDeltas;
@@ -477,6 +481,77 @@ namespace Cmdty.Storage
                 progress += forwardStepProgressPcnt;
                 lsmcParams.OnProgressUpdate?.Invoke(progress);
                 lsmcParams.CancellationToken.ThrowIfCancellationRequested();
+
+                #region Trigger Price Calculation
+
+                double expectedInventoryInventoryLoss = lsmcParams.Storage.CmdtyInventoryPercentLoss(period) * expectedInventory;
+                InjectWithdrawRange expectedInventoryInjectWithdrawRange = lsmcParams.Storage.GetInjectWithdrawRange(period, expectedInventory);
+                double[] triggerPriceDecisionSet = StorageHelper.CalculateBangBangDecisionSet(expectedInventoryInjectWithdrawRange, expectedInventory,
+                    expectedInventoryInventoryLoss, nextStepInventorySpaceMin, nextStepInventorySpaceMax, lsmcParams.NumericalTolerance, lsmcParams.ExtraDecisions);
+                double[] inventoryGridNexPeriod = inventorySpaceGrids[periodIndex + 1];
+
+                double triggerPriceMaxInjectVolume = triggerPriceDecisionSet.Max();
+                var injectTriggerPrices = new List<TriggerPricePoint>();
+                var triggerPricesBuilder = new TriggerPrices.Builder();
+
+                if (triggerPriceMaxInjectVolume > 0)
+                {
+                    double alternativeVolume = triggerPriceDecisionSet
+                        .Where(d => d >= 0)
+                        .OrderBy(d => d)
+                        .First(); // Probably zero, but might not due to forced injection, in which case the lowest injection rate
+                    if (triggerPriceMaxInjectVolume > alternativeVolume)
+                    {
+                        (double alternativeContinuationValue, double alternativeDecisionCost, double alternativeCmdtyConsumed) =
+                            CalcAlternatives(lsmcParams.Storage, expectedInventory, alternativeVolume, expectedInventoryInventoryLoss, inventoryGridNexPeriod, 
+                                regressContinuationValues, period, DiscountToCurrentDay);
+                        double[] triggerPriceVolumes = CalcInjectTriggerPriceVolumes<T>(triggerPriceMaxInjectVolume, alternativeVolume, numTriggerPriceVolumes);
+
+                        foreach (double triggerVolume in triggerPriceVolumes)
+                        {
+                            double injectTriggerPrice = CalcTriggerPrice(lsmcParams.Storage, expectedInventory, triggerVolume, expectedInventoryInventoryLoss, inventoryGridNexPeriod,
+                                regressContinuationValues, alternativeContinuationValue, alternativeVolume, period, alternativeDecisionCost,
+                                alternativeCmdtyConsumed, discountFactorFromCmdtySettlement, DiscountToCurrentDay);
+                            injectTriggerPrices.Add(new TriggerPricePoint(triggerVolume, injectTriggerPrice));
+                        }
+
+                        triggerPricesBuilder.MaxInjectTriggerPrice = injectTriggerPrices[injectTriggerPrices.Count - 1].Price;
+                        triggerPricesBuilder.MaxInjectVolume = triggerPriceMaxInjectVolume;
+                    }
+                }
+                
+                double maxWithdrawVolume = triggerPriceDecisionSet.Min();
+                var withdrawTriggerPrices = new List<TriggerPricePoint>();
+                if (maxWithdrawVolume < 0)
+                {
+                    double alternativeVolume = triggerPriceDecisionSet
+                        .Where(d => d <= 0)
+                        .OrderByDescending(d => d)
+                        .First(); // Probably zero, but might not due to forced withdrawal, in which case lowest withdrawal
+                    if (maxWithdrawVolume < alternativeVolume)
+                    {
+                        (double alternativeContinuationValue, double alternativeDecisionCost, double alternativeCmdtyConsumed) =
+                            CalcAlternatives(lsmcParams.Storage, expectedInventory, alternativeVolume, expectedInventoryInventoryLoss, inventoryGridNexPeriod, 
+                                regressContinuationValues, period, DiscountToCurrentDay);
+                        double[] triggerPriceVolumes = CalcWithdrawTriggerPriceVolumes<T>(maxWithdrawVolume, alternativeVolume, numTriggerPriceVolumes);
+
+                        foreach (double triggerVolume in triggerPriceVolumes.Reverse())
+                        {
+                            double withdrawTriggerPrice = CalcTriggerPrice(lsmcParams.Storage, expectedInventory, triggerVolume, expectedInventoryInventoryLoss, inventoryGridNexPeriod,
+                                regressContinuationValues, alternativeContinuationValue, alternativeVolume, period, alternativeDecisionCost,
+                                alternativeCmdtyConsumed, discountFactorFromCmdtySettlement, DiscountToCurrentDay);
+                            withdrawTriggerPrices.Add(new TriggerPricePoint(triggerVolume, withdrawTriggerPrice));
+                        }
+
+                        triggerPricesBuilder.MaxWithdrawTriggerPrice = withdrawTriggerPrices[0].Price;
+                        triggerPricesBuilder.MaxWithdrawVolume = maxWithdrawVolume;
+                    }
+                }
+
+                triggerVolumeProfilesArray[periodIndex] = new TriggerPriceVolumeProfiles(injectTriggerPrices, withdrawTriggerPrices);
+                triggerPricesArray[periodIndex] = triggerPricesBuilder.Build();
+
+                #endregion Trigger Price Calculation
             }
             // Pv on final period
             double endPeriodPv = 0.0;
@@ -504,9 +579,9 @@ namespace Cmdty.Storage
 
             // Calculate NPVs for first active period using current inventory
             // TODO this is unnecessarily introducing floating point error if the val date is during the storage active period and there should not be a Vector of simulated spot prices
-            double storageNpv = storageActualValuesNextPeriod[0].Average();
+            double backwardNpv = storageActualValuesNextPeriod[0].Average();
 
-            _logger?.LogInformation("Backward Pv: " + storageNpv.ToString("N", CultureInfo.InvariantCulture));
+            _logger?.LogInformation("Backward Pv: " + backwardNpv.ToString("N", CultureInfo.InvariantCulture));
 
             double expectedFinalInventory = Average(inventoryBySim[inventoryBySim.NumRows - 1]);
             // Profile at storage end when no decisions can happen
@@ -514,92 +589,8 @@ namespace Cmdty.Storage
 
             var deltasSeries = new DoubleTimeSeries<T>(periodsForResultsTimeSeries[0], deltas);
             var storageProfileSeries = new TimeSeries<T, StorageProfile>(periodsForResultsTimeSeries[0], storageProfiles);
-            
-            // Calculate trigger prices
-            _logger?.LogInformation("Started trigger price calculation.");
-            int numTriggerPriceVolumes = 10; // TODO move to parameters?
-            stopwatches.TriggerPriceCalc.Start();
-            var triggerVolumeProfilesArray = new TriggerPriceVolumeProfiles[periodsForResultsTimeSeries.Length - 1];
-            var triggerPricesArray = new TriggerPrices[periodsForResultsTimeSeries.Length - 1];
-            for (int periodIndex = 0; periodIndex < periodsForResultsTimeSeries.Length - 1; periodIndex++)
-            {
-                T period = periodsForResultsTimeSeries[periodIndex];
-                Vector<double>[] regressContinuationValues = storageRegressValuesByPeriod[periodIndex + 1];
-                double[] inventoryGridNexPeriod = inventorySpaceGrids[periodIndex + 1];
-
-                Day cmdtySettlementDate = lsmcParams.SettleDateRule(period);
-                double discountFactorFromCmdtySettlement = DiscountToCurrentDay(cmdtySettlementDate);
-
-                double expectedInventory = storageProfileSeries[period].Inventory;
-                (double nextStepInventorySpaceMin, double nextStepInventorySpaceMax) = inventorySpace[period.Offset(1)];
-                InjectWithdrawRange injectWithdrawRange = lsmcParams.Storage.GetInjectWithdrawRange(period, expectedInventory);
-                double inventoryLoss = lsmcParams.Storage.CmdtyInventoryPercentLoss(period) * expectedInventory;
-                double[] decisionSet = StorageHelper.CalculateBangBangDecisionSet(injectWithdrawRange, expectedInventory,
-                    inventoryLoss, nextStepInventorySpaceMin, nextStepInventorySpaceMax, lsmcParams.NumericalTolerance, lsmcParams.ExtraDecisions);
-
-                double maxInjectVolume = decisionSet.Max();
-                var injectTriggerPrices = new List<TriggerPricePoint>();
-                var triggerPricesBuilder = new TriggerPrices.Builder();
-                if (maxInjectVolume > 0)
-                {
-                    double alternativeVolume = decisionSet
-                        .Where(d => d >= 0)
-                        .OrderBy(d => d)
-                        .First(); // Probably zero, but might not due to forced injection, in which case the lowest injection rate
-                    if (maxInjectVolume > alternativeVolume)
-                    {
-                        (double alternativeContinuationValue, double alternativeDecisionCost, double alternativeCmdtyConsumed) = 
-                            CalcAlternatives(lsmcParams.Storage, expectedInventory, alternativeVolume, inventoryLoss, inventoryGridNexPeriod, regressContinuationValues, period, DiscountToCurrentDay);
-                        double[] triggerPriceVolumes = CalcInjectTriggerPriceVolumes<T>(maxInjectVolume, alternativeVolume, numTriggerPriceVolumes);
-
-                        foreach (double triggerVolume in triggerPriceVolumes)
-                        {
-                            double injectTriggerPrice = CalcTriggerPrice(lsmcParams.Storage, expectedInventory, triggerVolume, inventoryLoss, inventoryGridNexPeriod, 
-                                regressContinuationValues, alternativeContinuationValue, alternativeVolume, period, alternativeDecisionCost, 
-                                alternativeCmdtyConsumed, discountFactorFromCmdtySettlement, DiscountToCurrentDay);
-                            injectTriggerPrices.Add(new TriggerPricePoint(triggerVolume, injectTriggerPrice));
-                        }
-
-                        triggerPricesBuilder.MaxInjectTriggerPrice = injectTriggerPrices[injectTriggerPrices.Count - 1].Price;
-                        triggerPricesBuilder.MaxInjectVolume = maxInjectVolume;
-                    }
-                }
-
-                double maxWithdrawVolume = decisionSet.Min();
-                var withdrawTriggerPrices = new List<TriggerPricePoint>();
-                if (maxWithdrawVolume < 0)
-                {
-                    double alternativeVolume = decisionSet
-                        .Where(d => d <= 0)
-                        .OrderByDescending(d => d)
-                        .First(); // Probably zero, but might not due to forced withdrawal, in which case lowest withdrawal
-                    if (maxWithdrawVolume < alternativeVolume)
-                    {
-                        (double alternativeContinuationValue, double alternativeDecisionCost, double alternativeCmdtyConsumed) =
-                            CalcAlternatives(lsmcParams.Storage, expectedInventory, alternativeVolume, inventoryLoss, inventoryGridNexPeriod, regressContinuationValues, period, DiscountToCurrentDay);
-                        double[] triggerPriceVolumes = CalcWithdrawTriggerPriceVolumes<T>(maxWithdrawVolume, alternativeVolume, numTriggerPriceVolumes);
-
-                        foreach (double triggerVolume in triggerPriceVolumes.Reverse())
-                        {
-                            double withdrawTriggerPrice = CalcTriggerPrice(lsmcParams.Storage, expectedInventory, triggerVolume, inventoryLoss, inventoryGridNexPeriod,
-                                regressContinuationValues, alternativeContinuationValue, alternativeVolume, period, alternativeDecisionCost,
-                                alternativeCmdtyConsumed, discountFactorFromCmdtySettlement, DiscountToCurrentDay);
-                            withdrawTriggerPrices.Add(new TriggerPricePoint(triggerVolume, withdrawTriggerPrice));
-                        }
-
-                        triggerPricesBuilder.MaxWithdrawTriggerPrice = withdrawTriggerPrices[0].Price;
-                        triggerPricesBuilder.MaxWithdrawVolume = maxWithdrawVolume;
-                    }
-                }
-
-                triggerVolumeProfilesArray[periodIndex] = new TriggerPriceVolumeProfiles(injectTriggerPrices, withdrawTriggerPrices);
-                triggerPricesArray[periodIndex] = triggerPricesBuilder.Build();
-            }
             var triggerPriceVolumeProfiles = new TimeSeries<T, TriggerPriceVolumeProfiles>(periodsForResultsTimeSeries.First(), triggerVolumeProfilesArray);
             var triggerPrices = new TimeSeries<T, TriggerPrices>(periodsForResultsTimeSeries.First(), triggerPricesArray);
-            stopwatches.TriggerPriceCalc.Stop();
-            _logger?.LogInformation("Completed trigger price calculation.");
-
 
             var regressionSpotPricePanel = Panel.UseRawDataArray(regressionSpotSims.SpotPrices, regressionSpotSims.SimulatedPeriods, numSims);
             var valuationSpotPricePanel = Panel.UseRawDataArray(valuationSpotSims.SpotPrices, valuationSpotSims.SimulatedPeriods, numSims);

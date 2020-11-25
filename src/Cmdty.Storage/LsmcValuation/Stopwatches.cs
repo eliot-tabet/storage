@@ -38,7 +38,6 @@ namespace Cmdty.Storage
         public Stopwatch BackwardInduction { get; }
         public Stopwatch PseudoInverse { get; }
         public Stopwatch ForwardSimulation { get; }
-        public Stopwatch TriggerPriceCalc { get; }
 
         public Stopwatches()
         {
@@ -48,14 +47,13 @@ namespace Cmdty.Storage
             BackwardInduction = new Stopwatch();
             PseudoInverse = new Stopwatch();
             ForwardSimulation = new Stopwatch();
-            TriggerPriceCalc = new Stopwatch();
         }
 
         public string GenerateProfileReport()
         {
             var stringBuilder = new StringBuilder();
             TimeSpan otherAll = All.Elapsed - RegressionPriceSimulation.Elapsed - BackwardInduction.Elapsed - ValuationPriceSimulation.Elapsed -
-                                ForwardSimulation.Elapsed - TriggerPriceCalc.Elapsed;
+                                ForwardSimulation.Elapsed;
             TimeSpan otherBackwardInduction = BackwardInduction.Elapsed - PseudoInverse.Elapsed;
 
             string regressPriceSimPercent =
@@ -68,19 +66,15 @@ namespace Cmdty.Storage
                 (otherBackwardInduction.Ticks / (double)All.Elapsed.Ticks).ToString("P2", CultureInfo.InvariantCulture);
             string forwardSimPercent =
                 (ForwardSimulation.Elapsed.Ticks / (double)All.Elapsed.Ticks).ToString("P2", CultureInfo.InvariantCulture);
-            string triggerPricePercent =
-                (TriggerPriceCalc.Elapsed.Ticks / (double)All.Elapsed.Ticks).ToString("P2", CultureInfo.InvariantCulture);
             string otherPercent = (otherAll.Ticks / (double)All.Elapsed.Ticks).ToString("P2", CultureInfo.InvariantCulture);
 
-
-            stringBuilder.AppendLine("Total:\t\t" + All.Elapsed.ToString("g", CultureInfo.InvariantCulture));
+            stringBuilder.AppendLine("Total:\t\t\t" + All.Elapsed.ToString("g", CultureInfo.InvariantCulture));
             stringBuilder.AppendLine($"Regress price sim:\t{RegressionPriceSimulation.Elapsed.ToString("g", CultureInfo.InvariantCulture)}\t({regressPriceSimPercent})");
-            stringBuilder.AppendLine($"Val price sim:\t{ValuationPriceSimulation.Elapsed.ToString("g", CultureInfo.InvariantCulture)}\t({valuationPriceSimPercent})");
-            stringBuilder.AppendLine($"Pseudo-inverse:\t{PseudoInverse.Elapsed.ToString("g", CultureInfo.InvariantCulture)}\t({pseudoInversePercent})");
-            stringBuilder.AppendLine($"Other back ind:\t{otherBackwardInduction.ToString("g", CultureInfo.InvariantCulture)}\t({otherBackInductionPercent})");
-            stringBuilder.AppendLine($"Fwd sim:\t{ForwardSimulation.Elapsed.ToString("g", CultureInfo.InvariantCulture)}\t({forwardSimPercent})");
-            stringBuilder.AppendLine($"Trigger prices:\t{TriggerPriceCalc.Elapsed.ToString("g", CultureInfo.InvariantCulture)}\t({triggerPricePercent})");
-            stringBuilder.AppendLine($"Other:\t\t{otherAll.ToString("g", CultureInfo.InvariantCulture)}\t({otherPercent})");
+            stringBuilder.AppendLine($"Val price sim:\t\t{ValuationPriceSimulation.Elapsed.ToString("g", CultureInfo.InvariantCulture)}\t({valuationPriceSimPercent})");
+            stringBuilder.AppendLine($"Pseudo-inverse:\t\t{PseudoInverse.Elapsed.ToString("g", CultureInfo.InvariantCulture)}\t({pseudoInversePercent})");
+            stringBuilder.AppendLine($"Other back ind:\t\t{otherBackwardInduction.ToString("g", CultureInfo.InvariantCulture)}\t({otherBackInductionPercent})");
+            stringBuilder.AppendLine($"Fwd sim:\t\t{ForwardSimulation.Elapsed.ToString("g", CultureInfo.InvariantCulture)}\t({forwardSimPercent})");
+            stringBuilder.AppendLine($"Other:\t\t\t{otherAll.ToString("g", CultureInfo.InvariantCulture)}\t({otherPercent})");
 
             return stringBuilder.ToString();
         }
