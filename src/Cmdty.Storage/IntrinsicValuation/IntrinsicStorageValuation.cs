@@ -216,36 +216,45 @@ namespace Cmdty.Storage
             }
 
             // Loop forward from start inventory choosing optimal decisions
-            double storageNpv = 0.0;
-
-            var storageProfiles = new StorageProfile[inventorySpace.Count];
-            var periods = new T[inventorySpace.Count];
+            int numStorageProfiles = inventorySpace.Count + 1;
+            var storageProfiles = new StorageProfile[numStorageProfiles];
+            var periods = new T[numStorageProfiles];
 
             double inventoryLoop = startingInventory;
             T startActiveStorage = inventorySpace.Start.Offset(-1);
-            for (int i = 0; i < inventorySpace.Count; i++)
+            for (int i = 0; i < numStorageProfiles; i++)
             {
                 T periodLoop = startActiveStorage.Offset(i);
-                Day cmdtySettlementDate = settleDateRule(periodLoop);
-                double discountFactorFromCmdtySettlement = DiscountToCurrentDay(cmdtySettlementDate);
-                
-                double cmdtyPrice = forwardCurve[periodLoop];
-                Func<double, double> continuationValueByInventory = storageValueByInventory[i];
-                (double nextStepInventorySpaceMin, double nextStepInventorySpaceMax) = inventorySpace[periodLoop.Offset(1)];
-                (double storageNpvLoop, double optimalInjectWithdraw, double cmdtyConsumedOnAction, double inventoryLoss, double optimalPeriodPv) = 
-                                        OptimalDecisionAndValue(storage, periodLoop, inventoryLoop, nextStepInventorySpaceMin,
-                                            nextStepInventorySpaceMax, cmdtyPrice, continuationValueByInventory, discountFactorFromCmdtySettlement,
-                                            DiscountToCurrentDay, numericalTolerance);
+                double spotPrice = forwardCurve[periodLoop];
+                StorageProfile storageProfile;
+                if (periodLoop.Equals(storage.EndPeriod))
+                {
+                    double endPeriodNpv = storage.MustBeEmptyAtEnd ? 0.0 : storage.TerminalStorageNpv(spotPrice, inventoryLoop);
+                    storageProfile = new StorageProfile(inventoryLoop, 0.0, 0.0, 0.0, 0.0, endPeriodNpv);
+                }
+                else
+                {
+                    Day cmdtySettlementDate = settleDateRule(periodLoop);
+                    double discountFactorFromCmdtySettlement = DiscountToCurrentDay(cmdtySettlementDate);
 
-                inventoryLoop += optimalInjectWithdraw - inventoryLoss;
-                if (i == 0)
-                    storageNpv = storageNpvLoop;
+                    Func<double, double> continuationValueByInventory = storageValueByInventory[i];
+                    (double nextStepInventorySpaceMin, double nextStepInventorySpaceMax) = inventorySpace[periodLoop.Offset(1)];
+                    (double _, double optimalInjectWithdraw, double cmdtyConsumedOnAction, double inventoryLoss, double optimalPeriodPv) =
+                        OptimalDecisionAndValue(storage, periodLoop, inventoryLoop, nextStepInventorySpaceMin,
+                            nextStepInventorySpaceMax, spotPrice, continuationValueByInventory, discountFactorFromCmdtySettlement,
+                            DiscountToCurrentDay, numericalTolerance);
 
-                double netVolume = -optimalInjectWithdraw - cmdtyConsumedOnAction;
-                var storageProfile = new StorageProfile(inventoryLoop, optimalInjectWithdraw, cmdtyConsumedOnAction, inventoryLoss, netVolume, optimalPeriodPv);
+                    inventoryLoop += optimalInjectWithdraw - inventoryLoss;
+
+                    double netVolume = -optimalInjectWithdraw - cmdtyConsumedOnAction;
+                    storageProfile = new StorageProfile(inventoryLoop, optimalInjectWithdraw, cmdtyConsumedOnAction, inventoryLoss, netVolume, optimalPeriodPv);
+
+                }
                 storageProfiles[i] = storageProfile;
                 periods[i] = periodLoop;
             }
+
+            double storageNpv = storageProfiles.Sum(profile => profile.PeriodPv);
 
             return new IntrinsicStorageValuationResults<T>(storageNpv, new TimeSeries<T, StorageProfile>(periods, storageProfiles));
         }

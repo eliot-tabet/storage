@@ -124,7 +124,7 @@ namespace Cmdty.Storage.Test
 
             AssertDecisionProfileAllZeros(valuationResults.StorageProfile, 
                                 new Day(2019, 9, 15), 
-                                new Day(2019, 9, 29));
+                                new Day(2019, 9, 30));
         }
 
         [Fact]
@@ -144,7 +144,7 @@ namespace Cmdty.Storage.Test
 
             AssertDecisionProfileAllZeros(valuationResults.StorageProfile,
                                 new Day(2019, 9, 15),
-                                new Day(2019, 9, 29));
+                                new Day(2019, 9, 30));
         }
 
         private static IntrinsicStorageValuationResults<Day> IntrinsicValuationZeroInventoryForwardCurveWithSpread(double forwardSpread)

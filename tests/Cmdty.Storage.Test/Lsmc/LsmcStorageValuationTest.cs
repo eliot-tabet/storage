@@ -515,7 +515,7 @@ namespace Cmdty.Storage.Test
                                             .WithForwardCurve(lsmcParams.ForwardCurve)
                                             .WithCmdtySettlementRule(lsmcParams.SettleDateRule)
                                             .WithDiscountFactorFunc(lsmcParams.DiscountFactors)
-                                            .WithFixedNumberOfPointsOnGlobalInventoryRange(NumInventorySpacePoints*5) // Finer grid for intrinsic as intrinsic valuation currently doesn't use a forward loop for TODO remove this once forward loop valuation implemented for intrinsic
+                                            .WithFixedNumberOfPointsOnGlobalInventoryRange(NumInventorySpacePoints)
                                             .WithLinearInventorySpaceInterpolation()
                                             .WithNumericalTolerance(lsmcParams.NumericalTolerance)
                                             .Calculate();
@@ -608,17 +608,17 @@ namespace Cmdty.Storage.Test
         [Trait("Category", "Lsmc.LikeIntrinsic")]
         public void Calculate_OneFactorVeryLowVolsSimpleStorage_DeltasApproximatelyEqualIntrinsicVolumeProfile()
         {
-            AssertVeryLowVolDeltasApproximatelyEqualIntrinsicVolumeProfile(_simpleDailyStorage);
+            Assert_VeryLowVol_DeltasEqualIntrinsicVolumeProfile(_simpleDailyStorage);
         }
 
         [Fact(Skip = "Need to investigate why this is failing.")] // TODO investigate
         [Trait("Category", "Lsmc.LikeIntrinsic")]
         public void Calculate_OneFactorVeryLowVolsStorageWithRatchets_DeltasApproximatelyEqualIntrinsicVolumeProfile()
         {
-            AssertVeryLowVolDeltasApproximatelyEqualIntrinsicVolumeProfile(_dailyStorageWithRatchets);
+            Assert_VeryLowVol_DeltasEqualIntrinsicVolumeProfile(_dailyStorageWithRatchets);
         }
 
-        private void AssertVeryLowVolDeltasApproximatelyEqualIntrinsicVolumeProfile(CmdtyStorage<Day> storage)
+        private void Assert_VeryLowVol_DeltasEqualIntrinsicVolumeProfile(CmdtyStorage<Day> storage)
         {
             var builder = _1FactorParamsBuilder.Clone();
             builder.Storage = storage;
@@ -636,7 +636,7 @@ namespace Cmdty.Storage.Test
             DoubleTimeSeries<Day> lsmcDeltas = lsmcResults.Deltas;
 
             Assert.Equal(intrinsicProfile.Start, lsmcDeltas.Start);
-            Assert.Equal(intrinsicProfile.End, lsmcDeltas.End - 1); // TODO IMPORTANT get rid of -1 and don't include end date in lsmc deltas?
+            Assert.Equal(intrinsicProfile.End, lsmcDeltas.End);
 
             const int precision = 5;
 
