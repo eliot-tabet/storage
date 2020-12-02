@@ -397,20 +397,20 @@ def _net_multi_factor_calc(cmdty_storage, fwd_curve, interest_rates, inventory, 
     net_discount_func = net_cs.StorageHelper.CreateAct65ContCompDiscounterFromSeries(net_interest_rate_time_series)
     net_on_progress = utils.wrap_on_progress_for_dotnet(on_progress_update)
 
-    logger.debug('Compiling basis functions. Takes a few seconds on the first run.')
+    logger.info('Compiling basis functions. Takes a few seconds on the first run.')
     net_basis_functions = net_cs.BasisFunctionsBuilder.Parse(basis_funcs)
-    logger.debug('Compilation of basis functions complete.')
+    logger.info('Compilation of basis functions complete.')
 
     # Intrinsic calc
-    logger.debug('Calculating intrinsic value.')
+    logger.info('Calculating intrinsic value.')
     intrinsic_result = cs_intrinsic.net_intrinsic_calc(cmdty_storage, net_current_period, net_interest_rate_time_series,
                                                        inventory, net_forward_curve, net_settlement_rule,
                                                        num_inventory_grid_points,
                                                        numerical_tolerance, time_period_type)
-    logger.debug('Calculation of intrinsic value complete.')
+    logger.info('Calculation of intrinsic value complete.')
 
     # Multi-factor calc
-    logger.debug('Calculating LSMC value.')
+    logger.info('Calculating LSMC value.')
     net_logger = utils.create_net_log_adapter(logger, net_cs.LsmcStorageValuation)
     lsmc = net_cs.LsmcStorageValuation(net_logger)
     net_lsmc_params_builder = net_cs.PythonHelpers.ObjectFactory.CreateLsmcValuationParamsBuilder[time_period_type]()
@@ -432,7 +432,7 @@ def _net_multi_factor_calc(cmdty_storage, fwd_curve, interest_rates, inventory, 
                                                                            fwd_sim_seed)
     net_lsmc_params = net_lsmc_params_builder.Build()
     net_val_results = lsmc.Calculate[time_period_type](net_lsmc_params)
-    logger.debug('Calculation of LSMC value complete.')
+    logger.info('Calculation of LSMC value complete.')
 
     deltas = utils.net_time_series_to_pandas_series(net_val_results.Deltas, cmdty_storage.freq)
     expected_profile = cs_intrinsic.profile_to_data_frame(cmdty_storage.freq, net_val_results.ExpectedStorageProfile)
