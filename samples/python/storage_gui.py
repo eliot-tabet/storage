@@ -10,6 +10,45 @@ from collections import namedtuple
 import itertools
 import logging
 
+def dataframe_to_ipysheet(dataframe):
+    import numpy as np
+    columns = dataframe.columns.tolist()
+    rows = dataframe.index.tolist()
+    cells = []
+    cells.append(ips.Cell(
+            value=[p.strftime('%Y-%m-%d') for p in dataframe.index],
+            row_start=0,
+            row_end=len(rows) - 1,
+            column_start=0,
+            column_end=0,
+            type='date',
+            date_format='YYYY-MM-DD',
+            squeeze_row=False,
+            squeeze_column=True
+    ))
+    idx = 1
+    for c in columns:
+        cells.append(ips.Cell(
+            value=dataframe[c].values,
+            row_start=0,
+            row_end=len(rows) - 1,
+            column_start=idx,
+            column_end=idx,
+            type='numeric',
+            numeric_format='0.00',
+            squeeze_row=False,
+            squeeze_column=True
+        ))
+        idx += 1
+    
+    return ips.Sheet(
+        rows=len(rows),
+        columns=len(columns)+1,
+        cells=cells,
+        row_headers=False,
+        column_headers=['period'] + [str(header) for header in columns])
+        
+
 # Set up logging
 class OutputWidgetHandler(logging.Handler):
     """ Custom logging handler sending logs to an output widget """
@@ -256,10 +295,16 @@ values_wgt = ipw.VBox(value_wgts)
 out_summary = ipw.Output()
 summary_vbox = ipw.HBox([values_wgt, out_summary])
 
-out_triggers = ipw.Output()
+sheet_out_layout = {
+    'width': '100%',
+    'height' : '300px',
+    'overflow_y': 'auto'}
 
-tab_out_titles = ['Summary', 'Trigger Prices']
-tab_out_children = [summary_vbox, out_triggers]
+out_triggers_plot = ipw.Output()
+out_triggers_table = ipw.Output(layout=sheet_out_layout)
+
+tab_out_titles = ['Summary', 'Trigger Prices Chart', 'Trigger Prices Table']
+tab_out_children = [summary_vbox, out_triggers_plot, out_triggers_table]
 tab_output = create_tab(tab_out_titles, tab_out_children)
 
 
@@ -297,7 +342,8 @@ def btn_clicked(b):
         vw.value = ''
     btn_calculate.disabled = True
     out_summary.clear_output()
-    out_triggers.clear_output()
+    out_triggers_plot.clear_output()
+    out_triggers_table.clear_output()
     try:
         global fwd_curve
         logger.debug('Reading forward curve.')
@@ -333,7 +379,7 @@ def btn_clicked(b):
                                     seed=seed, fwd_sim_seed=fwd_sim_seed, extra_decisions=extra_decisions_wgt.value,
                                     num_inventory_grid_points=grid_points_wgt.value, on_progress_update=on_progress,
                                     numerical_tolerance=num_tol_wgt.value)
-        logger.info('Valuation completed without error.')
+        logger.info('Valuation completed successfully.')
         full_value_wgt.value = "{0:,.0f}".format(val_results_3f.npv)
         intr_value_wgt.value = "{0:,.0f}".format(val_results_3f.intrinsic_npv)
         extr_value_wgt.value = "{0:,.0f}".format(val_results_3f.extrinsic_npv)
@@ -349,7 +395,7 @@ def btn_clicked(b):
             ax_1.legend(['Full Delta', 'Intrinsic Delta'])
             ax_2.legend(['Forward Curve'])
             show_inline_matplotlib_plots()
-        with out_triggers:
+        with out_triggers_plot:
             trigger_prices = val_results_3f.trigger_prices
             ax_1 = trigger_prices['inject_trigger_price'].plot(legend=True)
             ax_1.set_ylabel('Price')
@@ -363,6 +409,13 @@ def btn_clicked(b):
                         bbox_to_anchor=(0.2, -0.12))
             ax_2.legend(['Expected Inventory'], loc='upper center', bbox_to_anchor=(0.7, -0.12))
             show_inline_matplotlib_plots()
+        with out_triggers_table:
+            print('If table does not display correctly click below and wait a few seconds...')
+            trigger_prices_frame = val_results_3f.trigger_prices.copy()
+            trigger_prices_frame['expected_inventory'] = val_results_3f.expected_profile['inventory']
+            trigger_prices_frame['fwd_price'] = active_fwd_curve
+            triggers_sheet = dataframe_to_ipysheet(trigger_prices_frame)
+            display(triggers_sheet)
     except Exception as e:
         logger.error('Exception:')
         logger.error(e)
