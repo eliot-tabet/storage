@@ -301,10 +301,11 @@ sheet_out_layout = {
     'overflow_y': 'auto'}
 
 out_triggers_plot = ipw.Output()
+out_summary_table = ipw.Output(layout=sheet_out_layout)
 out_triggers_table = ipw.Output(layout=sheet_out_layout)
 
-tab_out_titles = ['Summary', 'Trigger Prices Chart', 'Trigger Prices Table']
-tab_out_children = [summary_vbox, out_triggers_plot, out_triggers_table]
+tab_out_titles = ['Summary', 'Summary Table', 'Trigger Prices Chart', 'Trigger Prices Table']
+tab_out_children = [summary_vbox, out_summary_table, out_triggers_plot, out_triggers_table]
 tab_output = create_tab(tab_out_titles, tab_out_children)
 
 
@@ -342,6 +343,7 @@ def btn_clicked(b):
         vw.value = ''
     btn_calculate.disabled = True
     out_summary.clear_output()
+    out_summary_table.clear_output()
     out_triggers_plot.clear_output()
     out_triggers_table.clear_output()
     try:
@@ -395,6 +397,13 @@ def btn_clicked(b):
             ax_1.legend(['Full Delta', 'Intrinsic Delta'])
             ax_2.legend(['Forward Curve'])
             show_inline_matplotlib_plots()
+        with out_summary_table:
+            print('If table does not display correctly click below and wait a few seconds...')
+            deltas_frame = pd.DataFrame(index=val_results_3f.deltas.index,
+                            data = {'full_delta' : val_results_3f.deltas,
+                                    'intrinsic_delta' : intr_delta})
+            deltas_sheet = dataframe_to_ipysheet(deltas_frame)
+            display(deltas_sheet)
         with out_triggers_plot:
             trigger_prices = val_results_3f.trigger_prices
             ax_1 = trigger_prices['inject_trigger_price'].plot(legend=True)
