@@ -398,7 +398,7 @@ def btn_clicked(b):
             ax_2.legend(['Forward Curve'])
             show_inline_matplotlib_plots()
         with out_summary_table:
-            print('If table does not display correctly click below and wait a few seconds...')
+            print('If table does not display correctly click below, scroll down, and wait a few seconds...')
             deltas_frame = pd.DataFrame(index=val_results_3f.deltas.index,
                             data = {'full_delta' : val_results_3f.deltas,
                                     'intrinsic_delta' : intr_delta})
@@ -419,7 +419,7 @@ def btn_clicked(b):
             ax_2.legend(['Expected Inventory'], loc='upper center', bbox_to_anchor=(0.7, -0.12))
             show_inline_matplotlib_plots()
         with out_triggers_table:
-            print('If table does not display correctly click below and wait a few seconds...')
+            print('If table does not display correctly click below, scroll down, and wait a few seconds...')
             trigger_prices_frame = val_results_3f.trigger_prices.copy()
             trigger_prices_frame['expected_inventory'] = val_results_3f.expected_profile['inventory']
             trigger_prices_frame['fwd_price'] = active_fwd_curve
