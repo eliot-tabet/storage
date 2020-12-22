@@ -9,22 +9,43 @@ from ipywidgets.widgets.interaction import show_inline_matplotlib_plots
 from collections import namedtuple
 import itertools
 import logging
+import csv
+from PyQt5.QtWidgets import QFileDialog
+
+# Shared variables
+freq = 'D'
+num_fwd_rows = 20
+date_format = 'YYYY-MM-DD'
+num_ratch_rows = 20
+RatchetRow = namedtuple('RatchetRow', ['date', 'inventory', 'inject_rate', 'withdraw_rate'])
+
+
+def select_file_open(header, filter):
+    dir = './'
+    file_name = QFileDialog.getOpenFileName(None, header, dir, filter=filter)
+    return file_name[0]
+
+
+def select_file_save(header, filter):
+    dir = './'
+    file_name = QFileDialog.getSaveFileName(None, header, dir, filter=filter)
+    return file_name[0]
+
 
 def dataframe_to_ipysheet(dataframe):
-    import numpy as np
     columns = dataframe.columns.tolist()
     rows = dataframe.index.tolist()
     cells = []
     cells.append(ips.Cell(
-            value=[p.strftime('%Y-%m-%d') for p in dataframe.index],
-            row_start=0,
-            row_end=len(rows) - 1,
-            column_start=0,
-            column_end=0,
-            type='date',
-            date_format='YYYY-MM-DD',
-            squeeze_row=False,
-            squeeze_column=True
+        value=[p.strftime('%Y-%m-%d') for p in dataframe.index],
+        row_start=0,
+        row_end=len(rows) - 1,
+        column_start=0,
+        column_end=0,
+        type='date',
+        date_format='YYYY-MM-DD',
+        squeeze_row=False,
+        squeeze_column=True
     ))
     idx = 1
     for c in columns:
@@ -40,14 +61,14 @@ def dataframe_to_ipysheet(dataframe):
             squeeze_column=True
         ))
         idx += 1
-    
+
     return ips.Sheet(
         rows=len(rows),
-        columns=len(columns)+1,
+        columns=len(columns) + 1,
         cells=cells,
         row_headers=False,
         column_headers=['period'] + [str(header) for header in columns])
-        
+
 
 # Set up logging
 class OutputWidgetHandler(logging.Handler):
@@ -69,13 +90,14 @@ class OutputWidgetHandler(logging.Handler):
         new_output = {
             'name': 'stdout',
             'output_type': 'stream',
-            'text': formatted_record+'\n'
+            'text': formatted_record + '\n'
         }
-        self.out.outputs = (new_output, ) + self.out.outputs 
+        self.out.outputs = (new_output,) + self.out.outputs
 
     def clear_logs(self):
         """ Clear the current logs """
         self.out.clear_output()
+
 
 logger = logging.getLogger('storage_gui')
 log_handler = OutputWidgetHandler()
@@ -84,32 +106,29 @@ logger.addHandler(log_handler)
 logger.setLevel(logging.INFO)
 
 log_level_wgt = ipw.Dropdown(description='Log Level',
-                options=['Debug', 'Info', 'Warning', 'Error', 'Critical'],
-                value='Info')
+                             options=['Debug', 'Info', 'Warning', 'Error', 'Critical'],
+                             value='Info')
 
 multi_factor.logger.addHandler(log_handler)
 multi_factor.logger.setLevel(logging.INFO)
+
 
 def on_log_level_change(change):
     level_text = change['new']
     level_int = getattr(logging, level_text.upper())
     logger.setLevel(level_int)
     multi_factor.logger.setLevel(level_int)
-    
+
+
 log_level_wgt.observe(on_log_level_change, names='value')
+
 
 def on_clear_logs_clicked(b):
     log_handler.clear_logs()
 
+
 btn_clear_logs = ipw.Button(description='Clear Log Display')
 btn_clear_logs.on_click(on_clear_logs_clicked)
-
-# Shared properties
-freq='D'
-num_fwd_rows = 15
-date_format = 'YYYY-MM-DD'
-num_ratch_rows = 20
-RatchetRow = namedtuple('RatchetRow', ['date', 'inventory', 'inject_rate', 'withdraw_rate'])
 
 def create_tab(titles, children):
     tab = ipw.Tab()
@@ -118,24 +137,27 @@ def create_tab(titles, children):
     tab.children = children
     return tab
 
+
 def enumerate_ratchets():
     ratchet_row = 0
     while ratchet_row < num_ratch_rows and ratch_input_sheet[ratchet_row, 1].value != '':
         yield RatchetRow(ratch_input_sheet[ratchet_row, 0].value, ratch_input_sheet[ratchet_row, 1].value,
-                        ratch_input_sheet[ratchet_row, 3].value, ratch_input_sheet[ratchet_row, 2].value)
-        ratchet_row+=1
+                         ratch_input_sheet[ratchet_row, 3].value, ratch_input_sheet[ratchet_row, 2].value)
+        ratchet_row += 1
+
 
 def read_ratchets():
     ratchets = []
     for ratch in enumerate_ratchets():
         if ratch.date != '':
             dt_item = (pd.Period(ratch.date, freq=freq), [(ratch.inventory, -ratch.inject_rate,
-                                                        ratch.withdraw_rate)])
+                                                           ratch.withdraw_rate)])
             ratchets.append(dt_item)
         else:
             dt_item[1].append((ratch.inventory, -ratch.inject_rate,
-                                                        ratch.withdraw_rate))
+                               ratch.withdraw_rate))
     return ratchets
+
 
 val_date_wgt = ipw.DatePicker(description='Val Date', value=date.today())
 inventory_wgt = ipw.FloatText(description='Inventory')
@@ -154,16 +176,22 @@ smooth_curve_wgt = ipw.Checkbox(description='Apply Smoothing', value=False)
 apply_wkend_shaping_wgt = ipw.Checkbox(description='Wkend Shaping', value=False, disabled=True)
 wkend_factor_wgt = ipw.FloatText(description='Wkend shaping factor', step=0.005, disabled=True)
 btw_plot_fwd_wgt = ipw.Button(description='Plot Forward Curve')
+btn_import_fwd_wgt = ipw.Button(description='Import Forward Curve')
+btn_export_fwd_wgt = ipw.Button(description='Export Forward Curve')
 
 def on_smooth_curve_change(change):
     apply_wkend_shaping_wgt.disabled = not change['new']
 
+
 smooth_curve_wgt.observe(on_smooth_curve_change, names='value')
+
 
 def on_apply_wkend_shaping_change(change):
     wkend_factor_wgt.disabled = not change['new']
 
+
 apply_wkend_shaping_wgt.observe(on_apply_wkend_shaping_change, names='value')
+
 
 def on_plot_fwd_clicked(b):
     out_fwd_curve.clear_output()
@@ -172,11 +200,53 @@ def on_plot_fwd_clicked(b):
         curve.plot()
         show_inline_matplotlib_plots()
 
+
 btw_plot_fwd_wgt.on_click(on_plot_fwd_clicked)
 
 
+def on_import_fwd_curve_clicked(b):
+    fwd_curve_path = select_file_open('Select forward curve file', 'CSV File (*.csv)')
+    if fwd_curve_path != '':
+        for i in range(0, num_fwd_rows):
+            fwd_input_sheet[i, 0].value = ''
+            fwd_input_sheet[i, 1].value = ''
+        with open(fwd_curve_path, mode='r') as fwd_csv_file:
+            csv_reader = csv.DictReader(fwd_csv_file)
+            line_count = 0
+            for row in csv_reader:
+                if line_count == 0:
+                    header_text = ','.join(row)
+                    if header_text != 'contract_start,price':
+                        raise ValueError('Forward curve header row must be \'contract_start,price\'.')
+                contract = row['contract_start']
+                price = row['price']
+                fwd_input_sheet[line_count, 0].value = contract
+                fwd_input_sheet[line_count, 1].value = float(price)
+                line_count += 1
+
+
+def on_export_fwd_curve_clicked(b):
+    fwd_curve_path = select_file_save('Save forward curve to', 'CSV File (*.csv)')
+    if fwd_curve_path != '':
+        rows = []
+        fwd_row = 0
+        while fwd_input_sheet[fwd_row, 0].value != '':
+            row = {'contract_start': fwd_input_sheet[fwd_row, 0].value,
+                   'price': fwd_input_sheet[fwd_row, 1].value}
+            rows.append(row)
+            fwd_row += 1
+        with open(fwd_curve_path, mode='w', newline='') as fwd_csv_file:
+            writer = csv.DictWriter(fwd_csv_file, fieldnames=['contract_start', 'price'])
+            writer.writeheader()
+            writer.writerows(rows)
+
+
+btn_import_fwd_wgt.on_click(on_import_fwd_curve_clicked)
+btn_export_fwd_wgt.on_click(on_export_fwd_curve_clicked)
+
 fwd_data_wgt = ipw.HBox([ipw.VBox([smooth_curve_wgt, apply_wkend_shaping_wgt, wkend_factor_wgt,
-                       fwd_input_sheet]), ipw.VBox([btw_plot_fwd_wgt, out_fwd_curve])])
+                    ipw.HBox([btn_import_fwd_wgt, btn_export_fwd_wgt]), fwd_input_sheet]),
+                    ipw.VBox([btw_plot_fwd_wgt, out_fwd_curve])])
 
 # Common storage properties
 stor_type_wgt = ipw.RadioButtons(options=['Simple', 'Ratchets'], description='Storage Type')
@@ -187,8 +257,9 @@ inj_consumed_wgt = ipw.FloatText(description='Inj % Consumed', step=0.001)
 with_cost_wgt = ipw.FloatText(description='Withdrw Cost')
 with_consumed_wgt = ipw.FloatText(description='With % Consumed', step=0.001)
 
-storage_common_wgt = ipw.HBox([ipw.VBox([start_wgt, end_wgt, inj_cost_wgt, 
-    with_cost_wgt]), ipw.VBox([stor_type_wgt, inj_consumed_wgt, with_consumed_wgt])])
+storage_common_wgt = ipw.HBox([ipw.VBox([start_wgt, end_wgt, inj_cost_wgt,
+                                         with_cost_wgt]),
+                               ipw.VBox([stor_type_wgt, inj_consumed_wgt, with_consumed_wgt])])
 
 # Simple storage type properties
 invent_min_wgt = ipw.FloatText(description='Min Inventory')
@@ -199,7 +270,7 @@ storage_simple_wgt = ipw.VBox([invent_min_wgt, invent_max_wgt, inj_rate_wgt, wit
 
 # Ratchet storage type properties
 
-ratch_input_sheet = ips.sheet(rows=num_ratch_rows, columns=4, 
+ratch_input_sheet = ips.sheet(rows=num_ratch_rows, columns=4,
                               column_headers=['date', 'inventory', 'inject_rate', 'withdraw_rate'])
 for row_num in range(0, num_ratch_rows):
     ips.cell(row_num, 0, '', date_format=date_format, type='date')
@@ -210,13 +281,15 @@ for row_num in range(0, num_ratch_rows):
 # Compose storage
 storage_details_wgt = ipw.VBox([storage_common_wgt, storage_simple_wgt])
 
+
 def on_stor_type_change(change):
     if change['new'] == 'Simple':
         storage_details_wgt.children = (storage_common_wgt, storage_simple_wgt)
     else:
         storage_details_wgt.children = (storage_common_wgt, ratch_input_sheet)
-stor_type_wgt.observe(on_stor_type_change, names='value')
 
+
+stor_type_wgt.observe(on_stor_type_change, names='value')
 
 # Volatility parameters
 spot_vol_wgt = ipw.FloatText(description='Spot Vol', step=0.01)
@@ -224,8 +297,9 @@ spot_mr_wgt = ipw.FloatText(description='Spot Mean Rev', step=0.01)
 lt_vol_wgt = ipw.FloatText(description='Long Term Vol', step=0.01)
 seas_vol_wgt = ipw.FloatText(description='Seasonal Vol', step=0.01)
 btn_plot_vol = ipw.Button(description='Plot Forward Vol')
-out_vols =  ipw.Output()
+out_vols = ipw.Output()
 vol_params_wgt = ipw.HBox([ipw.VBox([spot_vol_wgt, spot_mr_wgt, lt_vol_wgt, seas_vol_wgt, btn_plot_vol]), out_vols])
+
 
 # Plotting vol
 def btn_plot_vol_clicked(b):
@@ -235,7 +309,8 @@ def btn_plot_vol_clicked(b):
             print('Enter val date and storage end date.')
             return
         vol_model = MultiFactorModel.for_3_factor_seasonal(freq, spot_mr_wgt.value, spot_vol_wgt.value,
-                                   lt_vol_wgt.value, seas_vol_wgt.value, val_date_wgt.value, end_wgt.value)
+                                                           lt_vol_wgt.value, seas_vol_wgt.value, val_date_wgt.value,
+                                                           end_wgt.value)
         start_vol_period = pd.Period(val_date_wgt.value, freq=freq)
         end_vol_period = start_vol_period + 1
         periods = pd.period_range(start=end_vol_period, end=end_wgt.value, freq=freq)
@@ -243,7 +318,8 @@ def btn_plot_vol_clicked(b):
         fwd_vol_series = pd.Series(data=fwd_vols, index=periods)
         fwd_vol_series.plot()
         show_inline_matplotlib_plots()
-        
+
+
 btn_plot_vol.on_click(btn_plot_vol_clicked)
 
 # Technical Parameters
@@ -256,8 +332,8 @@ fwd_sim_seed_wgt = ipw.IntText(description='Fwd Sim Seed', value=13, disabled=Fa
 grid_points_wgt = ipw.IntText(description='Grid Points', value=100, step=10)
 basis_funcs_label_wgt = ipw.Label('Basis Functions')
 basis_funcs_legend_wgt = ipw.VBox([ipw.Label('1=Constant'),
-                                    ipw.Label('s=Spot Price'),
-                                    ipw.Label('x_st=Short-term Factor'),
+                                   ipw.Label('s=Spot Price'),
+                                   ipw.Label('x_st=Short-term Factor'),
                                    ipw.Label('x_sw=Sum/Win Factor'),
                                    ipw.Label('x_lt=Long-term Factor')])
 
@@ -267,18 +343,23 @@ basis_funcs_input_wgt = ipw.Textarea(
 basis_func_wgt = ipw.HBox([ipw.VBox([basis_funcs_label_wgt, basis_funcs_legend_wgt]), basis_funcs_input_wgt])
 num_tol_wgt = ipw.FloatText(description='Numerical Tol', value=1E-10, step=1E-9)
 
+
 def on_seed_is_random_change(change):
     random_seed_wgt.disabled = change['new']
 
+
 seed_is_random_wgt.observe(on_seed_is_random_change, names='value')
+
 
 def on_fwd_sim_seed_set_change(change):
     fwd_sim_seed_wgt.disabled = not change['new']
 
+
 fwd_sim_seed_set_wgt.observe(on_fwd_sim_seed_set_change, names='value')
 
-tech_params_wgt = ipw.HBox([ipw.VBox([num_sims_wgt, extra_decisions_wgt, seed_is_random_wgt, random_seed_wgt, fwd_sim_seed_set_wgt, 
-    fwd_sim_seed_wgt, grid_points_wgt, num_tol_wgt]), basis_func_wgt])
+tech_params_wgt = ipw.HBox(
+    [ipw.VBox([num_sims_wgt, extra_decisions_wgt, seed_is_random_wgt, random_seed_wgt, fwd_sim_seed_set_wgt,
+               fwd_sim_seed_wgt, grid_points_wgt, num_tol_wgt]), basis_func_wgt])
 
 tab_in_titles = ['Valuation Data', 'Forward Curve', 'Storage Details', 'Volatility Params', 'Technical Params']
 tab_in_children = [val_inputs_wgt, fwd_data_wgt, storage_details_wgt, vol_params_wgt, tech_params_wgt]
@@ -297,7 +378,7 @@ summary_vbox = ipw.HBox([values_wgt, out_summary])
 
 sheet_out_layout = {
     'width': '100%',
-    'height' : '300px',
+    'height': '300px',
     'overflow_y': 'auto'}
 
 out_triggers_plot = ipw.Output()
@@ -312,8 +393,10 @@ tab_output = create_tab(tab_out_titles, tab_out_children)
 def on_progress(progress):
     progress_wgt.value = progress
 
+
 # Inputs Not Defined in GUI
 def twentieth_of_next_month(period): return period.asfreq('M').asfreq('D', 'end') + 20
+
 
 def read_fwd_curve():
     fwd_periods = []
@@ -337,6 +420,7 @@ def read_fwd_curve():
     else:
         return pd.Series(fwd_prices, pd.PeriodIndex(fwd_periods)).resample(freq).fillna('pad')
 
+
 def btn_clicked(b):
     progress_wgt.value = 0.0
     for vw in value_wgts:
@@ -354,39 +438,46 @@ def btn_clicked(b):
         global storage
         global val_results_3f
         if stor_type_wgt.value == 'Simple':
-            storage = CmdtyStorage(freq, storage_start=start_wgt.value, storage_end=end_wgt.value, 
+            storage = CmdtyStorage(freq, storage_start=start_wgt.value, storage_end=end_wgt.value,
                                    injection_cost=inj_cost_wgt.value, withdrawal_cost=with_cost_wgt.value,
-                                  min_inventory=invent_min_wgt.value, max_inventory=invent_max_wgt.value,
-                                  max_injection_rate=inj_rate_wgt.value, max_withdrawal_rate=with_rate_wgt.value,
-                                  cmdty_consumed_inject=inj_consumed_wgt.value, 
-                                  cmdty_consumed_withdraw=with_consumed_wgt.value)
+                                   min_inventory=invent_min_wgt.value, max_inventory=invent_max_wgt.value,
+                                   max_injection_rate=inj_rate_wgt.value, max_withdrawal_rate=with_rate_wgt.value,
+                                   cmdty_consumed_inject=inj_consumed_wgt.value,
+                                   cmdty_consumed_withdraw=with_consumed_wgt.value)
         else:
             ratchets = read_ratchets()
-            storage = CmdtyStorage(freq, storage_start=start_wgt.value, storage_end=end_wgt.value, 
-                       injection_cost=inj_cost_wgt.value, withdrawal_cost=with_cost_wgt.value,
-                       constraints=ratchets)
+            storage = CmdtyStorage(freq, storage_start=start_wgt.value, storage_end=end_wgt.value,
+                                   injection_cost=inj_cost_wgt.value, withdrawal_cost=with_cost_wgt.value,
+                                   constraints=ratchets)
 
-        interest_rate_curve = pd.Series(index=pd.period_range(val_date_wgt.value, 
-                                  twentieth_of_next_month(pd.Period(end_wgt.value, freq='D')), freq='D'), dtype='float64')
+        interest_rate_curve = pd.Series(index=pd.period_range(val_date_wgt.value,
+                                                              twentieth_of_next_month(
+                                                                  pd.Period(end_wgt.value, freq='D')), freq='D'),
+                                        dtype='float64')
         interest_rate_curve[:] = ir_wgt.value
         seed = None if seed_is_random_wgt.value else random_seed_wgt.value
         fwd_sim_seed = fwd_sim_seed_wgt.value if fwd_sim_seed_set_wgt.value else None
         logger.info('Valuation started.')
-        val_results_3f = three_factor_seasonal_value(storage, val_date_wgt.value, inventory_wgt.value, fwd_curve=fwd_curve,
-                                     interest_rates=interest_rate_curve, settlement_rule=twentieth_of_next_month,
-                                    spot_mean_reversion=spot_mr_wgt.value, spot_vol=spot_vol_wgt.value,
-                                    long_term_vol=lt_vol_wgt.value, seasonal_vol=seas_vol_wgt.value,
-                                    num_sims=num_sims_wgt.value, 
-                                    basis_funcs=basis_funcs_input_wgt.value, discount_deltas = discount_deltas_wgt.value,
-                                    seed=seed, fwd_sim_seed=fwd_sim_seed, extra_decisions=extra_decisions_wgt.value,
-                                    num_inventory_grid_points=grid_points_wgt.value, on_progress_update=on_progress,
-                                    numerical_tolerance=num_tol_wgt.value)
+        val_results_3f = three_factor_seasonal_value(storage, val_date_wgt.value, inventory_wgt.value,
+                                                     fwd_curve=fwd_curve,
+                                                     interest_rates=interest_rate_curve,
+                                                     settlement_rule=twentieth_of_next_month,
+                                                     spot_mean_reversion=spot_mr_wgt.value, spot_vol=spot_vol_wgt.value,
+                                                     long_term_vol=lt_vol_wgt.value, seasonal_vol=seas_vol_wgt.value,
+                                                     num_sims=num_sims_wgt.value,
+                                                     basis_funcs=basis_funcs_input_wgt.value,
+                                                     discount_deltas=discount_deltas_wgt.value,
+                                                     seed=seed, fwd_sim_seed=fwd_sim_seed,
+                                                     extra_decisions=extra_decisions_wgt.value,
+                                                     num_inventory_grid_points=grid_points_wgt.value,
+                                                     on_progress_update=on_progress,
+                                                     numerical_tolerance=num_tol_wgt.value)
         logger.info('Valuation completed successfully.')
         full_value_wgt.value = "{0:,.0f}".format(val_results_3f.npv)
         intr_value_wgt.value = "{0:,.0f}".format(val_results_3f.intrinsic_npv)
         extr_value_wgt.value = "{0:,.0f}".format(val_results_3f.extrinsic_npv)
         intr_delta = val_results_3f.intrinsic_profile['net_volume']
-        
+
         active_fwd_curve = fwd_curve[storage.start:storage.end]
         with out_summary:
             ax_1 = val_results_3f.deltas.plot(legend=True)
@@ -400,8 +491,8 @@ def btn_clicked(b):
         with out_summary_table:
             print('If table does not display correctly click below, scroll down, and wait a few seconds...')
             deltas_frame = pd.DataFrame(index=val_results_3f.deltas.index,
-                            data = {'full_delta' : val_results_3f.deltas,
-                                    'intrinsic_delta' : intr_delta})
+                                        data={'full_delta': val_results_3f.deltas,
+                                              'intrinsic_delta': intr_delta})
             deltas_sheet = dataframe_to_ipysheet(deltas_frame)
             display(deltas_sheet)
         with out_triggers_plot:
@@ -414,7 +505,7 @@ def btn_clicked(b):
             ax_2.set_ylabel('Volume')
             box = ax_1.get_position()
             ax_1.set_position([box.x0, box.y0 + box.height * 0.1, box.width, box.height * 0.9])
-            ax_1.legend(['Inject Trigger Price', 'Withdraw Trigger Price', 'Forward Curve'], loc='upper center', 
+            ax_1.legend(['Inject Trigger Price', 'Withdraw Trigger Price', 'Forward Curve'], loc='upper center',
                         bbox_to_anchor=(0.2, -0.12))
             ax_2.legend(['Expected Inventory'], loc='upper center', bbox_to_anchor=(0.7, -0.12))
             show_inline_matplotlib_plots()
@@ -433,14 +524,16 @@ def btn_clicked(b):
 
 
 btn_calculate = ipw.Button(description='Calculate')
-btn_calculate.on_click(btn_clicked)  
+btn_calculate.on_click(btn_clicked)
 
 controls_wgt = ipw.HBox([ipw.VBox([btn_calculate, progress_wgt, log_level_wgt, btn_clear_logs]), log_handler.out])
+
 
 def display_gui():
     display(tab_in)
     display(controls_wgt)
     display(tab_output)
+
 
 def test_data_btn():
     def btn_test_data_clicked(b):
@@ -474,7 +567,7 @@ def test_data_btn():
         for idx, wthd in enumerate([702.7, 785.0, 790.6, 825.6, 850.4]):
             ratch_input_sheet[idx, 3].value = wthd
         ratch_2_offset = 5
-        ratch_input_sheet[ratch_2_offset, 0].value = (today + timedelta(days = 150)).strftime('%Y-%m-%d')
+        ratch_input_sheet[ratch_2_offset, 0].value = (today + timedelta(days=150)).strftime('%Y-%m-%d')
         for idx, inv in enumerate([0.0, 24000.0, 48000.0, 61000.0, 65000.0]):
             ratch_input_sheet[ratch_2_offset + idx, 1].value = inv
         for idx, inj in enumerate([645.8, 593.65, 568.55, 560.8, 550.0]):
