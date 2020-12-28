@@ -10,7 +10,8 @@ from collections import namedtuple
 import itertools
 import logging
 import csv
-from PyQt5.QtWidgets import QFileDialog
+import os
+from PyQt5.QtWidgets import QFileDialog, QApplication
 
 # Shared variables
 freq = 'D'
@@ -22,13 +23,16 @@ RatchetRow = namedtuple('RatchetRow', ['date', 'inventory', 'inject_rate', 'with
 
 def select_file_open(header, filter):
     dir = './'
+    app = QApplication([dir])
     file_name = QFileDialog.getOpenFileName(None, header, dir, filter=filter)
     return file_name[0]
 
 
-def select_file_save(header, filter):
+def select_file_save(header, filter, default_file_name):
     dir = './'
-    file_name = QFileDialog.getSaveFileName(None, header, dir, filter=filter)
+    app = QApplication([dir])
+    default_file_path = os.path.join(dir, default_file_name)
+    file_name = QFileDialog.getSaveFileName(None, header, default_file_path, filter=filter)
     return file_name[0]
 
 
@@ -226,7 +230,7 @@ def on_import_fwd_curve_clicked(b):
 
 
 def on_export_fwd_curve_clicked(b):
-    fwd_curve_path = select_file_save('Save forward curve to', 'CSV File (*.csv)')
+    fwd_curve_path = select_file_save('Save forward curve to', 'CSV File (*.csv)', 'fwd_curve_data.csv')
     if fwd_curve_path != '':
         rows = []
         fwd_row = 0
@@ -385,8 +389,38 @@ out_triggers_plot = ipw.Output()
 out_summary_table = ipw.Output(layout=sheet_out_layout)
 out_triggers_table = ipw.Output(layout=sheet_out_layout)
 
+# Buttons to export table results
+def create_deltas_dataframe():
+    return pd.DataFrame(index=val_results_3f.deltas.index,
+                    data={'full_delta': val_results_3f.deltas,
+                          'intrinsic_delta': intr_delta})
+
+def create_triggers_dataframe():
+    trigger_prices_frame = val_results_3f.trigger_prices.copy()
+    trigger_prices_frame['expected_inventory'] = val_results_3f.expected_profile['inventory']
+    trigger_prices_frame['fwd_price'] = active_fwd_curve
+    return trigger_prices_frame
+
+def on_export_summary_click(b):
+    csv_path = select_file_save('Save table to', 'CSV File (*.csv)', 'storage_deltas.csv')
+    if csv_path != '':
+        deltas_frame = create_deltas_dataframe()
+        deltas_frame.to_csv(csv_path)
+
+def on_export_triggers_click(b):
+    csv_path = select_file_save('Save table to', 'CSV File (*.csv)', 'trigger_prices.csv')
+    if csv_path != '':
+        triggers_frame = create_triggers_dataframe()
+        triggers_frame.to_csv(csv_path)
+
+btn_export_summary_wgt = ipw.Button(description='Export Data', disabled=True)
+btn_export_summary_wgt.on_click(on_export_summary_click)
+btn_export_triggers_wgt = ipw.Button(description='Export Data', disabled=True)
+btn_export_triggers_wgt.on_click(on_export_triggers_click)
+
 tab_out_titles = ['Summary', 'Summary Table', 'Trigger Prices Chart', 'Trigger Prices Table']
-tab_out_children = [summary_vbox, out_summary_table, out_triggers_plot, out_triggers_table]
+tab_out_children = [summary_vbox, ipw.VBox([btn_export_summary_wgt, out_summary_table]), 
+    out_triggers_plot, ipw.VBox([btn_export_triggers_wgt, out_triggers_table])]
 tab_output = create_tab(tab_out_titles, tab_out_children)
 
 
@@ -476,8 +510,13 @@ def btn_clicked(b):
         full_value_wgt.value = "{0:,.0f}".format(val_results_3f.npv)
         intr_value_wgt.value = "{0:,.0f}".format(val_results_3f.intrinsic_npv)
         extr_value_wgt.value = "{0:,.0f}".format(val_results_3f.extrinsic_npv)
+        global intr_delta
         intr_delta = val_results_3f.intrinsic_profile['net_volume']
-
+        
+        btn_export_summary_wgt.disabled = False
+        btn_export_triggers_wgt.disabled = False
+        
+        global active_fwd_curve
         active_fwd_curve = fwd_curve[storage.start:storage.end]
         with out_summary:
             ax_1 = val_results_3f.deltas.plot(legend=True)
@@ -490,9 +529,7 @@ def btn_clicked(b):
             show_inline_matplotlib_plots()
         with out_summary_table:
             print('If table does not display correctly click below, scroll down, and wait a few seconds...')
-            deltas_frame = pd.DataFrame(index=val_results_3f.deltas.index,
-                                        data={'full_delta': val_results_3f.deltas,
-                                              'intrinsic_delta': intr_delta})
+            deltas_frame = create_deltas_dataframe()
             deltas_sheet = dataframe_to_ipysheet(deltas_frame)
             display(deltas_sheet)
         with out_triggers_plot:
@@ -511,9 +548,7 @@ def btn_clicked(b):
             show_inline_matplotlib_plots()
         with out_triggers_table:
             print('If table does not display correctly click below, scroll down, and wait a few seconds...')
-            trigger_prices_frame = val_results_3f.trigger_prices.copy()
-            trigger_prices_frame['expected_inventory'] = val_results_3f.expected_profile['inventory']
-            trigger_prices_frame['fwd_price'] = active_fwd_curve
+            trigger_prices_frame = create_triggers_dataframe()
             triggers_sheet = dataframe_to_ipysheet(trigger_prices_frame)
             display(triggers_sheet)
     except Exception as e:
