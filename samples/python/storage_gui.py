@@ -15,7 +15,7 @@ from PyQt5.QtWidgets import QFileDialog, QApplication
 
 # Shared variables
 freq = 'D'
-num_fwd_rows = 20
+num_fwd_rows = 28
 date_format = 'YYYY-MM-DD'
 num_ratch_rows = 20
 RatchetRow = namedtuple('RatchetRow', ['date', 'inventory', 'inject_rate', 'withdraw_rate'])
