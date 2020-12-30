@@ -41,7 +41,6 @@ namespace Cmdty.Storage
     {
         private readonly ILogger<LsmcStorageValuation> _logger;
 
-        private const double FloatingPointTol = 1E-8;   // TODO better way to pick this.
         // This has been very roughly estimated. Probably there is a better way of splitting up progress by estimating the order of the backward and forward components.
         private const double BackwardPcntTime = 0.96;
 
@@ -447,7 +446,7 @@ namespace Cmdty.Storage
                         double immediateNpv = injectWithdrawNpv - injectWithdrawCostNpv + cmdtyUsedForInjectWithdrawNpv - inventoryCostNpv; // TODO IMPORTANT check if inventoryCostNpv should be subtracted
 
                         double continuationValue =
-                            InterpolateContinuationValue(inventoryAfterDecision, nextPeriodInventorySpaceGrid, regressContinuationValues, simIndex);
+                            InterpolateContinuationValue(inventoryAfterDecision, nextPeriodInventorySpaceGrid, regressContinuationValues, simIndex, lsmcParams.NumericalTolerance);
 
                         double totalNpv = immediateNpv + continuationValue; 
                         decisionNpvsRegress[decisionIndex] = totalNpv;
@@ -504,14 +503,14 @@ namespace Cmdty.Storage
                     {
                         (double alternativeContinuationValue, double alternativeDecisionCost, double alternativeCmdtyConsumed) =
                             CalcAlternatives(lsmcParams.Storage, expectedInventory, alternativeVolume, expectedInventoryInventoryLoss, inventoryGridNexPeriod, 
-                                regressContinuationValues, period, DiscountToCurrentDay);
+                                regressContinuationValues, period, DiscountToCurrentDay, lsmcParams.NumericalTolerance);
                         double[] triggerPriceVolumes = CalcInjectTriggerPriceVolumes<T>(triggerPriceMaxInjectVolume, alternativeVolume, numTriggerPriceVolumes);
 
                         foreach (double triggerVolume in triggerPriceVolumes)
                         {
                             double injectTriggerPrice = CalcTriggerPrice(lsmcParams.Storage, expectedInventory, triggerVolume, expectedInventoryInventoryLoss, inventoryGridNexPeriod,
                                 regressContinuationValues, alternativeContinuationValue, alternativeVolume, period, alternativeDecisionCost,
-                                alternativeCmdtyConsumed, discountFactorFromCmdtySettlement, DiscountToCurrentDay);
+                                alternativeCmdtyConsumed, discountFactorFromCmdtySettlement, DiscountToCurrentDay, lsmcParams.NumericalTolerance);
                             injectTriggerPrices.Add(new TriggerPricePoint(triggerVolume, injectTriggerPrice));
                         }
 
@@ -532,14 +531,14 @@ namespace Cmdty.Storage
                     {
                         (double alternativeContinuationValue, double alternativeDecisionCost, double alternativeCmdtyConsumed) =
                             CalcAlternatives(lsmcParams.Storage, expectedInventory, alternativeVolume, expectedInventoryInventoryLoss, inventoryGridNexPeriod, 
-                                regressContinuationValues, period, DiscountToCurrentDay);
+                                regressContinuationValues, period, DiscountToCurrentDay, lsmcParams.NumericalTolerance);
                         double[] triggerPriceVolumes = CalcWithdrawTriggerPriceVolumes<T>(maxWithdrawVolume, alternativeVolume, numTriggerPriceVolumes);
 
                         foreach (double triggerVolume in triggerPriceVolumes.Reverse())
                         {
                             double withdrawTriggerPrice = CalcTriggerPrice(lsmcParams.Storage, expectedInventory, triggerVolume, expectedInventoryInventoryLoss, inventoryGridNexPeriod,
                                 regressContinuationValues, alternativeContinuationValue, alternativeVolume, period, alternativeDecisionCost,
-                                alternativeCmdtyConsumed, discountFactorFromCmdtySettlement, DiscountToCurrentDay);
+                                alternativeCmdtyConsumed, discountFactorFromCmdtySettlement, DiscountToCurrentDay, lsmcParams.NumericalTolerance);
                             withdrawTriggerPrices.Add(new TriggerPricePoint(triggerVolume, withdrawTriggerPrice));
                         }
 
@@ -611,11 +610,12 @@ namespace Cmdty.Storage
 
         private static double CalcTriggerPrice<T>(ICmdtyStorage<T> storage, double expectedInventory, double triggerVolume, double inventoryLoss,
                 double[] inventoryGridNexPeriod, Vector<double>[] regressContinuationValues, double alternativeContinuationValue, double alternativeVolume, T period,
-                double alternativeDecisionCost, double alternativeCmdtyConsumed, double discountFactorFromCmdtySettlement, Func<Day, double> discountToCurrentDay) 
+                double alternativeDecisionCost, double alternativeCmdtyConsumed, double discountFactorFromCmdtySettlement, Func<Day, double> discountToCurrentDay,
+                double numericalTolerance) 
             where T : ITimePeriod<T>
         {
             double inventoryAfterTriggerVolume = expectedInventory + triggerVolume - inventoryLoss;
-            double triggerVolumeContinuationValue = AverageContinuationValue(inventoryAfterTriggerVolume, inventoryGridNexPeriod, regressContinuationValues);
+            double triggerVolumeContinuationValue = AverageContinuationValue(inventoryAfterTriggerVolume, inventoryGridNexPeriod, regressContinuationValues, numericalTolerance);
             double triggerVolumeContinuationValueChange = triggerVolumeContinuationValue - alternativeContinuationValue;
 
             double triggerVolumeExcessVolume = triggerVolume - alternativeVolume;
@@ -652,10 +652,10 @@ namespace Cmdty.Storage
 
         private static (double alternativeContinuationValue, double alternativeDecisionCost, double alternativeCmdtyConsumed) CalcAlternatives<T>(
             ICmdtyStorage<T> storage, double expectedInventory, double alternativeVolume, double inventoryLoss, double[] inventoryGridNexPeriod,
-            Vector<double>[] regressContinuationValues, T period, Func<Day, double> discountToPresent) where T : ITimePeriod<T>
+            Vector<double>[] regressContinuationValues, T period, Func<Day, double> discountToPresent, double numericalTolerance) where T : ITimePeriod<T>
         {
             double inventoryAfterAlternative = expectedInventory + alternativeVolume - inventoryLoss;
-            double alternativeContinuationValue = AverageContinuationValue(inventoryAfterAlternative, inventoryGridNexPeriod, regressContinuationValues);
+            double alternativeContinuationValue = AverageContinuationValue(inventoryAfterAlternative, inventoryGridNexPeriod, regressContinuationValues, numericalTolerance);
             double alternativeDecisionCost = InjectWithdrawCostNpv(storage, alternativeVolume, period, expectedInventory, discountToPresent);
             double alternativeCmdtyConsumed = CmdtyVolumeConsumedOnDecision(storage, alternativeVolume, period, expectedInventory);
             return (alternativeContinuationValue, alternativeDecisionCost, alternativeCmdtyConsumed);
@@ -690,21 +690,15 @@ namespace Cmdty.Storage
         }
 
         private static double AverageContinuationValue(double inventoryAfterDecision, double[] inventoryGrid,
-            Vector<double>[] storageRegressValuesNextPeriod)
+                Vector<double>[] storageRegressValuesNextPeriod, double numericalTolerance)
         {
-            (int lowerInventoryIndex, int upperInventoryIndex) = StorageHelper.BisectInventorySpace(inventoryGrid, inventoryAfterDecision);
+            (int lowerInventoryIndex, int upperInventoryIndex) = StorageHelper.BisectInventorySpace(inventoryGrid, inventoryAfterDecision, numericalTolerance);
 
             if (lowerInventoryIndex == upperInventoryIndex)
                 return storageRegressValuesNextPeriod[lowerInventoryIndex].Average();
 
             double lowerInventory = inventoryGrid[lowerInventoryIndex];
-            if (Math.Abs(inventoryAfterDecision - lowerInventory) < FloatingPointTol)
-                return storageRegressValuesNextPeriod[lowerInventoryIndex].Average();
-
             double upperInventory = inventoryGrid[upperInventoryIndex];
-            if (Math.Abs(inventoryAfterDecision - upperInventory) < FloatingPointTol)
-                return storageRegressValuesNextPeriod[upperInventoryIndex].Average();
-
             double inventoryGridSpace = upperInventory - lowerInventory;
             double lowerWeight = (upperInventory - inventoryAfterDecision) / inventoryGridSpace;
             double upperWeight = 1.0 - lowerWeight;
@@ -718,22 +712,16 @@ namespace Cmdty.Storage
         }
 
         private static double InterpolateContinuationValue(double inventoryAfterDecision, double[] inventoryGrid, 
-                            Vector<double>[] storageRegressValuesNextPeriod, int simIndex)
+                            Vector<double>[] storageRegressValuesNextPeriod, int simIndex, double numericalTolerance)
         {
             // TODO look into the efficiency of memory access in this method and think about reordering dimension of arrays
-            (int lowerInventoryIndex, int upperInventoryIndex) = StorageHelper.BisectInventorySpace(inventoryGrid, inventoryAfterDecision);
+            (int lowerInventoryIndex, int upperInventoryIndex) = StorageHelper.BisectInventorySpace(inventoryGrid, inventoryAfterDecision, numericalTolerance);
 
             if (lowerInventoryIndex == upperInventoryIndex)
                 return storageRegressValuesNextPeriod[lowerInventoryIndex][simIndex];
 
             double lowerInventory = inventoryGrid[lowerInventoryIndex];
-            if (Math.Abs(inventoryAfterDecision - lowerInventory) < FloatingPointTol)
-                return storageRegressValuesNextPeriod[lowerInventoryIndex][simIndex];
-
             double upperInventory = inventoryGrid[upperInventoryIndex];
-            if (Math.Abs(inventoryAfterDecision - upperInventory) < FloatingPointTol)
-                return storageRegressValuesNextPeriod[upperInventoryIndex][simIndex];
-
             double inventoryGridSpace = upperInventory - lowerInventory;
             double lowerWeight = (upperInventory - inventoryAfterDecision) / inventoryGridSpace;
             double upperWeight = 1.0 - lowerWeight;

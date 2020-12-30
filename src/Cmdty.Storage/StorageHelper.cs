@@ -277,9 +277,9 @@ namespace Cmdty.Storage
 
         public static string LinearAlgebraProvider() => LinearAlgebraControl.Provider.ToString();
 
-        public static (int LowerIndex, int UpperIndex) BisectInventorySpace(double[] inventoryGrid, double inventory)
+        public static (int LowerIndex, int UpperIndex) BisectInventorySpace(double[] inventoryGrid, double inventory, double numericalTolerance)
         {
-            if (inventoryGrid.Length == 1 && inventory == inventoryGrid[0]) // TODO put in tolerance to avoid comparing floating point numbers
+            if (inventoryGrid.Length == 1 && EqualsWithinTol(inventory, inventoryGrid[0], numericalTolerance))
                 return (LowerIndex: 0, UpperIndex: 0);
 
             int lowerIndex = 0;
@@ -289,6 +289,9 @@ namespace Cmdty.Storage
             {
                 int midIndex = (lowerIndex + upperIndex) / 2;
                 double inventoryMid = inventoryGrid[midIndex];
+
+                if (EqualsWithinTol(inventory, inventoryMid, numericalTolerance))
+                    return (LowerIndex: midIndex, UpperIndex: midIndex);
 
                 if (inventoryMid > inventory)
                 {
@@ -300,6 +303,8 @@ namespace Cmdty.Storage
                     double inventoryMidPlusOne = inventoryGrid[midIndexPlusOne];
                     if (inventory <= inventoryMidPlusOne)
                         return (LowerIndex: midIndex, UpperIndex: midIndexPlusOne);
+                    if (EqualsWithinTol(inventory, inventoryMidPlusOne, numericalTolerance))
+                        return (LowerIndex: midIndexPlusOne, UpperIndex: midIndexPlusOne);
                     if (midIndexPlusOne == topIndex)
                         throw new ArgumentException("Inventory is outside of inventoryGrid bounds.");
                     lowerIndex = midIndex; // Search upper half
@@ -307,6 +312,8 @@ namespace Cmdty.Storage
             }
             throw new ArgumentException("Inventory is outside of inventoryGrid bounds.");
         }
+
+        public static bool EqualsWithinTol(double a, double b, double tol) => Math.Abs(a - b) <= tol;
 
     }
 }
