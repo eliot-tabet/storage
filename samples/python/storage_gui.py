@@ -12,6 +12,7 @@ import logging
 import csv
 import os
 from PyQt5.QtWidgets import QFileDialog, QApplication
+from datetime import datetime
 
 # Shared variables
 freq = 'D'
@@ -146,7 +147,7 @@ def enumerate_ratchets():
     ratchet_row = 0
     while ratchet_row < num_ratch_rows and ratch_input_sheet[ratchet_row, 1].value != '':
         yield RatchetRow(ratch_input_sheet[ratchet_row, 0].value, ratch_input_sheet[ratchet_row, 1].value,
-                         ratch_input_sheet[ratchet_row, 3].value, ratch_input_sheet[ratchet_row, 2].value)
+                         ratch_input_sheet[ratchet_row, 2].value, ratch_input_sheet[ratchet_row, 3].value)
         ratchet_row += 1
 
 
@@ -169,7 +170,8 @@ ir_wgt = ipw.FloatText(description='Intrst Rate %', step=0.005)
 discount_deltas_wgt = ipw.Checkbox(description='Discount Deltas', value=False)
 val_inputs_wgt = ipw.VBox([val_date_wgt, inventory_wgt, ir_wgt, discount_deltas_wgt])
 
-# Forward curve
+#======================================================================================================
+# FORWARD CURVE
 fwd_input_sheet = ips.sheet(rows=num_fwd_rows, columns=2, column_headers=['fwd_start', 'price'])
 for row_num in range(0, num_fwd_rows):
     ips.cell(row_num, 0, '', date_format=date_format, type='date')
@@ -252,6 +254,96 @@ fwd_data_wgt = ipw.HBox([ipw.VBox([smooth_curve_wgt, apply_wkend_shaping_wgt, wk
                     ipw.HBox([btn_import_fwd_wgt, btn_export_fwd_wgt]), fwd_input_sheet]),
                     ipw.VBox([btw_plot_fwd_wgt, out_fwd_curve])])
 
+#======================================================================================================
+# STORAGE DETAILS
+
+def on_save_storage_details_clicked(b):
+    save_path = select_file_save('Save storage details to', 'CSV File (*.csv)', 'storage_details.csv')
+    if save_path != '':
+        storage_type = ''
+        with open(save_path, mode='w', newline='') as storage_details_file:
+            details_writer = csv.writer(storage_details_file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
+            details_writer.writerow(['key', 'value'])
+            details_writer.writerow(['storage_start', start_wgt.value])
+            details_writer.writerow(['storage_end', end_wgt.value])
+            details_writer.writerow(['injection_cost', inj_cost_wgt.value])
+            details_writer.writerow(['withdrawal_cost', with_cost_wgt.value])
+            details_writer.writerow(['cmdty_consumed_inject', inj_consumed_wgt.value])
+            details_writer.writerow(['cmdty_consumed_withdraw', with_consumed_wgt.value])
+            storage_type = stor_type_wgt.value.lower()
+            details_writer.writerow(['storage_type', storage_type])
+            if storage_type == 'simple':
+                details_writer.writerow(['min_inventory', invent_min_wgt.value])
+                details_writer.writerow(['max_inventory', invent_max_wgt.value])
+                details_writer.writerow(['max_injection_rate', inj_rate_wgt.value])
+                details_writer.writerow(['max_withdrawal_rate', with_rate_wgt.value])
+        if storage_type == 'ratchets':
+            ratchets_save_path = select_file_save('Save storage ratchets to', 'CSV File (*.csv)', 'storage_ratchets.csv')
+            if ratchets_save_path != '':
+                with open(ratchets_save_path, mode='w', newline='') as storage_ratchets_file:
+                    ratchets_writer = csv.writer(storage_ratchets_file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
+                    ratchets_writer.writerow(['date', 'inventory', 'inject_rate', 'withdraw_rate'])
+                    for ratchet in enumerate_ratchets():
+                        ratchets_writer.writerow([ratchet.date, ratchet.inventory, ratchet.inject_rate, ratchet.withdraw_rate])
+
+
+def on_load_storage_details_clicked(b):
+    load_path = select_file_open('Open storage details from', 'CSV File (*.csv)')
+    if load_path != '':
+        details_dict = {}
+        with open(load_path, mode='r') as storage_details_file:
+            csv_reader = csv.reader(storage_details_file, delimiter=',')
+            line_count = 0
+            for row in csv_reader:
+                if line_count == 0:
+                    header_text = ','.join(row)
+                    if header_text != 'key,value':
+                        raise ValueError('Storage details header row must be \'key,value\' but is \'' + header_text + '\'.')
+                else:
+                    details_dict[row[0]] = row[1]
+                line_count += 1
+        start_wgt.value = datetime.strptime(details_dict['storage_start'], '%Y-%m-%d').date()
+        end_wgt.value = datetime.strptime(details_dict['storage_end'], '%Y-%m-%d').date()
+        inj_cost_wgt.value = details_dict['injection_cost']
+        with_cost_wgt.value = details_dict['withdrawal_cost']
+        inj_consumed_wgt.value = details_dict['cmdty_consumed_inject']
+        with_consumed_wgt.value = details_dict['cmdty_consumed_withdraw']
+        storage_type = details_dict['storage_type']
+        if storage_type == 'simple':
+            stor_type_wgt.value = 'Simple'
+            invent_min_wgt.value = details_dict['min_inventory']
+            invent_max_wgt.value = details_dict['max_inventory']
+            inj_rate_wgt.value = details_dict['max_injection_rate']
+            with_rate_wgt.value = details_dict['max_withdrawal_rate']
+        if storage_type == 'ratchets':
+            ratchets_load_path = select_file_open('Open storage details from', 'CSV File (*.csv)')
+            if ratchets_load_path != '':
+                with open(ratchets_load_path, mode='r') as ratchets_file:
+                    csv_reader = csv.reader(ratchets_file, delimiter=',')
+                    line_count = 0
+                    for row in csv_reader:
+                        if line_count == 0:
+                            header_text = ','.join(row)
+                            if header_text != 'date,inventory,inject_rate,withdraw_rate':
+                                raise ValueError('Storage details header row must be \'date,inventory,inject_rate,withdraw_rate\' but is \'' + header_text + '\'.')
+                        else:
+                            ratchet_date_str = row[0]
+                            ratchet_row = line_count - 1
+                            if ratchet_date_str != '':
+                                ratch_input_sheet[ratchet_row, 0].value = ratchet_date_str
+                            ratch_input_sheet[ratchet_row, 1].value = row[1]
+                            ratch_input_sheet[ratchet_row, 2].value = row[2]
+                            ratch_input_sheet[ratchet_row, 3].value = row[3]
+                        line_count += 1
+                stor_type_wgt.value = 'Ratchets'
+                
+        
+btn_save_storage_details_wgt = ipw.Button(description='Save Storage Details')
+btn_save_storage_details_wgt.on_click(on_save_storage_details_clicked)
+btn_load_storage_details_wgt = ipw.Button(description='Load Storage Details')
+btn_load_storage_details_wgt.on_click(on_load_storage_details_clicked)
+storage_load_save_hbox = ipw.HBox([btn_load_storage_details_wgt, btn_save_storage_details_wgt])
+
 # Common storage properties
 stor_type_wgt = ipw.RadioButtons(options=['Simple', 'Ratchets'], description='Storage Type')
 start_wgt = ipw.DatePicker(description='Start')
@@ -261,9 +353,11 @@ inj_consumed_wgt = ipw.FloatText(description='Inj % Consumed', step=0.001)
 with_cost_wgt = ipw.FloatText(description='Withdrw Cost')
 with_consumed_wgt = ipw.FloatText(description='With % Consumed', step=0.001)
 
-storage_common_wgt = ipw.HBox([ipw.VBox([start_wgt, end_wgt, inj_cost_wgt,
-                                         with_cost_wgt]),
-                               ipw.VBox([stor_type_wgt, inj_consumed_wgt, with_consumed_wgt])])
+
+storage_common_wgt = ipw.VBox([storage_load_save_hbox,
+                        ipw.HBox([ipw.VBox([
+                            start_wgt, end_wgt, inj_cost_wgt, with_cost_wgt]),
+                               ipw.VBox([stor_type_wgt, inj_consumed_wgt, with_consumed_wgt])])])
 
 # Simple storage type properties
 invent_min_wgt = ipw.FloatText(description='Min Inventory')
