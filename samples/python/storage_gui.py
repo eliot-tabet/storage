@@ -331,9 +331,9 @@ def on_load_storage_details_clicked(b):
                             ratchet_row = line_count - 1
                             if ratchet_date_str != '':
                                 ratch_input_sheet[ratchet_row, 0].value = ratchet_date_str
-                            ratch_input_sheet[ratchet_row, 1].value = row[1]
-                            ratch_input_sheet[ratchet_row, 2].value = row[2]
-                            ratch_input_sheet[ratchet_row, 3].value = row[3]
+                            ratch_input_sheet[ratchet_row, 1].value = float(row[1])
+                            ratch_input_sheet[ratchet_row, 2].value = float(row[2])
+                            ratch_input_sheet[ratchet_row, 3].value = float(row[3])
                         line_count += 1
                 stor_type_wgt.value = 'Ratchets'
                 
@@ -646,8 +646,7 @@ def btn_clicked(b):
             triggers_sheet = dataframe_to_ipysheet(trigger_prices_frame)
             display(triggers_sheet)
     except Exception as e:
-        logger.error('Exception:')
-        logger.error(e)
+        logger.exception(e)
     finally:
         btn_calculate.disabled = False
 
