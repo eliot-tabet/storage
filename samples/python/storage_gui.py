@@ -37,6 +37,30 @@ def select_file_save(header, filter, default_file_name):
     return file_name[0]
 
 
+def save_dict_to_csv(file_path, data_dict):
+    with open(file_path, mode='w', newline='') as csv_file:
+        csv_writer = csv.writer(csv_file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
+        csv_writer.writerow(['key', 'value'])
+        for key, value in data_dict.items():
+            csv_writer.writerow([key, value])
+
+
+def load_csv_to_dict(file_path) -> dict:
+    data_dict = {}
+    with open(file_path, mode='r') as csv_file:
+        csv_reader = csv.reader(csv_file, delimiter=',')
+        line_count = 0
+        for row in csv_reader:
+            if line_count == 0:
+                header_text = ','.join(row)
+                if header_text != 'key,value':
+                    raise ValueError('Storage details header row must be \'key,value\' but is \'' + header_text + '\'.')
+            else:
+                data_dict[row[0]] = row[1]
+            line_count += 1
+    return data_dict
+
+
 def dataframe_to_ipysheet(dataframe):
     columns = dataframe.columns.tolist()
     rows = dataframe.index.tolist()
@@ -135,6 +159,7 @@ def on_clear_logs_clicked(b):
 btn_clear_logs = ipw.Button(description='Clear Log Display')
 btn_clear_logs.on_click(on_clear_logs_clicked)
 
+
 def create_tab(titles, children):
     tab = ipw.Tab()
     for idx, title in enumerate(titles):
@@ -164,13 +189,49 @@ def read_ratchets():
     return ratchets
 
 
+# ======================================================================================================
+# VALUATION DATA
+
+
+def on_load_val_data_clicked(b):
+    val_data_path = select_file_open('Select valuation data file', 'CSV File (*.csv)')
+    if val_data_path != '':
+        val_data_dict = load_csv_to_dict(val_data_path)
+        val_date_wgt.value = datetime.strptime(val_data_dict['val_date'], '%Y-%m-%d').date()
+        inventory_wgt.value = val_data_dict['inventory']
+        ir_wgt.value = val_data_dict['interest_rate']
+        discount_deltas_wgt.value = bool(val_data_dict['discount_deltas'])
+
+
+def on_save_val_data_clicked(b):
+    val_data_path = select_file_save('Save valuation data to', 'CSV File (*.csv)', 'val_data.csv')
+    if val_data_path != '':
+        val_data_dict = val_data_to_dict()
+        save_dict_to_csv(val_data_path, val_data_dict)
+
+
+btn_load_val_data_wgt = ipw.Button(description='Load Valuation Data')
+btn_load_val_data_wgt.on_click(on_load_val_data_clicked)
+btn_save_val_data_wgt = ipw.Button(description='Save Valuation Data')
+btn_save_val_data_wgt.on_click(on_save_val_data_clicked)
+val_data_buttons = ipw.HBox([btn_load_val_data_wgt, btn_save_val_data_wgt])
+
 val_date_wgt = ipw.DatePicker(description='Val Date', value=date.today())
 inventory_wgt = ipw.FloatText(description='Inventory')
 ir_wgt = ipw.FloatText(description='Intrst Rate %', step=0.005)
 discount_deltas_wgt = ipw.Checkbox(description='Discount Deltas', value=False)
-val_inputs_wgt = ipw.VBox([val_date_wgt, inventory_wgt, ir_wgt, discount_deltas_wgt])
+val_inputs_wgt = ipw.VBox([val_data_buttons, val_date_wgt, inventory_wgt, ir_wgt, discount_deltas_wgt])
 
-#======================================================================================================
+
+def val_data_to_dict() -> dict:
+    val_data_dict = {'val_date': val_date_wgt.value,
+                     'inventory': inventory_wgt.value,
+                     'interest_rate': ir_wgt.value,
+                     'discount_deltas': discount_deltas_wgt.value}
+    return val_data_dict
+
+
+# ======================================================================================================
 # FORWARD CURVE
 fwd_input_sheet = ips.sheet(rows=num_fwd_rows, columns=2, column_headers=['fwd_start', 'price'])
 for row_num in range(0, num_fwd_rows):
@@ -184,6 +245,7 @@ wkend_factor_wgt = ipw.FloatText(description='Wkend shaping factor', step=0.005,
 btw_plot_fwd_wgt = ipw.Button(description='Plot Forward Curve')
 btn_import_fwd_wgt = ipw.Button(description='Import Forward Curve')
 btn_export_fwd_wgt = ipw.Button(description='Export Forward Curve')
+
 
 def on_smooth_curve_change(change):
     apply_wkend_shaping_wgt.disabled = not change['new']
@@ -251,16 +313,17 @@ btn_import_fwd_wgt.on_click(on_import_fwd_curve_clicked)
 btn_export_fwd_wgt.on_click(on_export_fwd_curve_clicked)
 
 fwd_data_wgt = ipw.HBox([ipw.VBox([smooth_curve_wgt, apply_wkend_shaping_wgt, wkend_factor_wgt,
-                    ipw.HBox([btn_import_fwd_wgt, btn_export_fwd_wgt]), fwd_input_sheet]),
-                    ipw.VBox([btw_plot_fwd_wgt, out_fwd_curve])])
+                                   ipw.HBox([btn_import_fwd_wgt, btn_export_fwd_wgt]), fwd_input_sheet]),
+                         ipw.VBox([btw_plot_fwd_wgt, out_fwd_curve])])
 
-#======================================================================================================
+
+# ======================================================================================================
 # STORAGE DETAILS
+
 
 def on_save_storage_details_clicked(b):
     save_path = select_file_save('Save storage details to', 'CSV File (*.csv)', 'storage_details.csv')
     if save_path != '':
-        storage_type = ''
         with open(save_path, mode='w', newline='') as storage_details_file:
             details_writer = csv.writer(storage_details_file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
             details_writer.writerow(['key', 'value'])
@@ -278,30 +341,22 @@ def on_save_storage_details_clicked(b):
                 details_writer.writerow(['max_injection_rate', inj_rate_wgt.value])
                 details_writer.writerow(['max_withdrawal_rate', with_rate_wgt.value])
         if storage_type == 'ratchets':
-            ratchets_save_path = select_file_save('Save storage ratchets to', 'CSV File (*.csv)', 'storage_ratchets.csv')
+            ratchets_save_path = select_file_save('Save storage ratchets to', 'CSV File (*.csv)',
+                                                  'storage_ratchets.csv')
             if ratchets_save_path != '':
                 with open(ratchets_save_path, mode='w', newline='') as storage_ratchets_file:
-                    ratchets_writer = csv.writer(storage_ratchets_file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
+                    ratchets_writer = csv.writer(storage_ratchets_file, delimiter=',', quotechar='"',
+                                                 quoting=csv.QUOTE_MINIMAL)
                     ratchets_writer.writerow(['date', 'inventory', 'inject_rate', 'withdraw_rate'])
                     for ratchet in enumerate_ratchets():
-                        ratchets_writer.writerow([ratchet.date, ratchet.inventory, ratchet.inject_rate, ratchet.withdraw_rate])
+                        ratchets_writer.writerow(
+                            [ratchet.date, ratchet.inventory, ratchet.inject_rate, ratchet.withdraw_rate])
 
 
 def on_load_storage_details_clicked(b):
     load_path = select_file_open('Open storage details from', 'CSV File (*.csv)')
     if load_path != '':
-        details_dict = {}
-        with open(load_path, mode='r') as storage_details_file:
-            csv_reader = csv.reader(storage_details_file, delimiter=',')
-            line_count = 0
-            for row in csv_reader:
-                if line_count == 0:
-                    header_text = ','.join(row)
-                    if header_text != 'key,value':
-                        raise ValueError('Storage details header row must be \'key,value\' but is \'' + header_text + '\'.')
-                else:
-                    details_dict[row[0]] = row[1]
-                line_count += 1
+        details_dict = load_csv_to_dict(load_path)
         start_wgt.value = datetime.strptime(details_dict['storage_start'], '%Y-%m-%d').date()
         end_wgt.value = datetime.strptime(details_dict['storage_end'], '%Y-%m-%d').date()
         inj_cost_wgt.value = details_dict['injection_cost']
@@ -325,7 +380,8 @@ def on_load_storage_details_clicked(b):
                         if line_count == 0:
                             header_text = ','.join(row)
                             if header_text != 'date,inventory,inject_rate,withdraw_rate':
-                                raise ValueError('Storage details header row must be \'date,inventory,inject_rate,withdraw_rate\' but is \'' + header_text + '\'.')
+                                raise ValueError(
+                                    'Storage details header row must be \'date,inventory,inject_rate,withdraw_rate\' but is \'' + header_text + '\'.')
                         else:
                             ratchet_date_str = row[0]
                             ratchet_row = line_count - 1
@@ -336,8 +392,8 @@ def on_load_storage_details_clicked(b):
                             ratch_input_sheet[ratchet_row, 3].value = float(row[3])
                         line_count += 1
                 stor_type_wgt.value = 'Ratchets'
-                
-        
+
+
 btn_save_storage_details_wgt = ipw.Button(description='Save Storage Details')
 btn_save_storage_details_wgt.on_click(on_save_storage_details_clicked)
 btn_load_storage_details_wgt = ipw.Button(description='Load Storage Details')
@@ -353,11 +409,10 @@ inj_consumed_wgt = ipw.FloatText(description='Inj % Consumed', step=0.001)
 with_cost_wgt = ipw.FloatText(description='Withdrw Cost')
 with_consumed_wgt = ipw.FloatText(description='With % Consumed', step=0.001)
 
-
 storage_common_wgt = ipw.VBox([storage_load_save_hbox,
-                        ipw.HBox([ipw.VBox([
-                            start_wgt, end_wgt, inj_cost_wgt, with_cost_wgt]),
-                               ipw.VBox([stor_type_wgt, inj_consumed_wgt, with_consumed_wgt])])])
+                               ipw.HBox([ipw.VBox([
+                                   start_wgt, end_wgt, inj_cost_wgt, with_cost_wgt]),
+                                   ipw.VBox([stor_type_wgt, inj_consumed_wgt, with_consumed_wgt])])])
 
 # Simple storage type properties
 invent_min_wgt = ipw.FloatText(description='Min Inventory')
@@ -389,7 +444,9 @@ def on_stor_type_change(change):
 
 stor_type_wgt.observe(on_stor_type_change, names='value')
 
-# Volatility parameters
+# ======================================================================================================
+# VOLATILITY PARAMS
+
 spot_vol_wgt = ipw.FloatText(description='Spot Vol', step=0.01)
 spot_mr_wgt = ipw.FloatText(description='Spot Mean Rev', step=0.01)
 lt_vol_wgt = ipw.FloatText(description='Long Term Vol', step=0.01)
@@ -420,7 +477,9 @@ def btn_plot_vol_clicked(b):
 
 btn_plot_vol.on_click(btn_plot_vol_clicked)
 
-# Technical Parameters
+# ======================================================================================================
+# TECHNICAL PARAMETERS
+
 num_sims_wgt = ipw.IntText(description='Num Sims', value=1000, step=500)
 extra_decisions_wgt = ipw.IntText(description='Extra Decisions', value=0, step=1)
 seed_is_random_wgt = ipw.Checkbox(description='Seed is Random', value=False)
@@ -483,11 +542,13 @@ out_triggers_plot = ipw.Output()
 out_summary_table = ipw.Output(layout=sheet_out_layout)
 out_triggers_table = ipw.Output(layout=sheet_out_layout)
 
+
 # Buttons to export table results
 def create_deltas_dataframe():
     return pd.DataFrame(index=val_results_3f.deltas.index,
-                    data={'full_delta': val_results_3f.deltas,
-                          'intrinsic_delta': intr_delta})
+                        data={'full_delta': val_results_3f.deltas,
+                              'intrinsic_delta': intr_delta})
+
 
 def create_triggers_dataframe():
     trigger_prices_frame = val_results_3f.trigger_prices.copy()
@@ -495,11 +556,13 @@ def create_triggers_dataframe():
     trigger_prices_frame['fwd_price'] = active_fwd_curve
     return trigger_prices_frame
 
+
 def on_export_summary_click(b):
     csv_path = select_file_save('Save table to', 'CSV File (*.csv)', 'storage_deltas.csv')
     if csv_path != '':
         deltas_frame = create_deltas_dataframe()
         deltas_frame.to_csv(csv_path)
+
 
 def on_export_triggers_click(b):
     csv_path = select_file_save('Save table to', 'CSV File (*.csv)', 'trigger_prices.csv')
@@ -507,14 +570,15 @@ def on_export_triggers_click(b):
         triggers_frame = create_triggers_dataframe()
         triggers_frame.to_csv(csv_path)
 
+
 btn_export_summary_wgt = ipw.Button(description='Export Data', disabled=True)
 btn_export_summary_wgt.on_click(on_export_summary_click)
 btn_export_triggers_wgt = ipw.Button(description='Export Data', disabled=True)
 btn_export_triggers_wgt.on_click(on_export_triggers_click)
 
 tab_out_titles = ['Summary', 'Summary Table', 'Trigger Prices Chart', 'Trigger Prices Table']
-tab_out_children = [summary_vbox, ipw.VBox([btn_export_summary_wgt, out_summary_table]), 
-    out_triggers_plot, ipw.VBox([btn_export_triggers_wgt, out_triggers_table])]
+tab_out_children = [summary_vbox, ipw.VBox([btn_export_summary_wgt, out_summary_table]),
+                    out_triggers_plot, ipw.VBox([btn_export_triggers_wgt, out_triggers_table])]
 tab_output = create_tab(tab_out_titles, tab_out_children)
 
 
@@ -590,8 +654,10 @@ def btn_clicked(b):
                                                      fwd_curve=fwd_curve,
                                                      interest_rates=interest_rate_curve,
                                                      settlement_rule=twentieth_of_next_month,
-                                                     spot_mean_reversion=spot_mr_wgt.value, spot_vol=spot_vol_wgt.value,
-                                                     long_term_vol=lt_vol_wgt.value, seasonal_vol=seas_vol_wgt.value,
+                                                     spot_mean_reversion=spot_mr_wgt.value,
+                                                     spot_vol=spot_vol_wgt.value,
+                                                     long_term_vol=lt_vol_wgt.value,
+                                                     seasonal_vol=seas_vol_wgt.value,
                                                      num_sims=num_sims_wgt.value,
                                                      basis_funcs=basis_funcs_input_wgt.value,
                                                      discount_deltas=discount_deltas_wgt.value,
@@ -606,10 +672,10 @@ def btn_clicked(b):
         extr_value_wgt.value = "{0:,.0f}".format(val_results_3f.extrinsic_npv)
         global intr_delta
         intr_delta = val_results_3f.intrinsic_profile['net_volume']
-        
+
         btn_export_summary_wgt.disabled = False
         btn_export_triggers_wgt.disabled = False
-        
+
         global active_fwd_curve
         active_fwd_curve = fwd_curve[storage.start:storage.end]
         with out_summary:
