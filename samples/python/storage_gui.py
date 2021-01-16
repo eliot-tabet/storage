@@ -245,6 +245,23 @@ def val_data_to_dict() -> dict:
 # FORWARD CURVE
 
 
+def create_fwd_input_sheet(dates, prices, num_rows):
+    if len(dates) > num_rows:
+        raise ValueError('Length of dates cannot exceed number of rows {}.'.format(num_rows))
+    if len(prices) > num_rows:
+        raise ValueError('Length of prices cannot exceed number of rows {}.'.format(num_rows))
+    dates = dates + [None] * (num_rows - len(dates))
+    prices = prices + [None] * (num_rows - len(prices))
+    dates_cells = ips.Cell(value=dates, row_start=0, row_end=len(dates) - 1, column_start=0,
+                           column_end=0, type='date', date_format=date_format, squeeze_row=False, squeeze_column=True)
+    prices_cells = ips.Cell(value=prices, row_start=0, row_end=len(prices) - 1, column_start=1,
+                            column_end=1, type='numeric', numeric_format='0.000', squeeze_row=False,
+                            squeeze_column=True)
+    cells = [dates_cells, prices_cells]
+    return ips.Sheet(rows=len(dates), columns=2, cells=cells, row_headers=False,
+                     column_headers=['fwd_start', 'price'])
+
+
 def on_load_curve_params(b):
     curve_params_path = select_file_open('Select curve parameters file', 'CSV File (*.csv)')
     if curve_params_path != '':
@@ -269,10 +286,7 @@ btn_save_curve_params_wgt = ipw.Button(description='Save Curve Params')
 btn_save_curve_params_wgt.on_click(on_save_curve_params)
 curve_params_buttons = ipw.HBox([btn_load_curve_params_wgt, btn_save_curve_params_wgt])
 
-fwd_input_sheet = ips.sheet(rows=num_fwd_rows, columns=2, column_headers=['fwd_start', 'price'])
-for row_num in range(0, num_fwd_rows):
-    ips.cell(row_num, 0, '', date_format=date_format, type='date')
-    ips.cell(row_num, 1, '', type='numeric')
+fwd_input_sheet = create_fwd_input_sheet([''] * num_fwd_rows, [''] * num_fwd_rows, num_fwd_rows)
 
 out_fwd_curve = ipw.Output()
 smooth_curve_wgt = ipw.Checkbox(description='Apply Smoothing', value=False)
@@ -311,9 +325,8 @@ btw_plot_fwd_wgt.on_click(on_plot_fwd_clicked)
 def on_import_fwd_curve_clicked(b):
     fwd_curve_path = select_file_open('Select forward curve file', 'CSV File (*.csv)')
     if fwd_curve_path != '':
-        for i in range(0, num_fwd_rows):
-            fwd_input_sheet[i, 0].value = ''
-            fwd_input_sheet[i, 1].value = ''
+        fwd_dates = []
+        fwd_prices = []
         with open(fwd_curve_path, mode='r') as fwd_csv_file:
             csv_reader = csv.DictReader(fwd_csv_file)
             line_count = 0
@@ -322,11 +335,11 @@ def on_import_fwd_curve_clicked(b):
                     header_text = ','.join(row)
                     if header_text != 'contract_start,price':
                         raise ValueError('Forward curve header row must be \'contract_start,price\'.')
-                contract = row['contract_start']
-                price = row['price']
-                fwd_input_sheet[line_count, 0].value = contract
-                fwd_input_sheet[line_count, 1].value = float(price)
+                fwd_dates.append(row['contract_start'])
+                fwd_prices.append(float(row['price']))
                 line_count += 1
+        imported_fwd_input_sheet = create_fwd_input_sheet(fwd_dates, fwd_prices, num_fwd_rows)
+        reset_fwd_input_sheet(imported_fwd_input_sheet)
 
 
 def on_export_fwd_curve_clicked(b):
@@ -334,9 +347,9 @@ def on_export_fwd_curve_clicked(b):
     if fwd_curve_path != '':
         rows = []
         fwd_row = 0
-        while fwd_input_sheet[fwd_row, 0].value != '':
-            row = {'contract_start': fwd_input_sheet[fwd_row, 0].value,
-                   'price': fwd_input_sheet[fwd_row, 1].value}
+        for fwd_start, fwd_price in enumerate_fwd_points():
+            row = {'contract_start': fwd_start,
+                   'price': fwd_price}
             rows.append(row)
             fwd_row += 1
         with open(fwd_curve_path, mode='w', newline='') as fwd_csv_file:
@@ -351,6 +364,14 @@ btn_export_fwd_wgt.on_click(on_export_fwd_curve_clicked)
 fwd_data_wgt = ipw.HBox([ipw.VBox([curve_params_buttons, smooth_curve_wgt, apply_wkend_shaping_wgt, wkend_factor_wgt,
                                    ipw.HBox([btn_import_fwd_wgt, btn_export_fwd_wgt]), fwd_input_sheet]),
                          ipw.VBox([btw_plot_fwd_wgt, out_fwd_curve])])
+
+
+def reset_fwd_input_sheet(new_fwd_input_sheet):
+    # This code is very bad and brittle, but necessary hack to be able to update the fwd input sheet quickly
+    tuple_with_fwd_input = fwd_data_wgt.children[0].children
+    fwd_data_wgt.children[0].children = tuple_with_fwd_input[0:5] + (new_fwd_input_sheet,)
+    global fwd_input_sheet
+    fwd_input_sheet = new_fwd_input_sheet
 
 
 # ======================================================================================================
@@ -480,6 +501,7 @@ def on_stor_type_change(change):
 
 stor_type_wgt.observe(on_stor_type_change, names='value')
 
+
 # ======================================================================================================
 # VOLATILITY PARAMS
 
@@ -544,6 +566,7 @@ def btn_plot_vol_clicked(b):
 
 
 btn_plot_vol.on_click(btn_plot_vol_clicked)
+
 
 # ======================================================================================================
 # TECHNICAL PARAMETERS
@@ -627,6 +650,7 @@ def tech_params_to_dict() -> dict:
             'num_inventory_grid_points': grid_points_wgt.value,
             'numerical_tolerance': num_tol_wgt.value}
 
+
 # ======================================================================================================
 # COMPOSE INPUT TABS
 
@@ -703,14 +727,23 @@ def on_progress(progress):
 def twentieth_of_next_month(period): return period.asfreq('M').asfreq('D', 'end') + 20
 
 
+def enumerate_fwd_points():
+    fwd_row = 0
+    while fwd_input_sheet.cells[0].value[fwd_row] is not None and fwd_input_sheet.cells[0].value[fwd_row] != '':
+        fwd_start = fwd_input_sheet.cells[0].value[fwd_row]
+        fwd_price = fwd_input_sheet.cells[1].value[fwd_row]
+        yield fwd_start, fwd_price
+        fwd_row += 1
+        if fwd_row == num_fwd_rows:
+            break
+
+
 def read_fwd_curve():
     fwd_periods = []
     fwd_prices = []
-    fwd_row = 0
-    while fwd_input_sheet[fwd_row, 0].value != '':
-        fwd_periods.append(pd.Period(fwd_input_sheet[fwd_row, 0].value, freq=freq))
-        fwd_prices.append(fwd_input_sheet[fwd_row, 1].value)
-        fwd_row += 1
+    for fwd_start, fwd_price in enumerate_fwd_points():
+        fwd_periods.append(pd.Period(fwd_start, freq=freq))
+        fwd_prices.append(fwd_price)
     if smooth_curve_wgt.value:
         p1, p2 = itertools.tee(fwd_periods)
         next(p2, None)
@@ -861,10 +894,10 @@ def test_data_btn():
         spot_mr_wgt.value = 14.5
         lt_vol_wgt.value = 0.23
         seas_vol_wgt.value = 0.39
-        for idx, price in enumerate([58.89, 61.41, 62.58, 58.9, 43.7, 58.65, 61.45, 56.87]):
-            fwd_input_sheet[idx, 1].value = price
-        for idx, do in enumerate([0, 30, 60, 90, 150, 250, 350, 400]):
-            fwd_input_sheet[idx, 0].value = (today + timedelta(days=do)).strftime('%Y-%m-%d')
+        fwd_prices = [58.89, 61.41, 62.58, 58.9, 43.7, 58.65, 61.45, 56.87]
+        fwd_dates = [(today + timedelta(days=do)).strftime('%Y-%m-%d') for do in [0, 30, 60, 90, 150, 250, 350, 400]]
+        updated_fwd_input_sheet = create_fwd_input_sheet(fwd_dates, fwd_prices, num_fwd_rows)
+        reset_fwd_input_sheet(updated_fwd_input_sheet)
         # Populate ratchets
         ratch_input_sheet[0, 0].value = today.strftime('%Y-%m-%d')
         for idx, inv in enumerate([0.0, 25000.0, 50000.0, 60000.0, 65000.0]):
