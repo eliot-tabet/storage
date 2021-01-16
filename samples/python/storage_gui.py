@@ -447,13 +447,45 @@ stor_type_wgt.observe(on_stor_type_change, names='value')
 # ======================================================================================================
 # VOLATILITY PARAMS
 
+
+def on_load_vol_params_clicked(b):
+    vol_data_path = select_file_open('Select volatility parameters file', 'CSV File (*.csv)')
+    if vol_data_path != '':
+        vol_data_dict = load_csv_to_dict(vol_data_path)
+        spot_mr_wgt.value = vol_data_dict['spot_mean_reversion']
+        spot_vol_wgt.value = vol_data_dict['spot_vol']
+        lt_vol_wgt.value = vol_data_dict['long_term_vol']
+        seas_vol_wgt.value = vol_data_dict['seasonal_vol']
+
+
+def on_save_vol_params_clicked(b):
+    vol_params_path = select_file_save('Save volatility parameters to', 'CSV File (*.csv)', 'vol_params.csv')
+    if vol_params_path != '':
+        vol_params_dict = vol_data_to_dict()
+        save_dict_to_csv(vol_params_path, vol_params_dict)
+
+
+btn_load_vol_params_wgt = ipw.Button(description='Load Vol Params')
+btn_load_vol_params_wgt.on_click(on_load_vol_params_clicked)
+btn_save_vol_params_wgt = ipw.Button(description='Save Vol Params')
+btn_save_vol_params_wgt.on_click(on_save_vol_params_clicked)
+vol_params_buttons = ipw.HBox([btn_load_vol_params_wgt, btn_save_vol_params_wgt])
+
 spot_vol_wgt = ipw.FloatText(description='Spot Vol', step=0.01)
 spot_mr_wgt = ipw.FloatText(description='Spot Mean Rev', step=0.01)
 lt_vol_wgt = ipw.FloatText(description='Long Term Vol', step=0.01)
 seas_vol_wgt = ipw.FloatText(description='Seasonal Vol', step=0.01)
 btn_plot_vol = ipw.Button(description='Plot Forward Vol')
 out_vols = ipw.Output()
-vol_params_wgt = ipw.HBox([ipw.VBox([spot_vol_wgt, spot_mr_wgt, lt_vol_wgt, seas_vol_wgt, btn_plot_vol]), out_vols])
+vol_params_wgt = ipw.HBox([ipw.VBox([vol_params_buttons, spot_vol_wgt, spot_mr_wgt, lt_vol_wgt, seas_vol_wgt,
+                                     btn_plot_vol]), out_vols])
+
+
+def vol_data_to_dict() -> dict:
+    return {'spot_mean_reversion': spot_mr_wgt.value,
+            'spot_vol': spot_vol_wgt.value,
+            'long_term_vol': lt_vol_wgt.value,
+            'seasonal_vol': seas_vol_wgt.value}
 
 
 # Plotting vol
