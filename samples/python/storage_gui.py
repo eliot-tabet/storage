@@ -22,6 +22,16 @@ num_ratch_rows = 20
 RatchetRow = namedtuple('RatchetRow', ['date', 'inventory', 'inject_rate', 'withdraw_rate'])
 
 
+def str_to_bool(bool_text: str) -> bool:
+    bool_text_lower = bool_text.lower()
+    if bool_text_lower == 'true':
+        return True
+    elif bool_text_lower == 'false':
+        return False
+    else:
+        raise ValueError('bool_text parameter value of \'{}\' cannot be parsed to boolean.'.format(bool_text))
+
+
 def select_file_open(header, filter):
     dir = './'
     app = QApplication([dir])
@@ -200,7 +210,7 @@ def on_load_val_data_clicked(b):
         val_date_wgt.value = datetime.strptime(val_data_dict['val_date'], '%Y-%m-%d').date()
         inventory_wgt.value = val_data_dict['inventory']
         ir_wgt.value = val_data_dict['interest_rate']
-        discount_deltas_wgt.value = bool(val_data_dict['discount_deltas'])
+        discount_deltas_wgt.value = str_to_bool(val_data_dict['discount_deltas'])
 
 
 def on_save_val_data_clicked(b):
@@ -512,6 +522,35 @@ btn_plot_vol.on_click(btn_plot_vol_clicked)
 # ======================================================================================================
 # TECHNICAL PARAMETERS
 
+
+def on_load_tech_params(b):
+    tech_params_path = select_file_open('Select technical params file', 'CSV File (*.csv)')
+    if tech_params_path != '':
+        tech_params_dict = load_csv_to_dict(tech_params_path)
+        num_sims_wgt.value = tech_params_dict['num_sims']
+        basis_funcs_input_wgt.value = tech_params_dict['basis_funcs']
+        random_seed_wgt.value = tech_params_dict['seed']
+        seed_is_random_wgt.value = str_to_bool(tech_params_dict['seed_is_random'])
+        fwd_sim_seed_wgt.value = tech_params_dict['fwd_sim_seed']
+        fwd_sim_seed_set_wgt.value = str_to_bool(tech_params_dict['set_fwd_sim_seed'])
+        extra_decisions_wgt.value = tech_params_dict['extra_decisions']
+        grid_points_wgt.value = tech_params_dict['num_inventory_grid_points']
+        num_tol_wgt.value = tech_params_dict['numerical_tolerance']
+
+
+def on_save_tech_params(b):
+    tech_params_path = select_file_save('Save technical params to', 'CSV File (*.csv)', 'tech_params.csv')
+    if tech_params_path != '':
+        tech_params_dict = tech_params_to_dict()
+        save_dict_to_csv(tech_params_path, tech_params_dict)
+
+
+btn_load_tech_params = ipw.Button(description='Load Tech Params')
+btn_load_tech_params.on_click(on_load_tech_params)
+btn_save_tech_params = ipw.Button(description='Save Tech Params')
+btn_save_tech_params.on_click(on_save_tech_params)
+tech_params_buttons = ipw.HBox([btn_load_tech_params, btn_save_tech_params])
+
 num_sims_wgt = ipw.IntText(description='Num Sims', value=1000, step=500)
 extra_decisions_wgt = ipw.IntText(description='Extra Decisions', value=0, step=1)
 seed_is_random_wgt = ipw.Checkbox(description='Seed is Random', value=False)
@@ -546,15 +585,31 @@ def on_fwd_sim_seed_set_change(change):
 
 fwd_sim_seed_set_wgt.observe(on_fwd_sim_seed_set_change, names='value')
 
-tech_params_wgt = ipw.HBox(
+tech_params_wgt = ipw.VBox([tech_params_buttons, ipw.HBox(
     [ipw.VBox([num_sims_wgt, extra_decisions_wgt, seed_is_random_wgt, random_seed_wgt, fwd_sim_seed_set_wgt,
-               fwd_sim_seed_wgt, grid_points_wgt, num_tol_wgt]), basis_func_wgt])
+               fwd_sim_seed_wgt, grid_points_wgt, num_tol_wgt]), basis_func_wgt])])
+
+
+def tech_params_to_dict() -> dict:
+    return {'num_sims': num_sims_wgt.value,
+            'basis_funcs': basis_funcs_input_wgt.value,
+            'seed': random_seed_wgt.value,
+            'seed_is_random': seed_is_random_wgt.value,
+            'fwd_sim_seed': fwd_sim_seed_wgt.value,
+            'set_fwd_sim_seed': fwd_sim_seed_set_wgt.value,
+            'extra_decisions': extra_decisions_wgt.value,
+            'num_inventory_grid_points': grid_points_wgt.value,
+            'numerical_tolerance': num_tol_wgt.value}
+
+# ======================================================================================================
+# COMPOSE INPUT TABS
 
 tab_in_titles = ['Valuation Data', 'Forward Curve', 'Storage Details', 'Volatility Params', 'Technical Params']
 tab_in_children = [val_inputs_wgt, fwd_data_wgt, storage_details_wgt, vol_params_wgt, tech_params_wgt]
 tab_in = create_tab(tab_in_titles, tab_in_children)
 
-# Output Widgets
+# ======================================================================================================
+# OUTPUT WIDGETS
 progress_wgt = ipw.FloatProgress(min=0.0, max=1.0)
 full_value_wgt = ipw.Text(description='Full Value', disabled=True)
 intr_value_wgt = ipw.Text(description='Intr. Value', disabled=True)
