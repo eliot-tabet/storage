@@ -243,6 +243,32 @@ def val_data_to_dict() -> dict:
 
 # ======================================================================================================
 # FORWARD CURVE
+
+
+def on_load_curve_params(b):
+    curve_params_path = select_file_open('Select curve parameters file', 'CSV File (*.csv)')
+    if curve_params_path != '':
+        curve_params_dict = load_csv_to_dict(curve_params_path)
+        smooth_curve_wgt.value = str_to_bool(curve_params_dict['smooth_curve'])
+        apply_wkend_shaping_wgt.value = str_to_bool(curve_params_dict['apply_weekend_shaping'])
+        wkend_factor_wgt.value = curve_params_dict['weekend_shaping_factor']
+
+
+def on_save_curve_params(b):
+    curve_params_path = select_file_save('Save curve params to', 'CSV File (*.csv)', 'curve_params.csv')
+    if curve_params_path != '':
+        curve_params_dict = {'smooth_curve': smooth_curve_wgt.value,
+                             'apply_weekend_shaping': apply_wkend_shaping_wgt.value,
+                             'weekend_shaping_factor': wkend_factor_wgt.value}
+        save_dict_to_csv(curve_params_path, curve_params_dict)
+
+
+btn_load_curve_params_wgt = ipw.Button(description='Load Curve Params')
+btn_load_curve_params_wgt.on_click(on_load_curve_params)
+btn_save_curve_params_wgt = ipw.Button(description='Save Curve Params')
+btn_save_curve_params_wgt.on_click(on_save_curve_params)
+curve_params_buttons = ipw.HBox([btn_load_curve_params_wgt, btn_save_curve_params_wgt])
+
 fwd_input_sheet = ips.sheet(rows=num_fwd_rows, columns=2, column_headers=['fwd_start', 'price'])
 for row_num in range(0, num_fwd_rows):
     ips.cell(row_num, 0, '', date_format=date_format, type='date')
@@ -322,7 +348,7 @@ def on_export_fwd_curve_clicked(b):
 btn_import_fwd_wgt.on_click(on_import_fwd_curve_clicked)
 btn_export_fwd_wgt.on_click(on_export_fwd_curve_clicked)
 
-fwd_data_wgt = ipw.HBox([ipw.VBox([smooth_curve_wgt, apply_wkend_shaping_wgt, wkend_factor_wgt,
+fwd_data_wgt = ipw.HBox([ipw.VBox([curve_params_buttons, smooth_curve_wgt, apply_wkend_shaping_wgt, wkend_factor_wgt,
                                    ipw.HBox([btn_import_fwd_wgt, btn_export_fwd_wgt]), fwd_input_sheet]),
                          ipw.VBox([btw_plot_fwd_wgt, out_fwd_curve])])
 
