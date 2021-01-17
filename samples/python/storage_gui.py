@@ -244,7 +244,6 @@ def val_data_to_dict() -> dict:
 # ======================================================================================================
 # FORWARD CURVE
 
-
 def create_fwd_input_sheet(dates, prices, num_rows):
     if len(dates) > num_rows:
         raise ValueError('Length of dates cannot exceed number of rows {}.'.format(num_rows))
@@ -260,6 +259,14 @@ def create_fwd_input_sheet(dates, prices, num_rows):
     cells = [dates_cells, prices_cells]
     return ips.Sheet(rows=len(dates), columns=2, cells=cells, row_headers=False,
                      column_headers=['fwd_start', 'price'])
+
+
+def reset_fwd_input_sheet(new_fwd_input_sheet):
+    # This code is very bad and brittle, but necessary hack to be able to update the fwd input sheet quickly
+    tuple_with_fwd_input = fwd_data_wgt.children[0].children
+    fwd_data_wgt.children[0].children = tuple_with_fwd_input[0:5] + (new_fwd_input_sheet,)
+    global fwd_input_sheet
+    fwd_input_sheet = new_fwd_input_sheet
 
 
 def on_load_curve_params(b):
@@ -295,7 +302,7 @@ wkend_factor_wgt = ipw.FloatText(description='Wkend shaping factor', step=0.005,
 btw_plot_fwd_wgt = ipw.Button(description='Plot Forward Curve')
 btn_import_fwd_wgt = ipw.Button(description='Import Forward Curve')
 btn_export_fwd_wgt = ipw.Button(description='Export Forward Curve')
-
+btn_clear_fwd_wgt = ipw.Button(description='Clear Forward Curve')
 
 def on_smooth_curve_change(change):
     apply_wkend_shaping_wgt.disabled = not change['new']
@@ -358,21 +365,19 @@ def on_export_fwd_curve_clicked(b):
             writer.writerows(rows)
 
 
+def on_clear_fwd_curve_clicked(b):
+    new_fwd_input_sheet = create_fwd_input_sheet([], [], num_fwd_rows)
+    reset_fwd_input_sheet(new_fwd_input_sheet)
+
+
 btn_import_fwd_wgt.on_click(on_import_fwd_curve_clicked)
 btn_export_fwd_wgt.on_click(on_export_fwd_curve_clicked)
+btn_clear_fwd_wgt.on_click(on_clear_fwd_curve_clicked)
 
 fwd_data_wgt = ipw.HBox([ipw.VBox([curve_params_buttons, smooth_curve_wgt, apply_wkend_shaping_wgt, wkend_factor_wgt,
-                                   ipw.HBox([btn_import_fwd_wgt, btn_export_fwd_wgt]), fwd_input_sheet]),
+                                   ipw.HBox([ipw.VBox([btn_import_fwd_wgt, btn_clear_fwd_wgt]), btn_export_fwd_wgt]),
+                                   fwd_input_sheet]),
                          ipw.VBox([btw_plot_fwd_wgt, out_fwd_curve])])
-
-
-def reset_fwd_input_sheet(new_fwd_input_sheet):
-    # This code is very bad and brittle, but necessary hack to be able to update the fwd input sheet quickly
-    tuple_with_fwd_input = fwd_data_wgt.children[0].children
-    fwd_data_wgt.children[0].children = tuple_with_fwd_input[0:5] + (new_fwd_input_sheet,)
-    global fwd_input_sheet
-    fwd_input_sheet = new_fwd_input_sheet
-
 
 # ======================================================================================================
 # STORAGE DETAILS
