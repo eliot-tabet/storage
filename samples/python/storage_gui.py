@@ -780,9 +780,6 @@ sheet_out_layout = {
     'overflow_y': 'auto'}
 
 out_triggers_plot = ipw.Output()
-out_summary_table = ipw.Output(layout=sheet_out_layout)
-out_triggers_table = ipw.Output(layout=sheet_out_layout)
-
 
 # Buttons to export table results
 def create_deltas_dataframe():
@@ -824,9 +821,14 @@ btn_export_triggers_wgt = ipw.Button(description='Export Data', disabled=True)
 btn_export_triggers_wgt.on_click(on_export_triggers_click)
 
 tab_out_titles = ['Summary', 'Summary Table', 'Trigger Prices Chart', 'Trigger Prices Table']
-tab_out_children = [summary_vbox, ipw.VBox([btn_export_summary_wgt, out_summary_table]),
-                    out_triggers_plot, ipw.VBox([btn_export_triggers_wgt, out_triggers_table])]
+tab_out_children = [summary_vbox, btn_export_summary_wgt, out_triggers_plot, btn_export_triggers_wgt]
 tab_output = create_tab(tab_out_titles, tab_out_children)
+
+
+def set_tab_output_child(child_index, new_child):
+    child_list = list(tab_output.children)
+    child_list[child_index] = new_child
+    tab_output.children = tuple(child_list)
 
 
 def on_progress(progress):
@@ -875,9 +877,7 @@ def btn_clicked(b):
         vw.value = ''
     btn_calculate.disabled = True
     out_summary.clear_output()
-    out_summary_table.clear_output()
     out_triggers_plot.clear_output()
-    out_triggers_table.clear_output()
     try:
         global fwd_curve
         logger.debug('Reading forward curve.')
@@ -943,11 +943,10 @@ def btn_clicked(b):
             ax_1.legend(['Full Delta', 'Intrinsic Delta'])
             ax_2.legend(['Forward Curve'])
             show_inline_matplotlib_plots()
-        with out_summary_table:
-            print('If table does not display correctly click below, scroll down, and wait a few seconds...')
-            deltas_frame = create_deltas_dataframe()
-            deltas_sheet = dataframe_to_ipysheet(deltas_frame)
-            display(deltas_sheet)
+        deltas_frame = create_deltas_dataframe()
+        deltas_sheet = dataframe_to_ipysheet(deltas_frame)
+        deltas_sheet.layout = sheet_out_layout
+        set_tab_output_child(1, ipw.VBox([btn_export_summary_wgt, deltas_sheet]))
         with out_triggers_plot:
             trigger_prices = val_results_3f.trigger_prices
             ax_1 = trigger_prices['inject_trigger_price'].plot(legend=True)
@@ -962,11 +961,10 @@ def btn_clicked(b):
                         bbox_to_anchor=(0.2, -0.12))
             ax_2.legend(['Expected Inventory'], loc='upper center', bbox_to_anchor=(0.7, -0.12))
             show_inline_matplotlib_plots()
-        with out_triggers_table:
-            print('If table does not display correctly click below, scroll down, and wait a few seconds...')
-            trigger_prices_frame = create_triggers_dataframe()
-            triggers_sheet = dataframe_to_ipysheet(trigger_prices_frame)
-            display(triggers_sheet)
+        trigger_prices_frame = create_triggers_dataframe()
+        triggers_sheet = dataframe_to_ipysheet(trigger_prices_frame)
+        triggers_sheet.layout = sheet_out_layout
+        set_tab_output_child(3, ipw.VBox([btn_export_triggers_wgt, triggers_sheet]))
     except Exception as e:
         logger.exception(e)
     finally:
