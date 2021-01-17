@@ -153,18 +153,23 @@ multi_factor.logger.setLevel(logging.INFO)
 
 
 def on_log_level_change(change):
-    level_text = change['new']
-    level_int = getattr(logging, level_text.upper())
-    logger.setLevel(level_int)
-    multi_factor.logger.setLevel(level_int)
+    try:
+        level_text = change['new']
+        level_int = getattr(logging, level_text.upper())
+        logger.setLevel(level_int)
+        multi_factor.logger.setLevel(level_int)
+    except Exception as e:
+        logger.exception(e)
 
 
 log_level_wgt.observe(on_log_level_change, names='value')
 
 
 def on_clear_logs_clicked(b):
-    log_handler.clear_logs()
-
+    try:
+        log_handler.clear_logs()
+    except Exception as e:
+        logger.exception(e)
 
 btn_clear_logs = ipw.Button(description='Clear Log Display')
 btn_clear_logs.on_click(on_clear_logs_clicked)
@@ -204,20 +209,26 @@ def read_ratchets():
 
 
 def on_load_val_data_clicked(b):
-    val_data_path = select_file_open('Select valuation data file', 'CSV File (*.csv)')
-    if val_data_path != '':
-        val_data_dict = load_csv_to_dict(val_data_path)
-        val_date_wgt.value = datetime.strptime(val_data_dict['val_date'], '%Y-%m-%d').date()
-        inventory_wgt.value = val_data_dict['inventory']
-        ir_wgt.value = val_data_dict['interest_rate']
-        discount_deltas_wgt.value = str_to_bool(val_data_dict['discount_deltas'])
+    try:
+        val_data_path = select_file_open('Select valuation data file', 'CSV File (*.csv)')
+        if val_data_path != '':
+            val_data_dict = load_csv_to_dict(val_data_path)
+            val_date_wgt.value = datetime.strptime(val_data_dict['val_date'], '%Y-%m-%d').date()
+            inventory_wgt.value = val_data_dict['inventory']
+            ir_wgt.value = val_data_dict['interest_rate']
+            discount_deltas_wgt.value = str_to_bool(val_data_dict['discount_deltas'])
+    except Exception as e:
+        logger.exception(e)
 
 
 def on_save_val_data_clicked(b):
-    val_data_path = select_file_save('Save valuation data to', 'CSV File (*.csv)', 'val_data.csv')
-    if val_data_path != '':
-        val_data_dict = val_data_to_dict()
-        save_dict_to_csv(val_data_path, val_data_dict)
+    try:
+        val_data_path = select_file_save('Save valuation data to', 'CSV File (*.csv)', 'val_data.csv')
+        if val_data_path != '':
+            val_data_dict = val_data_to_dict()
+            save_dict_to_csv(val_data_path, val_data_dict)
+    except Exception as e:
+        logger.exception(e)
 
 
 btn_load_val_data_wgt = ipw.Button(description='Load Valuation Data')
@@ -270,21 +281,26 @@ def reset_fwd_input_sheet(new_fwd_input_sheet):
 
 
 def on_load_curve_params(b):
-    curve_params_path = select_file_open('Select curve parameters file', 'CSV File (*.csv)')
-    if curve_params_path != '':
-        curve_params_dict = load_csv_to_dict(curve_params_path)
-        smooth_curve_wgt.value = str_to_bool(curve_params_dict['smooth_curve'])
-        apply_wkend_shaping_wgt.value = str_to_bool(curve_params_dict['apply_weekend_shaping'])
-        wkend_factor_wgt.value = curve_params_dict['weekend_shaping_factor']
-
+    try:
+        curve_params_path = select_file_open('Select curve parameters file', 'CSV File (*.csv)')
+        if curve_params_path != '':
+            curve_params_dict = load_csv_to_dict(curve_params_path)
+            smooth_curve_wgt.value = str_to_bool(curve_params_dict['smooth_curve'])
+            apply_wkend_shaping_wgt.value = str_to_bool(curve_params_dict['apply_weekend_shaping'])
+            wkend_factor_wgt.value = curve_params_dict['weekend_shaping_factor']
+    except Exception as e:
+        logger.exception(e)
 
 def on_save_curve_params(b):
-    curve_params_path = select_file_save('Save curve params to', 'CSV File (*.csv)', 'curve_params.csv')
-    if curve_params_path != '':
-        curve_params_dict = {'smooth_curve': smooth_curve_wgt.value,
-                             'apply_weekend_shaping': apply_wkend_shaping_wgt.value,
-                             'weekend_shaping_factor': wkend_factor_wgt.value}
-        save_dict_to_csv(curve_params_path, curve_params_dict)
+    try:
+        curve_params_path = select_file_save('Save curve params to', 'CSV File (*.csv)', 'curve_params.csv')
+        if curve_params_path != '':
+            curve_params_dict = {'smooth_curve': smooth_curve_wgt.value,
+                                 'apply_weekend_shaping': apply_wkend_shaping_wgt.value,
+                                 'weekend_shaping_factor': wkend_factor_wgt.value}
+            save_dict_to_csv(curve_params_path, curve_params_dict)
+    except Exception as e:
+        logger.exception(e)
 
 
 btn_load_curve_params_wgt = ipw.Button(description='Load Curve Params')
@@ -321,18 +337,24 @@ apply_wkend_shaping_wgt.observe(on_apply_wkend_shaping_change, names='value')
 
 
 def on_plot_fwd_clicked(b):
-    out_fwd_curve.clear_output()
-    curve = read_fwd_curve()
-    with out_fwd_curve:
-        curve.plot()
-        show_inline_matplotlib_plots()
+    try:
+        out_fwd_curve.clear_output()
+        curve = read_fwd_curve()
+        with out_fwd_curve:
+            curve.plot()
+            show_inline_matplotlib_plots()
+    except Exception as e:
+        logger.exception(e)
 
 
 def on_export_daily_fwd_clicked(b):
-    fwd_curve_path = select_file_save('Save daily forward curve to', 'CSV File (*.csv)', 'daily_fwd_curve.csv')
-    if fwd_curve_path != '':
-        curve = read_fwd_curve()
-        curve.to_csv(fwd_curve_path, index_label='date', header=['price'])
+    try:
+        fwd_curve_path = select_file_save('Save daily forward curve to', 'CSV File (*.csv)', 'daily_fwd_curve.csv')
+        if fwd_curve_path != '':
+            curve = read_fwd_curve()
+            curve.to_csv(fwd_curve_path, index_label='date', header=['price'])
+    except Exception as e:
+        logger.exception(e)
 
 
 btn_plot_fwd_wgt.on_click(on_plot_fwd_clicked)
@@ -340,44 +362,53 @@ btn_export_daily_fwd_wgt.on_click(on_export_daily_fwd_clicked)
 
 
 def on_import_fwd_curve_clicked(b):
-    fwd_curve_path = select_file_open('Select forward curve file', 'CSV File (*.csv)')
-    if fwd_curve_path != '':
-        fwd_dates = []
-        fwd_prices = []
-        with open(fwd_curve_path, mode='r') as fwd_csv_file:
-            csv_reader = csv.DictReader(fwd_csv_file)
-            line_count = 0
-            for row in csv_reader:
-                if line_count == 0:
-                    header_text = ','.join(row)
-                    if header_text != 'contract_start,price':
-                        raise ValueError('Forward curve header row must be \'contract_start,price\'.')
-                fwd_dates.append(row['contract_start'])
-                fwd_prices.append(float(row['price']))
-                line_count += 1
-        imported_fwd_input_sheet = create_fwd_input_sheet(fwd_dates, fwd_prices, num_fwd_rows)
-        reset_fwd_input_sheet(imported_fwd_input_sheet)
+    try:
+        fwd_curve_path = select_file_open('Select forward curve file', 'CSV File (*.csv)')
+        if fwd_curve_path != '':
+            fwd_dates = []
+            fwd_prices = []
+            with open(fwd_curve_path, mode='r') as fwd_csv_file:
+                csv_reader = csv.DictReader(fwd_csv_file)
+                line_count = 0
+                for row in csv_reader:
+                    if line_count == 0:
+                        header_text = ','.join(row)
+                        if header_text != 'contract_start,price':
+                            raise ValueError('Forward curve header row must be \'contract_start,price\'.')
+                    fwd_dates.append(row['contract_start'])
+                    fwd_prices.append(float(row['price']))
+                    line_count += 1
+            imported_fwd_input_sheet = create_fwd_input_sheet(fwd_dates, fwd_prices, num_fwd_rows)
+            reset_fwd_input_sheet(imported_fwd_input_sheet)
+    except Exception as e:
+        logger.exception(e)
 
 
 def on_export_fwd_curve_clicked(b):
-    fwd_curve_path = select_file_save('Save forward curve to', 'CSV File (*.csv)', 'fwd_curve_data.csv')
-    if fwd_curve_path != '':
-        rows = []
-        fwd_row = 0
-        for fwd_start, fwd_price in enumerate_fwd_points():
-            row = {'contract_start': fwd_start,
-                   'price': fwd_price}
-            rows.append(row)
-            fwd_row += 1
-        with open(fwd_curve_path, mode='w', newline='') as fwd_csv_file:
-            writer = csv.DictWriter(fwd_csv_file, fieldnames=['contract_start', 'price'])
-            writer.writeheader()
-            writer.writerows(rows)
+    try:
+        fwd_curve_path = select_file_save('Save forward curve to', 'CSV File (*.csv)', 'fwd_curve_data.csv')
+        if fwd_curve_path != '':
+            rows = []
+            fwd_row = 0
+            for fwd_start, fwd_price in enumerate_fwd_points():
+                row = {'contract_start': fwd_start,
+                       'price': fwd_price}
+                rows.append(row)
+                fwd_row += 1
+            with open(fwd_curve_path, mode='w', newline='') as fwd_csv_file:
+                writer = csv.DictWriter(fwd_csv_file, fieldnames=['contract_start', 'price'])
+                writer.writeheader()
+                writer.writerows(rows)
+    except Exception as e:
+        logger.exception(e)
 
 
 def on_clear_fwd_curve_clicked(b):
-    new_fwd_input_sheet = create_fwd_input_sheet([], [], num_fwd_rows)
-    reset_fwd_input_sheet(new_fwd_input_sheet)
+    try:
+        new_fwd_input_sheet = create_fwd_input_sheet([], [], num_fwd_rows)
+        reset_fwd_input_sheet(new_fwd_input_sheet)
+    except Exception as e:
+        logger.exception(e)
 
 
 btn_import_fwd_wgt.on_click(on_import_fwd_curve_clicked)
@@ -418,91 +449,103 @@ def create_ratchets_sheet(dates, inventories, inject_rates, withdraw_rates, num_
 
 
 def on_save_storage_details_clicked(b):
-    save_path = select_file_save('Save storage details to', 'CSV File (*.csv)', 'storage_details.csv')
-    if save_path != '':
-        with open(save_path, mode='w', newline='') as storage_details_file:
-            details_writer = csv.writer(storage_details_file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
-            details_writer.writerow(['key', 'value'])
-            details_writer.writerow(['storage_start', start_wgt.value])
-            details_writer.writerow(['storage_end', end_wgt.value])
-            details_writer.writerow(['injection_cost', inj_cost_wgt.value])
-            details_writer.writerow(['withdrawal_cost', with_cost_wgt.value])
-            details_writer.writerow(['cmdty_consumed_inject', inj_consumed_wgt.value])
-            details_writer.writerow(['cmdty_consumed_withdraw', with_consumed_wgt.value])
-            storage_type = stor_type_wgt.value.lower()
-            details_writer.writerow(['storage_type', storage_type])
-            if storage_type == 'simple':
-                details_writer.writerow(['min_inventory', invent_min_wgt.value])
-                details_writer.writerow(['max_inventory', invent_max_wgt.value])
-                details_writer.writerow(['max_injection_rate', inj_rate_wgt.value])
-                details_writer.writerow(['max_withdrawal_rate', with_rate_wgt.value])
-        if storage_type == 'ratchets':
-            ratchets_save_path = select_file_save('Save storage ratchets to', 'CSV File (*.csv)',
-                                                  'storage_ratchets.csv')
-            if ratchets_save_path != '':
-                with open(ratchets_save_path, mode='w', newline='') as storage_ratchets_file:
-                    ratchets_writer = csv.writer(storage_ratchets_file, delimiter=',', quotechar='"',
-                                                 quoting=csv.QUOTE_MINIMAL)
-                    ratchets_writer.writerow(['date', 'inventory', 'inject_rate', 'withdraw_rate'])
-                    for ratchet in enumerate_ratchets():
-                        ratchets_writer.writerow(
-                            [ratchet.date, ratchet.inventory, ratchet.inject_rate, ratchet.withdraw_rate])
+    try:
+        save_path = select_file_save('Save storage details to', 'CSV File (*.csv)', 'storage_details.csv')
+        if save_path != '':
+            with open(save_path, mode='w', newline='') as storage_details_file:
+                details_writer = csv.writer(storage_details_file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
+                details_writer.writerow(['key', 'value'])
+                details_writer.writerow(['storage_start', start_wgt.value])
+                details_writer.writerow(['storage_end', end_wgt.value])
+                details_writer.writerow(['injection_cost', inj_cost_wgt.value])
+                details_writer.writerow(['withdrawal_cost', with_cost_wgt.value])
+                details_writer.writerow(['cmdty_consumed_inject', inj_consumed_wgt.value])
+                details_writer.writerow(['cmdty_consumed_withdraw', with_consumed_wgt.value])
+                storage_type = stor_type_wgt.value.lower()
+                details_writer.writerow(['storage_type', storage_type])
+                if storage_type == 'simple':
+                    details_writer.writerow(['min_inventory', invent_min_wgt.value])
+                    details_writer.writerow(['max_inventory', invent_max_wgt.value])
+                    details_writer.writerow(['max_injection_rate', inj_rate_wgt.value])
+                    details_writer.writerow(['max_withdrawal_rate', with_rate_wgt.value])
+            if storage_type == 'ratchets':
+                ratchets_save_path = select_file_save('Save storage ratchets to', 'CSV File (*.csv)',
+                                                      'storage_ratchets.csv')
+                if ratchets_save_path != '':
+                    with open(ratchets_save_path, mode='w', newline='') as storage_ratchets_file:
+                        ratchets_writer = csv.writer(storage_ratchets_file, delimiter=',', quotechar='"',
+                                                     quoting=csv.QUOTE_MINIMAL)
+                        ratchets_writer.writerow(['date', 'inventory', 'inject_rate', 'withdraw_rate'])
+                        for ratchet in enumerate_ratchets():
+                            ratchets_writer.writerow(
+                                [ratchet.date, ratchet.inventory, ratchet.inject_rate, ratchet.withdraw_rate])
+    except Exception as e:
+        logger.exception(e)
 
 
 def on_load_storage_details_clicked(b):
-    load_path = select_file_open('Open storage details from', 'CSV File (*.csv)')
-    if load_path != '':
-        details_dict = load_csv_to_dict(load_path)
-        start_wgt.value = datetime.strptime(details_dict['storage_start'], '%Y-%m-%d').date()
-        end_wgt.value = datetime.strptime(details_dict['storage_end'], '%Y-%m-%d').date()
-        inj_cost_wgt.value = details_dict['injection_cost']
-        with_cost_wgt.value = details_dict['withdrawal_cost']
-        inj_consumed_wgt.value = details_dict['cmdty_consumed_inject']
-        with_consumed_wgt.value = details_dict['cmdty_consumed_withdraw']
-        storage_type = details_dict['storage_type']
-        if storage_type == 'simple':
-            stor_type_wgt.value = 'Simple'
-            invent_min_wgt.value = details_dict['min_inventory']
-            invent_max_wgt.value = details_dict['max_inventory']
-            inj_rate_wgt.value = details_dict['max_injection_rate']
-            with_rate_wgt.value = details_dict['max_withdrawal_rate']
-        if storage_type == 'ratchets':
-            ratchets_load_path = select_file_open('Open storage details from', 'CSV File (*.csv)')
-            if ratchets_load_path != '':
-                dates = []
-                inventories = []
-                inject_rates = []
-                withdraw_rates = []
-                with open(ratchets_load_path, mode='r') as ratchets_file:
-                    csv_reader = csv.reader(ratchets_file, delimiter=',')
-                    line_count = 0
-                    for row in csv_reader:
-                        if line_count == 0:
-                            header_text = ','.join(row)
-                            if header_text != 'date,inventory,inject_rate,withdraw_rate':
-                                raise ValueError(
-                                    'Storage details header row must be \'date,inventory,inject_rate,withdraw_rate\' but is \'' + header_text + '\'.')
-                        else:
-                            dates.append(row[0])
-                            inventories.append(float(row[1]))
-                            inject_rates.append(float(row[2]))
-                            withdraw_rates.append(float(row[3]))
-                        line_count += 1
-                new_ratchets_sheet = create_ratchets_sheet(dates, inventories, inject_rates, withdraw_rates,
-                                                           num_ratch_rows)
-                reset_ratchets_sheet(new_ratchets_sheet)
-                stor_type_wgt.value = 'Ratchets'
+    try:
+        load_path = select_file_open('Open storage details from', 'CSV File (*.csv)')
+        if load_path != '':
+            details_dict = load_csv_to_dict(load_path)
+            start_wgt.value = datetime.strptime(details_dict['storage_start'], '%Y-%m-%d').date()
+            end_wgt.value = datetime.strptime(details_dict['storage_end'], '%Y-%m-%d').date()
+            inj_cost_wgt.value = details_dict['injection_cost']
+            with_cost_wgt.value = details_dict['withdrawal_cost']
+            inj_consumed_wgt.value = details_dict['cmdty_consumed_inject']
+            with_consumed_wgt.value = details_dict['cmdty_consumed_withdraw']
+            storage_type = details_dict['storage_type']
+            if storage_type == 'simple':
+                stor_type_wgt.value = 'Simple'
+                invent_min_wgt.value = details_dict['min_inventory']
+                invent_max_wgt.value = details_dict['max_inventory']
+                inj_rate_wgt.value = details_dict['max_injection_rate']
+                with_rate_wgt.value = details_dict['max_withdrawal_rate']
+            if storage_type == 'ratchets':
+                ratchets_load_path = select_file_open('Open storage details from', 'CSV File (*.csv)')
+                if ratchets_load_path != '':
+                    dates = []
+                    inventories = []
+                    inject_rates = []
+                    withdraw_rates = []
+                    with open(ratchets_load_path, mode='r') as ratchets_file:
+                        csv_reader = csv.reader(ratchets_file, delimiter=',')
+                        line_count = 0
+                        for row in csv_reader:
+                            if line_count == 0:
+                                header_text = ','.join(row)
+                                if header_text != 'date,inventory,inject_rate,withdraw_rate':
+                                    raise ValueError(
+                                        'Storage details header row must be \'date,inventory,inject_rate,withdraw_rate\' but is \'' + header_text + '\'.')
+                            else:
+                                dates.append(row[0])
+                                inventories.append(float(row[1]))
+                                inject_rates.append(float(row[2]))
+                                withdraw_rates.append(float(row[3]))
+                            line_count += 1
+                    new_ratchets_sheet = create_ratchets_sheet(dates, inventories, inject_rates, withdraw_rates,
+                                                               num_ratch_rows)
+                    reset_ratchets_sheet(new_ratchets_sheet)
+                    stor_type_wgt.value = 'Ratchets'
+    except Exception as e:
+        logger.exception(e)
 
 
 def reset_ratchets_sheet(new_ratchets_sheet):
-    global ratchet_input_sheet
-    ratchet_input_sheet = new_ratchets_sheet
-    storage_details_wgt.children = (storage_common_wgt, ipw.VBox([btn_clear_ratchets_wgt, ratchet_input_sheet]))
+    try:
+        global ratchet_input_sheet
+        ratchet_input_sheet = new_ratchets_sheet
+        storage_details_wgt.children = (storage_common_wgt, ipw.VBox([btn_clear_ratchets_wgt, ratchet_input_sheet]))
+    except Exception as e:
+        logger.exception(e)
 
 
 def on_clear_ratchets_clicked(b):
-    new_ratchets_sheet = create_ratchets_sheet([], [], [], [], num_ratch_rows)
-    reset_ratchets_sheet(new_ratchets_sheet)
+    try:
+        new_ratchets_sheet = create_ratchets_sheet([], [], [], [], num_ratch_rows)
+        reset_ratchets_sheet(new_ratchets_sheet)
+    except Exception as e:
+        logger.exception(e)
 
 
 btn_save_storage_details_wgt = ipw.Button(description='Save Storage Details')
@@ -556,20 +599,26 @@ stor_type_wgt.observe(on_stor_type_change, names='value')
 
 
 def on_load_vol_params_clicked(b):
-    vol_data_path = select_file_open('Select volatility parameters file', 'CSV File (*.csv)')
-    if vol_data_path != '':
-        vol_data_dict = load_csv_to_dict(vol_data_path)
-        spot_mr_wgt.value = vol_data_dict['spot_mean_reversion']
-        spot_vol_wgt.value = vol_data_dict['spot_vol']
-        lt_vol_wgt.value = vol_data_dict['long_term_vol']
-        seas_vol_wgt.value = vol_data_dict['seasonal_vol']
+    try:
+        vol_data_path = select_file_open('Select volatility parameters file', 'CSV File (*.csv)')
+        if vol_data_path != '':
+            vol_data_dict = load_csv_to_dict(vol_data_path)
+            spot_mr_wgt.value = vol_data_dict['spot_mean_reversion']
+            spot_vol_wgt.value = vol_data_dict['spot_vol']
+            lt_vol_wgt.value = vol_data_dict['long_term_vol']
+            seas_vol_wgt.value = vol_data_dict['seasonal_vol']
+    except Exception as e:
+        logger.exception(e)
 
 
 def on_save_vol_params_clicked(b):
-    vol_params_path = select_file_save('Save volatility parameters to', 'CSV File (*.csv)', 'vol_params.csv')
-    if vol_params_path != '':
-        vol_params_dict = vol_data_to_dict()
-        save_dict_to_csv(vol_params_path, vol_params_dict)
+    try:
+        vol_params_path = select_file_save('Save volatility parameters to', 'CSV File (*.csv)', 'vol_params.csv')
+        if vol_params_path != '':
+            vol_params_dict = vol_data_to_dict()
+            save_dict_to_csv(vol_params_path, vol_params_dict)
+    except Exception as e:
+        logger.exception(e)
 
 
 btn_load_vol_params_wgt = ipw.Button(description='Load Vol Params')
@@ -622,25 +671,31 @@ btn_plot_vol.on_click(btn_plot_vol_clicked)
 
 
 def on_load_tech_params(b):
-    tech_params_path = select_file_open('Select technical params file', 'CSV File (*.csv)')
-    if tech_params_path != '':
-        tech_params_dict = load_csv_to_dict(tech_params_path)
-        num_sims_wgt.value = tech_params_dict['num_sims']
-        basis_funcs_input_wgt.value = tech_params_dict['basis_funcs']
-        random_seed_wgt.value = tech_params_dict['seed']
-        seed_is_random_wgt.value = str_to_bool(tech_params_dict['seed_is_random'])
-        fwd_sim_seed_wgt.value = tech_params_dict['fwd_sim_seed']
-        fwd_sim_seed_set_wgt.value = str_to_bool(tech_params_dict['set_fwd_sim_seed'])
-        extra_decisions_wgt.value = tech_params_dict['extra_decisions']
-        grid_points_wgt.value = tech_params_dict['num_inventory_grid_points']
-        num_tol_wgt.value = tech_params_dict['numerical_tolerance']
+    try:
+        tech_params_path = select_file_open('Select technical params file', 'CSV File (*.csv)')
+        if tech_params_path != '':
+            tech_params_dict = load_csv_to_dict(tech_params_path)
+            num_sims_wgt.value = tech_params_dict['num_sims']
+            basis_funcs_input_wgt.value = tech_params_dict['basis_funcs']
+            random_seed_wgt.value = tech_params_dict['seed']
+            seed_is_random_wgt.value = str_to_bool(tech_params_dict['seed_is_random'])
+            fwd_sim_seed_wgt.value = tech_params_dict['fwd_sim_seed']
+            fwd_sim_seed_set_wgt.value = str_to_bool(tech_params_dict['set_fwd_sim_seed'])
+            extra_decisions_wgt.value = tech_params_dict['extra_decisions']
+            grid_points_wgt.value = tech_params_dict['num_inventory_grid_points']
+            num_tol_wgt.value = tech_params_dict['numerical_tolerance']
+    except Exception as e:
+        logger.exception(e)
 
 
 def on_save_tech_params(b):
-    tech_params_path = select_file_save('Save technical params to', 'CSV File (*.csv)', 'tech_params.csv')
-    if tech_params_path != '':
-        tech_params_dict = tech_params_to_dict()
-        save_dict_to_csv(tech_params_path, tech_params_dict)
+    try:
+        tech_params_path = select_file_save('Save technical params to', 'CSV File (*.csv)', 'tech_params.csv')
+        if tech_params_path != '':
+            tech_params_dict = tech_params_to_dict()
+            save_dict_to_csv(tech_params_path, tech_params_dict)
+    except Exception as e:
+        logger.exception(e)
 
 
 btn_load_tech_params = ipw.Button(description='Load Tech Params')
@@ -744,17 +799,23 @@ def create_triggers_dataframe():
 
 
 def on_export_summary_click(b):
-    csv_path = select_file_save('Save table to', 'CSV File (*.csv)', 'storage_deltas.csv')
-    if csv_path != '':
-        deltas_frame = create_deltas_dataframe()
-        deltas_frame.to_csv(csv_path)
+    try:
+        csv_path = select_file_save('Save table to', 'CSV File (*.csv)', 'storage_deltas.csv')
+        if csv_path != '':
+            deltas_frame = create_deltas_dataframe()
+            deltas_frame.to_csv(csv_path)
+    except Exception as e:
+        logger.exception(e)
 
 
 def on_export_triggers_click(b):
-    csv_path = select_file_save('Save table to', 'CSV File (*.csv)', 'trigger_prices.csv')
-    if csv_path != '':
-        triggers_frame = create_triggers_dataframe()
-        triggers_frame.to_csv(csv_path)
+    try:
+        csv_path = select_file_save('Save table to', 'CSV File (*.csv)', 'trigger_prices.csv')
+        if csv_path != '':
+            triggers_frame = create_triggers_dataframe()
+            triggers_frame.to_csv(csv_path)
+    except Exception as e:
+        logger.exception(e)
 
 
 btn_export_summary_wgt = ipw.Button(description='Export Data', disabled=True)
