@@ -299,7 +299,8 @@ out_fwd_curve = ipw.Output()
 smooth_curve_wgt = ipw.Checkbox(description='Apply Smoothing', value=False)
 apply_wkend_shaping_wgt = ipw.Checkbox(description='Wkend Shaping', value=False, disabled=True)
 wkend_factor_wgt = ipw.FloatText(description='Wkend shaping factor', step=0.005, disabled=True)
-btw_plot_fwd_wgt = ipw.Button(description='Plot Forward Curve')
+btn_plot_fwd_wgt = ipw.Button(description='Plot Forward Curve')
+btn_export_daily_fwd_wgt = ipw.Button(description='Export Daily Curve')
 btn_import_fwd_wgt = ipw.Button(description='Import Forward Curve')
 btn_export_fwd_wgt = ipw.Button(description='Export Forward Curve')
 btn_clear_fwd_wgt = ipw.Button(description='Clear Forward Curve')
@@ -326,7 +327,15 @@ def on_plot_fwd_clicked(b):
         show_inline_matplotlib_plots()
 
 
-btw_plot_fwd_wgt.on_click(on_plot_fwd_clicked)
+def on_export_daily_fwd_clicked(b):
+    fwd_curve_path = select_file_save('Save daily forward curve to', 'CSV File (*.csv)', 'daily_fwd_curve.csv')
+    if fwd_curve_path != '':
+        curve = read_fwd_curve()
+        curve.to_csv(fwd_curve_path, index_label='date', header=['price'])
+
+
+btn_plot_fwd_wgt.on_click(on_plot_fwd_clicked)
+btn_export_daily_fwd_wgt.on_click(on_export_daily_fwd_clicked)
 
 
 def on_import_fwd_curve_clicked(b):
@@ -377,7 +386,7 @@ btn_clear_fwd_wgt.on_click(on_clear_fwd_curve_clicked)
 fwd_data_wgt = ipw.HBox([ipw.VBox([curve_params_buttons, smooth_curve_wgt, apply_wkend_shaping_wgt, wkend_factor_wgt,
                                    ipw.HBox([ipw.VBox([btn_import_fwd_wgt, btn_clear_fwd_wgt]), btn_export_fwd_wgt]),
                                    fwd_input_sheet]),
-                         ipw.VBox([btw_plot_fwd_wgt, out_fwd_curve])])
+                         ipw.VBox([btn_plot_fwd_wgt, btn_export_daily_fwd_wgt, out_fwd_curve])])
 
 # ======================================================================================================
 # STORAGE DETAILS
