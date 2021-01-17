@@ -180,22 +180,22 @@ def create_tab(titles, children):
 
 def enumerate_ratchets():
     ratchet_row = 0
-    while ratchet_row < num_ratch_rows and ratch_input_sheet[ratchet_row, 1].value != '':
-        yield RatchetRow(ratch_input_sheet[ratchet_row, 0].value, ratch_input_sheet[ratchet_row, 1].value,
-                         ratch_input_sheet[ratchet_row, 2].value, ratch_input_sheet[ratchet_row, 3].value)
+    while ratchet_row < num_ratch_rows and ratchet_input_sheet.cells[1].value[ratchet_row] != '':
+        yield RatchetRow(ratchet_input_sheet.cells[0].value[ratchet_row], ratchet_input_sheet.cells[1].value[ratchet_row],
+                         ratchet_input_sheet.cells[2].value[ratchet_row], ratchet_input_sheet.cells[3].value[ratchet_row])
         ratchet_row += 1
 
 
 def read_ratchets():
     ratchets = []
-    for ratch in enumerate_ratchets():
-        if ratch.date != '':
-            dt_item = (pd.Period(ratch.date, freq=freq), [(ratch.inventory, -ratch.inject_rate,
-                                                           ratch.withdraw_rate)])
+    for ratchet in enumerate_ratchets():
+        if ratchet.date != '':
+            dt_item = (pd.Period(ratchet.date, freq=freq), [(ratchet.inventory, -ratchet.inject_rate,
+                                                             ratchet.withdraw_rate)])
             ratchets.append(dt_item)
         else:
-            dt_item[1].append((ratch.inventory, -ratch.inject_rate,
-                               ratch.withdraw_rate))
+            dt_item[1].append((ratchet.inventory, -ratchet.inject_rate,
+                               ratchet.withdraw_rate))
     return ratchets
 
 
@@ -305,6 +305,7 @@ btn_import_fwd_wgt = ipw.Button(description='Import Forward Curve')
 btn_export_fwd_wgt = ipw.Button(description='Export Forward Curve')
 btn_clear_fwd_wgt = ipw.Button(description='Clear Forward Curve')
 
+
 def on_smooth_curve_change(change):
     apply_wkend_shaping_wgt.disabled = not change['new']
 
@@ -388,8 +389,32 @@ fwd_data_wgt = ipw.HBox([ipw.VBox([curve_params_buttons, smooth_curve_wgt, apply
                                    fwd_input_sheet]),
                          ipw.VBox([btn_plot_fwd_wgt, btn_export_daily_fwd_wgt, out_fwd_curve])])
 
+
 # ======================================================================================================
 # STORAGE DETAILS
+
+
+def create_numeric_col(values, col_num):
+    return ips.Cell(value=values, row_start=0, row_end=len(values) - 1, column_start=col_num,
+                    column_end=col_num, type='numeric', numeric_format='0.000', squeeze_row=False,
+                    squeeze_column=True)
+
+
+def create_ratchets_sheet(dates, inventories, inject_rates, withdraw_rates, num_rows):
+    if len(inventories) > num_rows:
+        raise ValueError('Length of inventories in ratchets cannot exceed number of rows {}.'.format(num_rows))
+    dates = dates + [''] * (num_rows - len(dates))
+    inventories = inventories + [''] * (num_rows - len(inventories))
+    inject_rates = inject_rates + [''] * (num_rows - len(inject_rates))
+    withdraw_rates = withdraw_rates + [''] * (num_rows - len(withdraw_rates))
+    dates_cells = ips.Cell(value=dates, row_start=0, row_end=len(dates) - 1, column_start=0,
+                           column_end=0, type='date', date_format=date_format, squeeze_row=False, squeeze_column=True)
+    inventory_cells = create_numeric_col(inventories, 1)
+    inject_rate_cells = create_numeric_col(inject_rates, 2)
+    withdraw_rate_cells = create_numeric_col(withdraw_rates, 3)
+    cells = [dates_cells, inventory_cells, inject_rate_cells, withdraw_rate_cells]
+    return ips.Sheet(rows=len(dates), columns=4, cells=cells, row_headers=False,
+                     column_headers=['date', 'inventory', 'inject_rate', 'withdraw_rate'])
 
 
 def on_save_storage_details_clicked(b):
@@ -444,6 +469,10 @@ def on_load_storage_details_clicked(b):
         if storage_type == 'ratchets':
             ratchets_load_path = select_file_open('Open storage details from', 'CSV File (*.csv)')
             if ratchets_load_path != '':
+                dates = []
+                inventories = []
+                inject_rates = []
+                withdraw_rates = []
                 with open(ratchets_load_path, mode='r') as ratchets_file:
                     csv_reader = csv.reader(ratchets_file, delimiter=',')
                     line_count = 0
@@ -454,21 +483,34 @@ def on_load_storage_details_clicked(b):
                                 raise ValueError(
                                     'Storage details header row must be \'date,inventory,inject_rate,withdraw_rate\' but is \'' + header_text + '\'.')
                         else:
-                            ratchet_date_str = row[0]
-                            ratchet_row = line_count - 1
-                            if ratchet_date_str != '':
-                                ratch_input_sheet[ratchet_row, 0].value = ratchet_date_str
-                            ratch_input_sheet[ratchet_row, 1].value = float(row[1])
-                            ratch_input_sheet[ratchet_row, 2].value = float(row[2])
-                            ratch_input_sheet[ratchet_row, 3].value = float(row[3])
+                            dates.append(row[0])
+                            inventories.append(float(row[1]))
+                            inject_rates.append(float(row[2]))
+                            withdraw_rates.append(float(row[3]))
                         line_count += 1
+                new_ratchets_sheet = create_ratchets_sheet(dates, inventories, inject_rates, withdraw_rates,
+                                                           num_ratch_rows)
+                reset_ratchets_sheet(new_ratchets_sheet)
                 stor_type_wgt.value = 'Ratchets'
+
+
+def reset_ratchets_sheet(new_ratchets_sheet):
+    global ratchet_input_sheet
+    ratchet_input_sheet = new_ratchets_sheet
+    storage_details_wgt.children = (storage_common_wgt, ipw.VBox([btn_clear_ratchets_wgt, ratchet_input_sheet]))
+
+
+def on_clear_ratchets_clicked(b):
+    new_ratchets_sheet = create_ratchets_sheet([], [], [], [], num_ratch_rows)
+    reset_ratchets_sheet(new_ratchets_sheet)
 
 
 btn_save_storage_details_wgt = ipw.Button(description='Save Storage Details')
 btn_save_storage_details_wgt.on_click(on_save_storage_details_clicked)
 btn_load_storage_details_wgt = ipw.Button(description='Load Storage Details')
 btn_load_storage_details_wgt.on_click(on_load_storage_details_clicked)
+btn_clear_ratchets_wgt = ipw.Button(description='Clear Ratchets')
+btn_clear_ratchets_wgt.on_click(on_clear_ratchets_clicked)
 storage_load_save_hbox = ipw.HBox([btn_load_storage_details_wgt, btn_save_storage_details_wgt])
 
 # Common storage properties
@@ -481,9 +523,9 @@ with_cost_wgt = ipw.FloatText(description='Withdrw Cost')
 with_consumed_wgt = ipw.FloatText(description='With % Consumed', step=0.001)
 
 storage_common_wgt = ipw.VBox([storage_load_save_hbox,
-                               ipw.HBox([ipw.VBox([
-                                   start_wgt, end_wgt, inj_cost_wgt, with_cost_wgt]),
-                                   ipw.VBox([stor_type_wgt, inj_consumed_wgt, with_consumed_wgt])])])
+                           ipw.HBox([ipw.VBox([
+                           start_wgt, end_wgt, inj_cost_wgt, with_cost_wgt]),
+                           ipw.VBox([stor_type_wgt, inj_consumed_wgt, with_consumed_wgt])])])
 
 # Simple storage type properties
 invent_min_wgt = ipw.FloatText(description='Min Inventory')
@@ -493,14 +535,7 @@ with_rate_wgt = ipw.FloatText(description='Withdrw Rate')
 storage_simple_wgt = ipw.VBox([invent_min_wgt, invent_max_wgt, inj_rate_wgt, with_rate_wgt])
 
 # Ratchet storage type properties
-
-ratch_input_sheet = ips.sheet(rows=num_ratch_rows, columns=4,
-                              column_headers=['date', 'inventory', 'inject_rate', 'withdraw_rate'])
-for row_num in range(0, num_ratch_rows):
-    ips.cell(row_num, 0, '', date_format=date_format, type='date')
-    ips.cell(row_num, 1, '', type='numeric')
-    ips.cell(row_num, 2, '', type='numeric')
-    ips.cell(row_num, 3, '', type='numeric')
+ratchet_input_sheet = create_ratchets_sheet([], [], [], [], num_ratch_rows)
 
 # Compose storage
 storage_details_wgt = ipw.VBox([storage_common_wgt, storage_simple_wgt])
@@ -510,7 +545,7 @@ def on_stor_type_change(change):
     if change['new'] == 'Simple':
         storage_details_wgt.children = (storage_common_wgt, storage_simple_wgt)
     else:
-        storage_details_wgt.children = (storage_common_wgt, ratch_input_sheet)
+        storage_details_wgt.children = (storage_common_wgt, ipw.VBox([btn_clear_ratchets_wgt, ratchet_input_sheet]))
 
 
 stor_type_wgt.observe(on_stor_type_change, names='value')
@@ -913,21 +948,14 @@ def test_data_btn():
         updated_fwd_input_sheet = create_fwd_input_sheet(fwd_dates, fwd_prices, num_fwd_rows)
         reset_fwd_input_sheet(updated_fwd_input_sheet)
         # Populate ratchets
-        ratch_input_sheet[0, 0].value = today.strftime('%Y-%m-%d')
-        for idx, inv in enumerate([0.0, 25000.0, 50000.0, 60000.0, 65000.0]):
-            ratch_input_sheet[idx, 1].value = inv
-        for idx, inj in enumerate([650.0, 552.5, 512.8, 498.6, 480.0]):
-            ratch_input_sheet[idx, 2].value = inj
-        for idx, wthd in enumerate([702.7, 785.0, 790.6, 825.6, 850.4]):
-            ratch_input_sheet[idx, 3].value = wthd
-        ratch_2_offset = 5
-        ratch_input_sheet[ratch_2_offset, 0].value = (today + timedelta(days=150)).strftime('%Y-%m-%d')
-        for idx, inv in enumerate([0.0, 24000.0, 48000.0, 61000.0, 65000.0]):
-            ratch_input_sheet[ratch_2_offset + idx, 1].value = inv
-        for idx, inj in enumerate([645.8, 593.65, 568.55, 560.8, 550.0]):
-            ratch_input_sheet[ratch_2_offset + idx, 2].value = inj
-        for idx, wthd in enumerate([752.5, 813.7, 836.45, 854.78, 872.9]):
-            ratch_input_sheet[ratch_2_offset + idx, 3].value = wthd
+        dates = [today.strftime('%Y-%m-%d'), '', '', '', ''] + \
+                [(today + timedelta(days=150)).strftime('%Y-%m-%d'), '', '', '', '']
+        inventories = [0.0, 25000.0, 50000.0, 60000.0, 65000.0] + [0.0, 24000.0, 48000.0, 61000.0, 65000.0]
+        inject_rates = [650.0, 552.5, 512.8, 498.6, 480.0] + [645.8, 593.65, 568.55, 560.8, 550.0]
+        withdraw_rates = [702.7, 785.0, 790.6, 825.6, 850.4] + [752.5, 813.7, 836.45, 854.78, 872.9]
+        new_ratchets_input = create_ratchets_sheet(dates, inventories, inject_rates, withdraw_rates, num_ratch_rows)
+        reset_ratchets_sheet(new_ratchets_input)
+        storage_details_wgt.children = (storage_common_wgt, storage_simple_wgt)
 
     btn_test_data = ipw.Button(description='Populate Test Data')
     btn_test_data.on_click(btn_test_data_clicked)
