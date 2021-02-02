@@ -219,7 +219,7 @@ def as_net_array(np_array: np.ndarray):
     assert np_array.flags.c_contiguous
 
     try:
-        net_array = dotnet.Array.CreateInstance(_MAP_NP_NET[dtype], net_dims)
+        net_array = dotnet.Array.CreateInstance(_MAP_NP_NET[dtype], *net_dims)
     except KeyError:
         raise NotImplementedError("asNetArray does not yet support dtype {}".format(dtype))
 
