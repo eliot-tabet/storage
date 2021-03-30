@@ -85,9 +85,10 @@ namespace Cmdty.Storage
             var basisFunctionList = lsmcParams.BasisFunctions.ToList();
 
             TimeSeries<T, InventoryRange> inventorySpace = StorageHelper.CalculateInventorySpace(lsmcParams.Storage, lsmcParams.Inventory, lsmcParams.CurrentPeriod);
+            T startActiveStorage = inventorySpace.Start.Offset(-1);
 
-            if (lsmcParams.ForwardCurve.Start.CompareTo(lsmcParams.CurrentPeriod) > 0)
-                throw new ArgumentException("Forward curve starts too late. Must start on or before the current period.", nameof(lsmcParams.ForwardCurve));
+            if (lsmcParams.ForwardCurve.Start.CompareTo(startActiveStorage) > 0)
+                throw new ArgumentException($"Forward curve starts too late. Must start on or before the period {startActiveStorage}.", nameof(lsmcParams.ForwardCurve));
 
             if (lsmcParams.ForwardCurve.End.CompareTo(inventorySpace.End) < 0)
                 throw new ArgumentException("Forward curve does not extend until storage end period.", nameof(lsmcParams.ForwardCurve));
@@ -145,7 +146,6 @@ namespace Cmdty.Storage
                 designMatrix[i, 0] = 1.0;
             
             // Loop back through other periods
-            T startActiveStorage = inventorySpace.Start.Offset(-1);
             T[] periodsForResultsTimeSeries = startActiveStorage.EnumerateTo(inventorySpace.End).ToArray();
 
             var regressCoeffsBuilder = new TimeSeries<T, Panel<int, double>>.Builder(periodsForResultsTimeSeries.Length - 1);
