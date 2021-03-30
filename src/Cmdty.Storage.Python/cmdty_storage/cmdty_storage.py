@@ -40,7 +40,8 @@ class InjectWithdrawRange(NamedTuple):
     max_inject_withdraw_rate: float
 
 
-ConstraintsType = Union[Iterable[Tuple[date, Tuple[float, float, float]]],
+ConstraintsType = Union[Iterable[Tuple[str, Tuple[float, float, float]]],
+                        Iterable[Tuple[date, Tuple[float, float, float]]],
                         Iterable[Tuple[datetime, Tuple[float, float, float]]],
                         Iterable[Tuple[pd.Period, Tuple[float, float, float]]]]
 
