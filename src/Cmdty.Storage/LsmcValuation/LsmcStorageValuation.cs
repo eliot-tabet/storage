@@ -104,8 +104,8 @@ namespace Cmdty.Storage
             var inventorySpaceGrids = new double[numPeriods][];
 
             // Calculate NPVs at end period
-            var endInventorySpace = inventorySpace[lsmcParams.Storage.EndPeriod]; // TODO this will probably break!
-            var endInventorySpaceGrid = lsmcParams.GridCalc.GetGridPoints(endInventorySpace.MinInventory, endInventorySpace.MaxInventory)
+            (double endMinInventory, double endMaxInventory) = inventorySpace[lsmcParams.Storage.EndPeriod];
+            double[] endInventorySpaceGrid = lsmcParams.GridCalc.GetGridPoints(endMinInventory, endMaxInventory)
                                             .ToArray();
             inventorySpaceGrids[numPeriods - 1] = endInventorySpaceGrid;
 
@@ -151,7 +151,7 @@ namespace Cmdty.Storage
             var regressCoeffsBuilder = new TimeSeries<T, Panel<int, double>>.Builder(periodsForResultsTimeSeries.Length - 1);
 
             int backCounter = numPeriods - 2;
-            Vector<double> numSimsMemoryBuffer = Vector<double>.Build.Dense(numSims);
+            Vector<double> numSimsMemoryBuffer = Vector<double>.Build.Dense(numSims); // Performance optimisation: heap memory that will be reused
             double progress = 0.0;
             double backStepProgressPcnt = BackwardPcntTime / (periodsForResultsTimeSeries.Length - 1);
 
@@ -167,7 +167,7 @@ namespace Cmdty.Storage
                 {
                     currentPeriodContinuationValues = new double[nextPeriodInventorySpaceGrid.Length];
                     // Current period, for which the price isn't random so expected storage values are just the average of the values for all sims
-                    for (int i = 0; i < nextPeriodInventorySpaceGrid.Length; i++) // TODO parallelise?
+                    for (int i = 0; i < nextPeriodInventorySpaceGrid.Length; i++)
                     {
                         Vector<double> storageValuesBySimNextPeriod = storageActualValuesNextPeriod[i];
                         double expectedStorageValueNextPeriod = storageValuesBySimNextPeriod.Average();
@@ -184,7 +184,7 @@ namespace Cmdty.Storage
 
                     var thisPeriodRegressCoeffs = new Panel<int, double>(Enumerable.Range(0, nextPeriodInventorySpaceGrid.Length), basisFunctionList.Count);
                     // TODO doing the regressions for all next inventory could be inefficient as they might not all be needed
-                    for (int i = 0; i < nextPeriodInventorySpaceGrid.Length; i++) // TODO parallelise?
+                    for (int i = 0; i < nextPeriodInventorySpaceGrid.Length; i++)
                     {
                         Vector<double> storageValuesBySimNextPeriod = storageActualValuesNextPeriod[i];
                         Vector<double> regressResults = pseudoInverse.Multiply(storageValuesBySimNextPeriod);
