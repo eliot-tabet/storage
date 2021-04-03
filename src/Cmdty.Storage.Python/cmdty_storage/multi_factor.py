@@ -132,7 +132,7 @@ def _validate_multi_factor_params(  # TODO unit test validation fails
         if i == j:
             if not np.isclose([corr], [1.0]):
                 raise ValueError("Factor correlation on diagonal position ({i}, {j}) value of {corr} not valid as not "
-                                 "equal to 1.").format(i=i, j=j, corr=corr)
+                                 "equal to 1.".format(i=i, j=j, corr=corr))
         else:
             if not -1 <= corr <= 1:
                 raise ValueError("Factor correlation in position ({i}, {j}) value of {corr} not valid as not in the "
