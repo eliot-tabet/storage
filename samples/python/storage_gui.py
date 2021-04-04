@@ -704,7 +704,7 @@ btn_save_tech_params = ipw.Button(description='Save Tech Params')
 btn_save_tech_params.on_click(on_save_tech_params)
 tech_params_buttons = ipw.HBox([btn_load_tech_params, btn_save_tech_params])
 
-num_sims_wgt = ipw.IntText(description='Num Sims', value=1000, step=500)
+num_sims_wgt = ipw.IntText(description='Num Sims', value=4000, step=500)
 extra_decisions_wgt = ipw.IntText(description='Extra Decisions', value=0, step=1)
 seed_is_random_wgt = ipw.Checkbox(description='Seed is Random', value=False)
 random_seed_wgt = ipw.IntText(description='Seed', value=11)

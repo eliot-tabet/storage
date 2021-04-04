@@ -33,6 +33,7 @@ using Cmdty.TimePeriodValueTypes;
 using Cmdty.TimeSeries;
 using MathNet.Numerics.LinearAlgebra;
 using MathNet.Numerics.LinearAlgebra.Double;
+using MathNet.Numerics.LinearAlgebra.Factorization;
 using Microsoft.Extensions.Logging;
 
 namespace Cmdty.Storage
@@ -144,7 +145,11 @@ namespace Cmdty.Storage
             Matrix<double> designMatrix = Matrix<double>.Build.Dense(numSims, basisFunctionList.Count);
             for (int i = 0; i < numSims; i++)
                 designMatrix[i, 0] = 1.0;
-            
+
+            // Reuse heap memory
+            Matrix<double> qTranspose = Matrix<double>.Build.Dense(basisFunctionList.Count, numSims);
+            Matrix<double> pseudoInverse = Matrix<double>.Build.Dense(basisFunctionList.Count, numSims);
+
             // Loop back through other periods
             T[] periodsForResultsTimeSeries = startActiveStorage.EnumerateTo(inventorySpace.End).ToArray();
 
@@ -179,7 +184,10 @@ namespace Cmdty.Storage
                 {
                     PopulateDesignMatrix(designMatrix, period, regressionSpotSims, basisFunctionList);
                     stopwatches.PseudoInverse.Start();
-                    Matrix<double> pseudoInverse = designMatrix.PseudoInverse();
+                    QR<double> designMatrixQr = designMatrix.QR(QRMethod.Thin);
+                    Matrix<double> rInverse = designMatrixQr.R.Inverse();
+                    designMatrixQr.Q.Transpose(qTranspose);
+                    rInverse.Multiply(qTranspose, pseudoInverse);
                     stopwatches.PseudoInverse.Stop();
 
                     var thisPeriodRegressCoeffs = new Panel<int, double>(Enumerable.Range(0, nextPeriodInventorySpaceGrid.Length), basisFunctionList.Count);
@@ -332,7 +340,7 @@ namespace Cmdty.Storage
             }
             stopwatches.BackwardInduction.Stop();
             _logger?.LogInformation("Completed backward induction.");
-            
+
             _logger?.LogInformation("Starting valuation spot price simulation.");
             stopwatches.ValuationPriceSimulation.Start();
             ISpotSimResults<T> valuationSpotSims = lsmcParams.ValuationSpotSimsGenerator();
