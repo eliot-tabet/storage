@@ -30,7 +30,7 @@ Valuation and optimisation of commodity storage.
         * [Build Prerequisites](#build-prerequisites-1)
         * [Running the Build](#running-the-build-1)
         * [Build Artifacts](#build-artifacts-1)
-* [Why the Strange Tech Stack?](#why-the-strange-tech-stack?)
+* [Why the Strange Tech Stack?](#why-the-strange-tech-stack)
 * [License](#license)
 
 ## Overview
