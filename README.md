@@ -4,7 +4,7 @@
 [![NuGet](https://img.shields.io/nuget/v/cmdty.storage.svg)](https://www.nuget.org/packages/Cmdty.Storage/)
 [![PyPI](https://img.shields.io/pypi/v/cmdty-storage.svg)](https://pypi.org/project/cmdty-storage/)
 
-Valuation and optimisation of commodity storage.
+Multi-Factor Least Squares Monte Carlo energy storage valuation model.
 
 ### Table of Contents
 * [Overview](#overview)
