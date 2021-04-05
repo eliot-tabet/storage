@@ -1,0 +1,5 @@
+key,value
+spot_mean_reversion,90.0
+spot_vol,0.84
+long_term_vol,0.31
+seasonal_vol,0.2
