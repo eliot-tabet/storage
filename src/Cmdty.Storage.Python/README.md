@@ -23,12 +23,12 @@ Calculations take into account many of the complex features of physical storage 
 ## Examples
 ### Creating the Storage Object
 The first step is to create an instance of the class CmdtyStorage which
-represents the storage facility. See below for two examples of this, the first creating
+represents the storage facility. See below for two examples of this. The first example creates
 a simple storage object with constant constraints. The second examples creates a storage
 object with inventory-varying injection and withdrawal rates, commonly known as "ratchets".
 
 For full details on how to create CmdtyStorage instances see the Jupyter notebook 
-[creating_storage_instances.ipynb](https://github.com/cmdty/storage/blob/master/samples/python/creating_storage_instances.ipynb).
+[creating_storage_instances.ipynb](../../samples/python/creating_storage_instances.ipynb).
 
 ```python
 from cmdty_storage import CmdtyStorage
@@ -72,11 +72,7 @@ storage_with_ratchets = CmdtyStorage(
 ```
 
 ### Storage Optimisation Using LSMC
-The following is an example of valuing the storage using LSMC and a three-factor seasonal
-model of price dynamics
-
-For comprehensive documentation of invoking the LSMC model, using both the three-factor price model,
-and a more general multi-factor model of price dynamics, see the notebook [multifactor_storage.ipynb](https://github.com/cmdty/storage/blob/master/samples/python/multifactor_storage.ipynb).
+The following is an example of valuing the storage using LSMC and a [three-factor seasonal model](https://github.com/cmdty/core/blob/master/docs/three_factor_seasonal_model/three_factor_seasonal_model.pdf) of price dynamics.
 
 ```python
 from cmdty_storage import three_factor_seasonal_value
@@ -122,12 +118,18 @@ print('Extrinsic NPV: \t{0:,.0f}'.format(three_factor_results.extrinsic_npv))
 Prints the following.
 
 ```
-Full NPV:	69,496
+Full NPV:	    69,496
 Intrinsic NPV: 	38,446
 Extrinsic NPV: 	31,049
 ```
+For comprehensive documentation of invoking the LSMC model, using both the three-factor price model,
+and a more general multi-factor model, see the notebook [multifactor_storage.ipynb](../../samples/python/multifactor_storage.ipynb).
 
-Plotting the daily Deltas and projected inventory.
+### Inspecting Valuation Results
+The object returned from the calling `three_factor_seasonal_value` has many properties containing useful information. The code below give examples of a
+few of these. See the **Valuation Results** section of [multifactor_storage.ipynb](../../samples/python/multifactor_storage.ipynb) for more details.
+
+Plotting the daily Deltas and projected inventory:
 ```python
 %matplotlib inline
 ax_deltas = three_factor_results.deltas.plot(title='Daily Deltas vs Projected Inventory', legend=True, label='Delta')
@@ -140,4 +142,23 @@ ax_inventory.set_ylabel('Inventory')
 ax_deltas.legend(h1+h2, l1+l2, loc=1)
 ```
 
-![delta chart](../../assets/delta_inventory_chart.png)
+![Delta Chart](../../assets/delta_inventory_chart.png)
+
+The **trigger_prices** property contains information on "trigger prices" which are approximate spot price levels at which the exercise decision changes.
+* The withdraw trigger price is the spot price level, at time of nomination, above which the optimal decision will change to withdraw.
+* The inject trigger price is the spot price level, at time of nomination, below which the optimal decision will change to inject.
+
+Plotting the trigger prices versus the forward curve:
+```python
+%matplotlib inline
+ax_triggers = three_factor_results.trigger_prices['inject_trigger_price'].plot(
+    title='Trigger Prices vs Forward Curve', legend=True)
+three_factor_results.trigger_prices['withdraw_trigger_price'].plot(legend=True)
+fwd_curve['2021-04-25' : '2022-04-01'].plot(legend=True)
+ax_triggers.legend(['Inject Trigger Price', 'Withdraw Trigger', 'Forward Curve'])
+```
+![Trigger Prices Chart](../../assets/trigger_prices_chart.png)
+
+## Example GUI
+An example GUI notebook created using Jupyter Widgets can be found 
+[here](../../samples/python/multi_factor_gui.ipynb).
