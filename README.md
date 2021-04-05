@@ -8,9 +8,7 @@ Valuation and optimisation of commodity storage.
 
 ### Table of Contents
 * [Overview](#overview)
-* [Models](#models)
-    * [Currently Implemented](#currently-implemented)
-    * [Planned Implementations](#planned-implementations)
+* [Models Currently Implemented](#models-currently-implemented)
 * [Getting Started](#getting-started)
     * [Installing C# API](#installing-c-api)
     * [Installing Python Package](#installing-python-package)
@@ -45,8 +43,7 @@ Calculations take into account many of the complex features of physical storage 
 * Optional time and inventory dependent loss of commodity in storage. For example this assumption is necessary for electricity storage which isn't 100% efficient.
 * Ability to constrain the storage to be empty at the end of it's life, or specify a value of commodity inventory left in storage.
 
-## Models
-### Currently Implemented
+## Models Currently Implemented
 Currently the following models are implemented in this repository:
 * Intrinsic valuation, i.e. optimal value assuming the commodity price remains static.
 * One-factor trinomial tree, with seasonal spot volatility.
