@@ -14,7 +14,6 @@ Valuation and optimisation of commodity storage.
 * [Getting Started](#getting-started)
     * [Installing C# API](#installing-c-api)
     * [Installing Python Package](#installing-python-package)
-    * [Installing Excel Add-In](#installing-excel-add-in)
 * [Using the C# API](#using-the-c-api)
     * [Creating the Storage Object](#creating-the-storage-object)
         * [Storage with Constant Parameters](#storage-with-constant-parameters)
@@ -31,7 +30,7 @@ Valuation and optimisation of commodity storage.
         * [Build Prerequisites](#build-prerequisites-1)
         * [Running the Build](#running-the-build-1)
         * [Build Artifacts](#build-artifacts-1)
-* [One Factor Trinomial Tree Model](#one-factor-trinomial-tree-method-critique-and-rationale)
+* [Why the Strange Tech Stack?](#why-the-strange-tech-stack?)
 * [License](#license)
 
 ## Overview
@@ -346,6 +345,32 @@ Run the following commands in a cloned repo
 #### Build Artifacts
 The following results of the build will be saved into the artifacts directory (which itelf will be created in the top directory of the repo).
 * The NuGet package: Cmdty.Storage.[version].nupkg
+
+## Why the Strange Tech Stack?
+Users of the Python API might be perplexed as to the technology used: Python calling into .NET, which itself calls into native code for the Intel MKL numerical routines.
+This is certainly not a common structure, especially for a package focussed on complex numerical calculations.
+Where the Python runtime speed is an issue, as is suspected with this project, it is more usual to have a structure
+where Python calls into native code using ctypes, or makes use of a [Numba](https://numba.pydata.org/).
+
+However, the Cmdty project started off as a .NET only project, written in C#, due to the author being mainly
+a C# guy during the day-job. The Python wrapper was added later as it became apparent that there was a demand to
+use the models from Python. Since then it now seems that there are many more users of the Python API than
+the C# NuGet package, resulting in significant time being spent on the Python API, and examples.
+
+If the project was started again from scratch, potentially it would have been written entirely in Python
+utilising Numba. However, due to time constraints, and not wanting to have the maintenance headache of 
+having two independent implementations side-by-side there is no plan to work on this. That said,
+if others want to have a go at a pure Python implementation it would be very much welcomed and I would
+happily help out.
+
+Despite the oddity in the structure it seems to work quite well with the performance of the LSMC
+model being decent. Although compiled C# usually does not run as quickly as native code,
+it's performance isn't bad at all, and the majority of the running time is spent during the QR 
+decomposition for the regression which is itself done using Intel MKL, which does these calculations
+pretty much as quickly as you can get. The only real annoyances with the structure is:
+* [pythonnet](https://github.com/pythonnet/pythonnet) not currently supporting .NET Core. A fix for
+this is currently [in the pipeline](https://github.com/pythonnet/pythonnet/issues/984) for the next pythonnet release. At current this means that Mono needs to be installed in order to use the Python API on Linux.
+* The PyPI package size.
 
 ## License
 
