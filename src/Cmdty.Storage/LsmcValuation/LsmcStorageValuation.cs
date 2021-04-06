@@ -43,7 +43,7 @@ namespace Cmdty.Storage
         private readonly ILogger<LsmcStorageValuation> _logger;
 
         // This has been very roughly estimated. Probably there is a better way of splitting up progress by estimating the order of the backward and forward components.
-        private const double BackwardPcntTime = 0.96;
+        private const double BackwardPcntTime = 0.66;
 
         public LsmcStorageValuation(ILogger<LsmcStorageValuation> logger = null)
         {
