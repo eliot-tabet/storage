@@ -28,7 +28,7 @@ a simple storage object with constant constraints. The second examples creates a
 object with inventory-varying injection and withdrawal rates, commonly known as "ratchets".
 
 For full details on how to create CmdtyStorage instances see the Jupyter notebook 
-[creating_storage_instances.ipynb](../../samples/python/creating_storage_instances.ipynb).
+[creating_storage_instances.ipynb](https://github.com/cmdty/storage/blob/master/samples/python/creating_storage_instances.ipynb).
 
 ```python
 from cmdty_storage import CmdtyStorage
@@ -123,11 +123,11 @@ Intrinsic NPV: 	38,446
 Extrinsic NPV: 	31,049
 ```
 For comprehensive documentation of invoking the LSMC model, using both the three-factor price model,
-and a more general multi-factor model, see the notebook [multifactor_storage.ipynb](../../samples/python/multifactor_storage.ipynb).
+and a more general multi-factor model, see the notebook [multifactor_storage.ipynb](https://github.com/cmdty/storage/blob/master/samples/python/multifactor_storage.ipynb).
 
 ### Inspecting Valuation Results
 The object returned from the calling `three_factor_seasonal_value` has many properties containing useful information. The code below give examples of a
-few of these. See the **Valuation Results** section of [multifactor_storage.ipynb](../../samples/python/multifactor_storage.ipynb) for more details.
+few of these. See the **Valuation Results** section of [multifactor_storage.ipynb](https://github.com/cmdty/storage/blob/master/samples/python/multifactor_storage.ipynb) for more details.
 
 Plotting the daily Deltas and projected inventory:
 ```python
@@ -142,7 +142,7 @@ ax_inventory.set_ylabel('Inventory')
 ax_deltas.legend(h1+h2, l1+l2, loc=1)
 ```
 
-![Delta Chart](../../assets/delta_inventory_chart.png)
+![Delta Chart](https://github.com/cmdty/storage/blob/master/assets/delta_inventory_chart.png)
 
 The **trigger_prices** property contains information on "trigger prices" which are approximate spot price levels at which the exercise decision changes.
 * The withdraw trigger price is the spot price level, at time of nomination, above which the optimal decision will change to withdraw.
@@ -157,10 +157,10 @@ three_factor_results.trigger_prices['withdraw_trigger_price'].plot(legend=True)
 fwd_curve['2021-04-25' : '2022-04-01'].plot(legend=True)
 ax_triggers.legend(['Inject Trigger Price', 'Withdraw Trigger', 'Forward Curve'])
 ```
-![Trigger Prices Chart](../../assets/trigger_prices_chart.png)
+![Trigger Prices Chart](https://github.com/cmdty/storage/blob/master/assets/trigger_prices_chart.png)
 
 ## Example GUI
 An example GUI notebook created using Jupyter Widgets can be found 
-[here](../../samples/python/multi_factor_gui.ipynb).
+[here](https://github.com/cmdty/storage/blob/master/samples/python/multi_factor_gui.ipynb).
 
-![Demo GUI](../../assets/gui_demo.gif)
+![Demo GUI](https://github.com/cmdty/storage/blob/master/assets/gui_demo.gif)
