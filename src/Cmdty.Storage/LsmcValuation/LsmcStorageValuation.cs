@@ -345,7 +345,7 @@ namespace Cmdty.Storage
             stopwatches.ValuationPriceSimulation.Start();
             ISpotSimResults<T> valuationSpotSims = lsmcParams.ValuationSpotSimsGenerator();
             stopwatches.ValuationPriceSimulation.Stop();
-            _logger?.LogInformation("Spot forward price simulation complete.");
+            _logger?.LogInformation("Valuation spot price simulation complete.");
 
             TimeSeries<T, Panel<int, double>> regressCoeffs = regressCoeffsBuilder.Build();
             var inventoryBySim = new Panel<T, double>(periodsForResultsTimeSeries, numSims);
@@ -369,7 +369,7 @@ namespace Cmdty.Storage
             var triggerPricesArray = new TriggerPrices[periodsForResultsTimeSeries.Length - 1];
 
             double forwardStepProgressPcnt = (1.0 - BackwardPcntTime) / periodsForResultsTimeSeries.Length;
-            _logger?.LogInformation("Starting forward simulation.");
+            _logger?.LogInformation("Starting calculations of optimal decisions by simulation forward in time.");
             stopwatches.ForwardSimulation.Start();
             for (int periodIndex = 0; periodIndex < periodsForResultsTimeSeries.Length - 1; periodIndex++) // TODO more clearly handle this -1
             {
@@ -579,7 +579,7 @@ namespace Cmdty.Storage
             }
 
             stopwatches.ForwardSimulation.Stop();
-            _logger?.LogInformation("Completed forward simulation.");
+            _logger?.LogInformation("Starting calculations of optimal decisions by simulation forward in time.");
 
             double forwardNpv = pvBySim.Average();
             _logger?.LogInformation("Forward Pv: " + forwardNpv.ToString("N", CultureInfo.InvariantCulture));
