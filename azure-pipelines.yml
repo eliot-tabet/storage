@@ -75,11 +75,13 @@ steps:
       summaryFileLocation: '$(System.DefaultWorkingDirectory)/**/coverage.cobertura.xml'
 
   - task: TwineAuthenticate@0
+    enabled: 'false'
     inputs:
       artifactFeeds: 'cmdty'
     displayName: 'Twine Authenticate'
 
   - script: 'twine upload -r cmdty --config-file $(PYPIRC_PATH) src/Cmdty.Storage.Python/dist/**'
+    enabled: 'false'
     displayName: 'Upload Python package to Azure Artifacts Cmdty Feed'
 
   - task: CopyFiles@2
@@ -98,6 +100,7 @@ steps:
       flattenFolders: true
 
   - task: DotNetCoreCLI@2
+    enabled: 'false'
     displayName: Publish NuGet package to cmdty feed
     inputs:
       command: 'push'
