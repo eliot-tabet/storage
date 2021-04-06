@@ -142,7 +142,7 @@ ax_inventory.set_ylabel('Inventory')
 ax_deltas.legend(h1+h2, l1+l2, loc=1)
 ```
 
-![Delta Chart](https://github.com/cmdty/storage/blob/master/assets/delta_inventory_chart.png)
+![Delta Chart](https://github.com/cmdty/storage/raw/master/assets/delta_inventory_chart.png)
 
 The **trigger_prices** property contains information on "trigger prices" which are approximate spot price levels at which the exercise decision changes.
 * The withdraw trigger price is the spot price level, at time of nomination, above which the optimal decision will change to withdraw.
@@ -157,10 +157,10 @@ three_factor_results.trigger_prices['withdraw_trigger_price'].plot(legend=True)
 fwd_curve['2021-04-25' : '2022-04-01'].plot(legend=True)
 ax_triggers.legend(['Inject Trigger Price', 'Withdraw Trigger', 'Forward Curve'])
 ```
-![Trigger Prices Chart](https://github.com/cmdty/storage/blob/master/assets/trigger_prices_chart.png)
+![Trigger Prices Chart](https://github.com/cmdty/storage/raw/master/assets/trigger_prices_chart.png)
 
 ## Example GUI
 An example GUI notebook created using Jupyter Widgets can be found 
 [here](https://github.com/cmdty/storage/blob/master/samples/python/multi_factor_gui.ipynb).
 
-![Demo GUI](https://github.com/cmdty/storage/blob/master/assets/gui_demo.gif)
+![Demo GUI](https://github.com/cmdty/storage/raw/master/assets/gui_demo.gif)
