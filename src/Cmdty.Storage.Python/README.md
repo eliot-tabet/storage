@@ -118,9 +118,9 @@ print('Extrinsic NPV: \t{0:,.0f}'.format(three_factor_results.extrinsic_npv))
 Prints the following.
 
 ```
-Full NPV:	    69,496
-Intrinsic NPV: 	38,446
-Extrinsic NPV: 	31,049
+Full NPV:       69,496
+Intrinsic NPV:  38,446
+Extrinsic NPV:  31,049
 ```
 For comprehensive documentation of invoking the LSMC model, using both the three-factor price model,
 and a more general multi-factor model, see the notebook [multifactor_storage.ipynb](https://github.com/cmdty/storage/blob/master/samples/python/multifactor_storage.ipynb).
