@@ -162,3 +162,5 @@ ax_triggers.legend(['Inject Trigger Price', 'Withdraw Trigger', 'Forward Curve']
 ## Example GUI
 An example GUI notebook created using Jupyter Widgets can be found 
 [here](../../samples/python/multi_factor_gui.ipynb).
+
+![Demo GUI](../../assets/gui_demo.gif)
