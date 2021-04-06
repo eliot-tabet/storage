@@ -935,13 +935,14 @@ def btn_clicked(b):
         global active_fwd_curve
         active_fwd_curve = fwd_curve[storage.start:storage.end]
         with out_summary:
-            ax_1 = val_results_3f.deltas.plot(legend=True)
+            ax_1 = val_results_3f.deltas.plot(legend=True, label='Full Delta')
             ax_1.set_ylabel('Delta')
-            intr_delta.plot(legend=True, ax=ax_1)
-            ax_2 = active_fwd_curve.plot(secondary_y=True, legend=True, ax=ax_1)
+            intr_delta.plot(legend=True, ax=ax_1, label='Intrinsic Delta')
+            ax_2 = active_fwd_curve.plot(secondary_y=True, legend=True, ax=ax_1, label='Forward Curve')
+            h1, l1 = ax_1.get_legend_handles_labels()
+            h2, l2 = ax_2.get_legend_handles_labels()
             ax_2.set_ylabel('Forward Price')
-            ax_1.legend(['Full Delta', 'Intrinsic Delta'])
-            ax_2.legend(['Forward Curve'])
+            ax_1.legend(h1+h2, l1+l2, loc=0)
             show_inline_matplotlib_plots()
         deltas_frame = create_deltas_dataframe()
         deltas_sheet = dataframe_to_ipysheet(deltas_frame)
