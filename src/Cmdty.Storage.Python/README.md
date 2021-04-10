@@ -1,5 +1,5 @@
 ## Overview
-Commodity valuation and optimisation model implemented using the Longstaff Schwartz Least Squares 
+Storage valuation and optimisation model implemented using the Longstaff Schwartz Least Squares 
 Monte Carlo technique.
 [A multi-factor model](https://github.com/cmdty/core/blob/master/docs/multifactor_price_process/multifactor_price_process.pdf) 
 is used to for the commodity price dynamics. This allows for a complex 
