@@ -1,4 +1,4 @@
-# Commodity Storage 
+# Cmdty Storage 
 [![Build Status](https://dev.azure.com/cmdty/github/_apis/build/status/cmdty.storage?branchName=master)](https://dev.azure.com/cmdty/github/_build/latest?definitionId=2&branchName=master)
 ![Azure DevOps coverage](https://img.shields.io/azure-devops/coverage/cmdty/github/2)
 [![NuGet](https://img.shields.io/nuget/v/cmdty.storage.svg)](https://www.nuget.org/packages/Cmdty.Storage/)
@@ -82,7 +82,7 @@ For full details on how to create CmdtyStorage instances see the Jupyter noteboo
 The following code creates a simple storage object with constant constraints.
 
 ```python
-from cmdty_storage import CmdtyStorage
+from cmdty_storage import CmdtyStorage, RatchetInterp
 import pandas as pd
 storage_simple = CmdtyStorage(
     freq='D',
@@ -108,7 +108,7 @@ storage_with_ratchets = CmdtyStorage(
     storage_end = '2022-04-01',
     injection_cost = 0.01,
     withdrawal_cost = 0.025,
-    constraints= [
+    ratchets = [
                 ('2021-04-01', # For days after 2021-04-01 (inclusive) until 2022-10-01 (exclusive):
                        [
                             (0.0, -150.0, 250.0),    # At min inventory of zero, max withdrawal of 150, max injection 250
@@ -123,7 +123,8 @@ storage_with_ratchets = CmdtyStorage(
                             (5000.0, -230.0, 165.0), # At inventory of 5000, max withdrawal of 230, max injection 165
                             (7000.0, -245.0, 148.0), # At max inventory of 7000, max withdrawal of 245, max injection 148
                         ]),
-                 ]
+                 ],
+    ratchet_interp = RatchetInterp.LINEAR
 )
 ```
 

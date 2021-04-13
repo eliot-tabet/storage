@@ -31,7 +31,7 @@ For full details on how to create CmdtyStorage instances see the Jupyter noteboo
 [creating_storage_instances.ipynb](https://github.com/cmdty/storage/blob/master/samples/python/creating_storage_instances.ipynb).
 
 ```python
-from cmdty_storage import CmdtyStorage
+from cmdty_storage import CmdtyStorage, RatchetInterp
 import pandas as pd
 storage_simple = CmdtyStorage(
     freq='D',
@@ -66,7 +66,8 @@ storage_with_ratchets = CmdtyStorage(
                             (5000.0, -230.0, 165.0), # At inventory of 5000, max withdrawal of 230, max injection 165
                             (7000.0, -245.0, 148.0), # At max inventory of 7000, max withdrawal of 245, max injection 148
                         ]),
-                 ]
+                 ],
+    ratchet_interp = RatchetInterp.LINEAR
 )
 
 ```
