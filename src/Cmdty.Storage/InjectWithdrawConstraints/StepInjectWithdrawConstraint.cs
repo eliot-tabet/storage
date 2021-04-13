@@ -35,9 +35,6 @@ namespace Cmdty.Storage
         private readonly InjectWithdrawRangeByInventory[] _injectWithdrawRanges;
         private readonly double[] _inventories;
 
-        //private readonly double[] _bracketLowerInventoryAfterMaxWithdraw;
-        //private readonly double[] _bracketUpperInventoryAfterMaxWithdraw;
-
         public StepInjectWithdrawConstraint([NotNull] IEnumerable<InjectWithdrawRangeByInventory> injectWithdrawRanges)
         {
             if (injectWithdrawRanges == null) throw new ArgumentNullException(nameof(injectWithdrawRanges));
@@ -58,15 +55,17 @@ namespace Cmdty.Storage
             
             _inventories = _injectWithdrawRanges.Select(injectWithdrawRange => injectWithdrawRange.Inventory)
                                                 .ToArray();
-            //_bracketLowerInventoryAfterMaxWithdraw = new double[_injectWithdrawRanges.Length];
-            //_bracketUpperInventoryAfterMaxWithdraw = new double[_injectWithdrawRanges.Length];
 
-            //for (int i = 0; i < _injectWithdrawRanges.Length; i++)
-            //{
-                
-            //}
-            // TODO check withdrawal rate increasing with inventory
-            // TODO check injection rate decreasing with inventory
+            if (_inventories.Length > 2)
+            {
+                for (int i = 1; i < _inventories.Length - 1; i++) // Don't check the last pair as these should have same inject/withdraw rates, as checked for above
+                {
+                    if (_injectWithdrawRanges[i].InjectWithdrawRange.MaxInjectWithdrawRate > _injectWithdrawRanges[i-1].InjectWithdrawRange.MaxInjectWithdrawRate)
+                        throw new ArgumentException("Ratchet injection rates cannot increase with inventory.");
+                    if (_injectWithdrawRanges[i].InjectWithdrawRange.MinInjectWithdrawRate > _injectWithdrawRanges[i - 1].InjectWithdrawRange.MinInjectWithdrawRate)
+                        throw new ArgumentException("Ratchet withdrawal rates cannot decrease with inventory.");
+                }
+            }
 
         }
 

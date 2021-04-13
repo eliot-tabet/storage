@@ -178,5 +178,35 @@ namespace Cmdty.Storage.Test
             Assert.Throws<ArgumentException>(() => _stepConstraint.GetInjectWithdrawRange(1000.001));
         }
 
+        [Fact]
+        public void Constructor_InjectRatesIncreaseWithInventory_ThrowsArgumentException()
+        {
+            var injectWithdrawRanges = new List<InjectWithdrawRangeByInventory>
+            {
+                (inventory: 0.0, (minInjectWithdrawRate: -44.85, maxInjectWithdrawRate: 56.8)),
+                (inventory: 100.0, (minInjectWithdrawRate: -45.01, maxInjectWithdrawRate: 54.5)),
+                (inventory: 300.0, (minInjectWithdrawRate: -45.78, maxInjectWithdrawRate: 52.01)),
+                (inventory: 600.0, (minInjectWithdrawRate: -46.17, maxInjectWithdrawRate: 52.01001)),
+                (inventory: 800.0, (minInjectWithdrawRate: -46.99, maxInjectWithdrawRate: 50.8)),
+                (inventory: 1000.0, (minInjectWithdrawRate: -46.99, maxInjectWithdrawRate: 50.8))
+            };
+            Assert.Throws<ArgumentException>(() => new StepInjectWithdrawConstraint(injectWithdrawRanges));
+        }
+
+        [Fact]
+        public void Constructor_WithdrawRatesDecreaseWithInventory_ThrowsArgumentException()
+        {
+            var injectWithdrawRanges = new List<InjectWithdrawRangeByInventory>
+            {
+                (inventory: 0.0, (minInjectWithdrawRate: -44.85, maxInjectWithdrawRate: 56.8)),
+                (inventory: 100.0, (minInjectWithdrawRate: -45.01, maxInjectWithdrawRate: 54.5)),
+                (inventory: 300.0, (minInjectWithdrawRate: -45.78, maxInjectWithdrawRate: 52.01)),
+                (inventory: 600.0, (minInjectWithdrawRate: -45.77, maxInjectWithdrawRate: 51.9)),
+                (inventory: 800.0, (minInjectWithdrawRate: -46.99, maxInjectWithdrawRate: 50.8)),
+                (inventory: 1000.0, (minInjectWithdrawRate: -46.99, maxInjectWithdrawRate: 50.8))
+            };
+            Assert.Throws<ArgumentException>(() => new StepInjectWithdrawConstraint(injectWithdrawRanges));
+        }
+
     }
 }
