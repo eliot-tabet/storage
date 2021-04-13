@@ -35,6 +35,9 @@ namespace Cmdty.Storage
         private readonly InjectWithdrawRangeByInventory[] _injectWithdrawRanges;
         private readonly double[] _inventories;
 
+        //private readonly double[] _bracketLowerInventoryAfterMaxWithdraw;
+        //private readonly double[] _bracketUpperInventoryAfterMaxWithdraw;
+
         public PiecewiseFlatInjectWithdrawConstraint([NotNull] IEnumerable<InjectWithdrawRangeByInventory> injectWithdrawRanges)
         {
             if (injectWithdrawRanges == null) throw new ArgumentNullException(nameof(injectWithdrawRanges));
@@ -45,7 +48,17 @@ namespace Cmdty.Storage
                 throw new ArgumentException("Inject/withdraw ranges collection must contain at least two elements.", nameof(injectWithdrawRanges));
 
             _inventories = _injectWithdrawRanges.Select(injectWithdrawRange => injectWithdrawRange.Inventory)
-                .ToArray();
+                                                .ToArray();
+            //_bracketLowerInventoryAfterMaxWithdraw = new double[_injectWithdrawRanges.Length];
+            //_bracketUpperInventoryAfterMaxWithdraw = new double[_injectWithdrawRanges.Length];
+
+            //for (int i = 0; i < _injectWithdrawRanges.Length; i++)
+            //{
+                
+            //}
+            // TODO check withdrawal rate increasing with inventory
+            // TODO check injection rate decreasing with inventory
+
         }
 
         public InjectWithdrawRange GetInjectWithdrawRange(double inventory)
@@ -60,13 +73,87 @@ namespace Cmdty.Storage
         public double InventorySpaceUpperBound(double nextPeriodInventorySpaceLowerBound, double nextPeriodInventorySpaceUpperBound,
             double currentPeriodMinInventory, double currentPeriodMaxInventory, double inventoryPercentLoss)
         {
-            throw new NotImplementedException();
+            InjectWithdrawRange currentPeriodInjectWithdrawRangeAtMaxInventory = GetInjectWithdrawRange(currentPeriodMaxInventory);
+
+            double nextPeriodMaxInventoryFromThisPeriodMaxInventory = currentPeriodMaxInventory * (1 - inventoryPercentLoss)
+                                                                      + currentPeriodInjectWithdrawRangeAtMaxInventory.MaxInjectWithdrawRate;
+            double nextPeriodMinInventoryFromThisPeriodMaxInventory = currentPeriodMaxInventory * (1 - inventoryPercentLoss)
+                                                                      + currentPeriodInjectWithdrawRangeAtMaxInventory.MinInjectWithdrawRate;
+
+            if (nextPeriodMinInventoryFromThisPeriodMaxInventory <= nextPeriodInventorySpaceUpperBound &&
+                nextPeriodInventorySpaceLowerBound <= nextPeriodMaxInventoryFromThisPeriodMaxInventory)
+            {
+                // No need to solve root as next period inventory space can be reached from the current period max inventory
+                return currentPeriodMaxInventory;
+            }
+            // TODO share code in method up to here with PiecewiseLinearInjectWithdrawConstraint
+
+            double? inventorySpaceUpper = null;
+            for (int i = 0; i < _injectWithdrawRanges.Length - 1; i++)
+            {
+                // TODO reuse values between loop iterations like in PiecewiseLinearInjectWithdrawConstraint, or not bother because will make code less clear?
+                double maxWithdrawRate = _injectWithdrawRanges[i].InjectWithdrawRange.MinInjectWithdrawRate;
+                double bracketLowerInventory = _injectWithdrawRanges[i].Inventory;
+                double bracketLowerInventoryAfterWithdraw = bracketLowerInventory * (1 - inventoryPercentLoss) + maxWithdrawRate;
+                
+                double bracketUpperInventory = _injectWithdrawRanges[i + 1].Inventory;
+                double bracketUpperInventoryAfterWithdraw = bracketUpperInventory * (1 - inventoryPercentLoss) + maxWithdrawRate;
+
+                if (bracketLowerInventoryAfterWithdraw <= nextPeriodInventorySpaceUpperBound &&
+                    nextPeriodInventorySpaceUpperBound <= bracketUpperInventoryAfterWithdraw)
+                {
+                    // If there are multiple solutions we want to take the maximum one, so we keep overwriting the solution
+                    inventorySpaceUpper = StorageHelper.InterpolateLinearAndSolve(bracketLowerInventory,
+                                        bracketLowerInventoryAfterWithdraw, bracketUpperInventory,
+                                        bracketUpperInventoryAfterWithdraw, nextPeriodInventorySpaceUpperBound);
+                }
+            }
+
+            if (inventorySpaceUpper == null)
+                throw new ApplicationException("Storage inventory constraints cannot be satisfied.");
+            return inventorySpaceUpper.Value;
         }
 
         public double InventorySpaceLowerBound(double nextPeriodInventorySpaceLowerBound, double nextPeriodInventorySpaceUpperBound,
             double currentPeriodMinInventory, double currentPeriodMaxInventory, double inventoryPercentLoss)
         {
-            throw new NotImplementedException();
+            InjectWithdrawRange currentPeriodInjectWithdrawRangeAtMinInventory = GetInjectWithdrawRange(currentPeriodMinInventory);
+
+            double nextPeriodMaxInventoryFromThisPeriodMinInventory = currentPeriodMinInventory * (1 - inventoryPercentLoss)
+                                                                      + currentPeriodInjectWithdrawRangeAtMinInventory.MaxInjectWithdrawRate;
+            double nextPeriodMinInventoryFromThisPeriodMinInventory = currentPeriodMinInventory * (1 - inventoryPercentLoss)
+                                                                      + currentPeriodInjectWithdrawRangeAtMinInventory.MinInjectWithdrawRate;
+
+            if (nextPeriodMinInventoryFromThisPeriodMinInventory <= nextPeriodInventorySpaceUpperBound &&
+                nextPeriodInventorySpaceLowerBound <= nextPeriodMaxInventoryFromThisPeriodMinInventory)
+            {
+                // No need to solve root as next period inventory space can be reached from the current period min inventory
+                return currentPeriodMinInventory;
+            }
+            // TODO share code in method up to here with PiecewiseLinearInjectWithdrawConstraint
+
+            double? inventorySpaceLower = null;
+            for (int i = 0; i < _injectWithdrawRanges.Length - 1; i++)
+            {
+                // TODO reuse values between loop iterations like in PiecewiseLinearInjectWithdrawConstraint, or not bother because will make code less clear?
+                double maxInjectionRate = _injectWithdrawRanges[i].InjectWithdrawRange.MaxInjectWithdrawRate;
+                double bracketLowerInventory = _injectWithdrawRanges[i].Inventory;
+                double bracketLowerInventoryAfterInject = bracketLowerInventory * (1 - inventoryPercentLoss) + maxInjectionRate;
+                double bracketUpperInventory = _injectWithdrawRanges[i + 1].Inventory;
+                double bracketUpperInventoryAfterInject = bracketUpperInventory * (1 - inventoryPercentLoss) + maxInjectionRate;
+
+                if (bracketLowerInventoryAfterInject <= nextPeriodInventorySpaceLowerBound &&
+                    nextPeriodInventorySpaceLowerBound <= bracketUpperInventoryAfterInject)
+                {
+                    inventorySpaceLower = StorageHelper.InterpolateLinearAndSolve(bracketLowerInventory,
+                        bracketLowerInventoryAfterInject, bracketUpperInventory,
+                        bracketUpperInventoryAfterInject, nextPeriodInventorySpaceLowerBound);
+                }
+            }
+
+            if (inventorySpaceLower == null)
+                throw new ApplicationException("Storage inventory constraints cannot be satisfied.");
+            return inventorySpaceLower.Value;
         }
     }
 }

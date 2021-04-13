@@ -315,5 +315,18 @@ namespace Cmdty.Storage
 
         public static bool EqualsWithinTol(double a, double b, double tol) => Math.Abs(a - b) <= tol;
 
+        /// <summary>
+        /// Derives a linear equation from a pair of points (x1, y1) and (x2, y2) and then solves for x, for a known y
+        /// </summary>
+        public static double InterpolateLinearAndSolve(double x1, double y1, double x2, double y2, double y)
+        {
+            // Calculate m (gradient) and c (constant) coefficients of linear equation y = mx + c
+            double gradient = (y2 - y1) / (x2 - x1);
+            double constant = y1 - gradient * x1;
+
+            // Find x for known y
+            double x = (y - constant) / gradient;
+            return x;
+        }
     }
 }

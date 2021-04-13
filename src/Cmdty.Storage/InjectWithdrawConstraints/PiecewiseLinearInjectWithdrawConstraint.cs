@@ -102,7 +102,7 @@ namespace Cmdty.Storage
                 if (bracketLowerInventoryAfterWithdraw <= nextPeriodInventorySpaceUpperBound &&
                     nextPeriodInventorySpaceUpperBound <= bracketUpperInventoryAfterWithdraw)
                 {
-                    double inventorySpaceUpper = InterpolateLinearAndSolve(bracketLowerInventory,
+                    double inventorySpaceUpper = StorageHelper.InterpolateLinearAndSolve(bracketLowerInventory,
                                                 bracketLowerInventoryAfterWithdraw, bracketUpperInventory,
                                                 bracketUpperInventoryAfterWithdraw, nextPeriodInventorySpaceUpperBound);
                     return inventorySpaceUpper;
@@ -118,7 +118,7 @@ namespace Cmdty.Storage
         public double InventorySpaceLowerBound(double nextPeriodInventorySpaceLowerBound, double nextPeriodInventorySpaceUpperBound,
                                                 double currentPeriodMinInventory, double currentPeriodMaxInventory, double inventoryPercentLoss)
         {
-            var currentPeriodInjectWithdrawRangeAtMinInventory = GetInjectWithdrawRange(currentPeriodMinInventory);
+            InjectWithdrawRange currentPeriodInjectWithdrawRangeAtMinInventory = GetInjectWithdrawRange(currentPeriodMinInventory);
 
             double nextPeriodMaxInventoryFromThisPeriodMinInventory = currentPeriodMinInventory * (1 - inventoryPercentLoss)
                                                                       + currentPeriodInjectWithdrawRangeAtMinInventory.MaxInjectWithdrawRate;
@@ -138,7 +138,7 @@ namespace Cmdty.Storage
 
             for (int i = 1; i < _injectWithdrawRanges.Length; i++)
             {
-                var bracketUpperDecisionRange = _injectWithdrawRanges[i];
+                InjectWithdrawRangeByInventory bracketUpperDecisionRange = _injectWithdrawRanges[i];
                 double bracketUpperInventory = bracketUpperDecisionRange.Inventory;
                 double bracketUpperInventoryAfterInject = bracketUpperInventory * (1 - inventoryPercentLoss) +
                                             bracketUpperDecisionRange.InjectWithdrawRange.MaxInjectWithdrawRate;
@@ -146,7 +146,7 @@ namespace Cmdty.Storage
                 if (bracketLowerInventoryAfterInject <= nextPeriodInventorySpaceLowerBound &&
                     nextPeriodInventorySpaceLowerBound <= bracketUpperInventoryAfterInject)
                 {
-                    double inventorySpaceLower = InterpolateLinearAndSolve(bracketLowerInventory,
+                    double inventorySpaceLower = StorageHelper.InterpolateLinearAndSolve(bracketLowerInventory,
                                                 bracketLowerInventoryAfterInject, bracketUpperInventory, 
                                                 bracketUpperInventoryAfterInject, nextPeriodInventorySpaceLowerBound);
                     return inventorySpaceLower;
@@ -158,20 +158,5 @@ namespace Cmdty.Storage
 
             throw new ApplicationException("Storage inventory constraints cannot be satisfied.");
         }
-
-        /// <summary>
-        /// Derives a linear equation from a pair of points (x1, y1) and (x2, y2) and then solves for x, for a known y
-        /// </summary>
-        private static double InterpolateLinearAndSolve(double x1, double y1, double x2, double y2, double y)
-        {
-            // Calculate m (gradient) and c (constant) coefficients of linear equation y = mx + c
-            double gradient = (y2 - y1) / (x2 - x1);
-            double constant = y1 - gradient * x1;
-
-            // Find x for known y
-            double x = (y - constant) / gradient;
-            return x;
-        }
-
     }
 }
