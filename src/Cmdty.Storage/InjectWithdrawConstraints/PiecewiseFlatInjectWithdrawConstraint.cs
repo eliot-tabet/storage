@@ -133,7 +133,7 @@ namespace Cmdty.Storage
             // TODO share code in method up to here with PiecewiseLinearInjectWithdrawConstraint
 
             double? inventorySpaceLower = null;
-            for (int i = 0; i < _injectWithdrawRanges.Length - 1; i++)
+            for (int i = _injectWithdrawRanges.Length - 2; i >= 0; i--)
             {
                 // TODO reuse values between loop iterations like in PiecewiseLinearInjectWithdrawConstraint, or not bother because will make code less clear?
                 double maxInjectionRate = _injectWithdrawRanges[i].InjectWithdrawRange.MaxInjectWithdrawRate;
@@ -145,6 +145,7 @@ namespace Cmdty.Storage
                 if (bracketLowerInventoryAfterInject <= nextPeriodInventorySpaceLowerBound &&
                     nextPeriodInventorySpaceLowerBound <= bracketUpperInventoryAfterInject)
                 {
+                    // If there are multiple solutions we want to take the minimum one, so we keep overwriting the solution
                     inventorySpaceLower = StorageHelper.InterpolateLinearAndSolve(bracketLowerInventory,
                         bracketLowerInventoryAfterInject, bracketUpperInventory,
                         bracketUpperInventoryAfterInject, nextPeriodInventorySpaceLowerBound);
