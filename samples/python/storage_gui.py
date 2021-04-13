@@ -1,7 +1,7 @@
 import pandas as pd
 import ipywidgets as ipw
 import ipysheet as ips
-from cmdty_storage import CmdtyStorage, three_factor_seasonal_value, MultiFactorModel, multi_factor
+from cmdty_storage import CmdtyStorage, three_factor_seasonal_value, MultiFactorModel, multi_factor, RatchetInterp
 from curves import max_smooth_interp, adjustments
 from datetime import date, timedelta
 from IPython.display import display
@@ -896,7 +896,7 @@ def btn_clicked(b):
             ratchets = read_ratchets()
             storage = CmdtyStorage(freq, storage_start=start_wgt.value, storage_end=end_wgt.value,
                                    injection_cost=inj_cost_wgt.value, withdrawal_cost=with_cost_wgt.value,
-                                   constraints=ratchets)
+                                   ratchets=ratchets, ratchet_interp = RatchetInterp.LINEAR)
 
         interest_rate_curve = pd.Series(index=pd.period_range(val_date_wgt.value,
                                                               twentieth_of_next_month(
