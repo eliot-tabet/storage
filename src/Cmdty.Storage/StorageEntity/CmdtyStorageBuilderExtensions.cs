@@ -79,6 +79,9 @@ namespace Cmdty.Storage
                     addInjectionCost = WithTimeAndInventoryVaryingInjectWithdrawRatesPolynomial(builder, injectWithdrawRanges, polynomial.NewtonRaphsonAccuracy,
                                                         polynomial.NewtonRaphsonMaxNumIterations, polynomial.NewtonRaphsonSubdivision);
                     break;
+                case InterpolationType.StepType _:
+                    addInjectionCost = WithStepRatchets(builder, injectWithdrawRanges);
+                    break;
                 default:
                     throw new ArgumentException($"InterpolationType {interpolationType.GetType().Name} not recognised"); // Shouldn't actually be possible to reach here...
             }
@@ -118,6 +121,21 @@ namespace Cmdty.Storage
 
             IAddInjectionCost<T> addInjectionCost = AddInjectWithdrawRanges(builder, injectWithdrawRanges, ConstraintFactory);
 
+            return addInjectionCost;
+        }
+
+        public static IAddInjectionCost<T> WithStepRatchets<T>(
+            [NotNull] this IAddInjectWithdrawConstraints<T> builder,
+            [NotNull] IEnumerable<InjectWithdrawRangeByInventoryAndPeriod<T>> injectWithdrawRanges)
+            where T : ITimePeriod<T>
+        {
+            if (builder == null) throw new ArgumentNullException(nameof(builder));
+            if (injectWithdrawRanges == null) throw new ArgumentNullException(nameof(injectWithdrawRanges));
+
+            IInjectWithdrawConstraint ConstraintFactory(InjectWithdrawRangeByInventory[] injectWithdrawRangeArray)
+            => new StepInjectWithdrawConstraint(injectWithdrawRangeArray);
+
+            IAddInjectionCost<T> addInjectionCost = AddInjectWithdrawRanges(builder, injectWithdrawRanges, ConstraintFactory);
             return addInjectionCost;
         }
 

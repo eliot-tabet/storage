@@ -29,9 +29,10 @@ from pathlib import Path
 clr.AddReference(str(Path('cmdty_storage/lib/Cmdty.Storage')))
 import Cmdty.Storage as net_cs
 
-from typing import Union, Callable, Iterable, Tuple, NamedTuple
+from typing import Union, Callable, Iterable, Tuple, NamedTuple, Optional
 from datetime import datetime, date
 import pandas as pd
+from enum import Enum
 from cmdty_storage import utils
 
 
@@ -40,10 +41,15 @@ class InjectWithdrawRange(NamedTuple):
     max_inject_withdraw_rate: float
 
 
-ConstraintsType = Union[Iterable[Tuple[str, Tuple[float, float, float]]],
-                        Iterable[Tuple[date, Tuple[float, float, float]]],
-                        Iterable[Tuple[datetime, Tuple[float, float, float]]],
-                        Iterable[Tuple[pd.Period, Tuple[float, float, float]]]]
+class RatchetInterp(Enum):
+    LINEAR = 1
+    STEP = 2
+
+
+RatchetsType = Optional[Union[Iterable[Tuple[str, Iterable[Tuple[float, float, float]]]],
+                     Iterable[Tuple[date, Iterable[Tuple[float, float, float]]]],
+                     Iterable[Tuple[datetime, Iterable[Tuple[float, float, float]]]],
+                     Iterable[Tuple[pd.Period, Iterable[Tuple[float, float, float]]]]]]
 
 
 class CmdtyStorage:
@@ -54,7 +60,8 @@ class CmdtyStorage:
                  storage_end: utils.TimePeriodSpecType,
                  injection_cost: Union[float, pd.Series],
                  withdrawal_cost: Union[float, pd.Series],
-                 constraints: ConstraintsType = None,
+                 ratchets: RatchetsType = None,
+                 ratchet_interp: Optional[RatchetInterp] = None,
                  min_inventory: Union[None, float, int, pd.Series] = None,
                  max_inventory: Union[None, float, int, pd.Series] = None,
                  max_injection_rate: Union[None, float, int, pd.Series] = None,
@@ -67,45 +74,39 @@ class CmdtyStorage:
 
         if freq not in utils.FREQ_TO_PERIOD_TYPE:
             raise ValueError("freq parameter value of '{}' not supported. The allowable values can be found in the keys of the dict curves.FREQ_TO_PERIOD_TYPE.".format(freq))
-
         time_period_type = utils.FREQ_TO_PERIOD_TYPE[freq]
-
         start_period = utils.from_datetime_like(storage_start, time_period_type)
         end_period = utils.from_datetime_like(storage_end, time_period_type)
-
         builder = net_cs.IBuilder[time_period_type](net_cs.CmdtyStorage[time_period_type].Builder)
-
         builder = builder.WithActiveTimePeriod(start_period, end_period)
-
         net_constraints = dotnet_cols_gen.List[net_cs.InjectWithdrawRangeByInventoryAndPeriod[time_period_type]]()
 
-        if constraints is not None:
-            utils.raise_if_not_none(min_inventory, "min_inventory parameter should not be provided if constraints parameter is provided.")
-            utils.raise_if_not_none(max_inventory, "max_inventory parameter should not be provided if constraints parameter is provided.")
-            utils.raise_if_not_none(max_injection_rate, "max_injection_rate parameter should not be provided if constraints parameter is provided.")
-            utils.raise_if_not_none(max_withdrawal_rate, "max_withdrawal_rate parameter should not be provided if constraints parameter is provided.")
-
-            for period, rates_by_inventory in constraints:
+        if ratchets is not None:
+            utils.raise_if_not_none(min_inventory, "min_inventory parameter should not be provided if ratchets parameter is provided.")
+            utils.raise_if_not_none(max_inventory, "max_inventory parameter should not be provided if ratchets parameter is provided.")
+            utils.raise_if_not_none(max_injection_rate, "max_injection_rate parameter should not be provided if ratchets parameter is provided.")
+            utils.raise_if_not_none(max_withdrawal_rate, "max_withdrawal_rate parameter should not be provided if ratchets parameter is provided.")
+            utils.raise_if_none(ratchet_interp, "ratchet_interp parameter should be provided if ratchets parameter is provided.")
+            for period, rates_by_inventory in ratchets:
                 net_period = utils.from_datetime_like(period, time_period_type)
                 net_rates_by_inventory = dotnet_cols_gen.List[net_cs.InjectWithdrawRangeByInventory]()
                 for inventory, min_rate, max_rate in rates_by_inventory:
                     net_rates_by_inventory.Add(net_cs.InjectWithdrawRangeByInventory(inventory, net_cs.InjectWithdrawRange(min_rate, max_rate)))
                 net_constraints.Add(net_cs.InjectWithdrawRangeByInventoryAndPeriod[time_period_type](net_period, net_rates_by_inventory))
-
             builder = net_cs.IAddInjectWithdrawConstraints[time_period_type](builder)
-            net_cs.CmdtyStorageBuilderExtensions.WithTimeAndInventoryVaryingInjectWithdrawRatesPiecewiseLinear[time_period_type](builder, net_constraints)
-
+            if ratchet_interp == RatchetInterp.LINEAR:
+                net_cs.CmdtyStorageBuilderExtensions.WithTimeAndInventoryVaryingInjectWithdrawRatesPiecewiseLinear[time_period_type](builder, net_constraints)
+            elif ratchet_interp == RatchetInterp.STEP:
+                net_cs.CmdtyStorageBuilderExtensions.WithStepRatchets[time_period_type](builder, net_constraints)
         else:
-            utils.raise_if_none(min_inventory, "min_inventory parameter should be provided if constraints parameter is not provided.")
-            utils.raise_if_none(max_inventory, "max_inventory parameter should be provided if constraints parameter is not provided.")
-            utils.raise_if_none(max_injection_rate, "max_injection_rate parameter should be provided if constraints parameter is not provided.")
-            utils.raise_if_none(max_withdrawal_rate, "max_withdrawal_rate parameter should be provided if constraints parameter is not provided.")
-
+            utils.raise_if_not_none(ratchet_interp, "ratchet_interp should not be provided if ratchets parameter is not provided.")
+            utils.raise_if_none(min_inventory, "min_inventory parameter should be provided if ratchets parameter is not provided.")
+            utils.raise_if_none(max_inventory, "max_inventory parameter should be provided if ratchets parameter is not provided.")
+            utils.raise_if_none(max_injection_rate, "max_injection_rate parameter should be provided if ratchets parameter is not provided.")
+            utils.raise_if_none(max_withdrawal_rate, "max_withdrawal_rate parameter should be provided if ratchets parameter is not provided.")
             builder = net_cs.IAddInjectWithdrawConstraints[time_period_type](builder)
-
             max_injection_rate_is_scalar = utils.is_scalar(max_injection_rate)
             max_withdrawal_rate_is_scalar = utils.is_scalar(max_withdrawal_rate)
-
             if max_injection_rate_is_scalar and max_withdrawal_rate_is_scalar:
                 net_cs.CmdtyStorageBuilderExtensions.WithConstantInjectWithdrawRange[time_period_type](builder, -max_withdrawal_rate, max_injection_rate)
             else:
@@ -117,7 +118,6 @@ class CmdtyStorage:
                 inject_withdraw_series = max_injection_rate.combine(max_withdrawal_rate, lambda inj_rate, with_rate: (-with_rate, inj_rate)).dropna()
                 net_inj_with_series = utils.series_to_time_series(inject_withdraw_series, time_period_type, net_cs.InjectWithdrawRange, lambda tup: net_cs.InjectWithdrawRange(tup[0], tup[1]))
                 builder.WithInjectWithdrawRangeSeries(net_inj_with_series)
-
             builder = net_cs.IAddMinInventory[time_period_type](builder)
             if isinstance(min_inventory, pd.Series):
                 net_series_min_inventory = utils.series_to_double_time_series(min_inventory, time_period_type)
@@ -133,7 +133,6 @@ class CmdtyStorage:
                 builder.WithConstantMaxInventory(max_inventory)
 
         builder = net_cs.IAddInjectionCost[time_period_type](builder)
-
         if utils.is_scalar(injection_cost):
             builder.WithPerUnitInjectionCost(injection_cost)
         else:
@@ -141,7 +140,6 @@ class CmdtyStorage:
             builder.WithPerUnitInjectionCostTimeSeries(net_series_injection_cost)
 
         builder = net_cs.IAddCmdtyConsumedOnInject[time_period_type](builder)
-
         if cmdty_consumed_inject is not None:
             if utils.is_scalar(cmdty_consumed_inject):
                 builder.WithFixedPercentCmdtyConsumedOnInject(cmdty_consumed_inject)
@@ -159,7 +157,6 @@ class CmdtyStorage:
             builder.WithPerUnitWithdrawalCostTimeSeries(net_series_withdrawal_cost)
 
         builder = net_cs.IAddCmdtyConsumedOnWithdraw[time_period_type](builder)
-
         if cmdty_consumed_withdraw is not None:
             if utils.is_scalar(cmdty_consumed_withdraw):
                 builder.WithFixedPercentCmdtyConsumedOnWithdraw(cmdty_consumed_withdraw)
@@ -190,7 +187,6 @@ class CmdtyStorage:
             builder.WithNoInventoryCost()
 
         builder = net_cs.IAddTerminalStorageState[time_period_type](builder)
-
         if terminal_storage_npv is None:
             builder.MustBeEmptyAtEnd()
         else:

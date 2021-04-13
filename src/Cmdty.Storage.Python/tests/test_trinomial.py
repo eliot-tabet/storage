@@ -58,7 +58,7 @@ class TestIntrinsicValue(unittest.TestCase):
             return price * inventory - 15.4  # Some arbitrary calculation
 
         cmdty_storage = cs.CmdtyStorage('D', storage_start, storage_end, constant_injection_cost,
-                                        constant_withdrawal_cost, constraints,
+                                        constant_withdrawal_cost, constraints, ratchet_interp=cs.RatchetInterp.LINEAR,
                                         cmdty_consumed_inject=constant_pcnt_consumed_inject,
                                         cmdty_consumed_withdraw=constant_pcnt_consumed_withdraw,
                                         terminal_storage_npv=terminal_npv_calc,
@@ -112,14 +112,14 @@ class TestIntrinsicValue(unittest.TestCase):
         constant_pcnt_consumed_inject = 0.0001
         constant_withdrawal_cost = 0.02
         constant_pcnt_consumed_withdraw = 0.000088
-        constant_pcnt_inventory_loss = 0.001;
-        constant_pcnt_inventory_cost = 0.002;
+        constant_pcnt_inventory_loss = 0.001
+        constant_pcnt_inventory_cost = 0.002
 
         def terminal_npv_calc(price, inventory):
             return price * inventory - 15.4  # Some arbitrary calculation
 
         cmdty_storage = cs.CmdtyStorage('D', storage_start, storage_end, constant_injection_cost,
-                                        constant_withdrawal_cost, constraints,
+                                        constant_withdrawal_cost, constraints, ratchet_interp=cs.RatchetInterp.LINEAR,
                                         cmdty_consumed_inject=constant_pcnt_consumed_inject,
                                         cmdty_consumed_withdraw=constant_pcnt_consumed_withdraw,
                                         terminal_storage_npv=terminal_npv_calc,

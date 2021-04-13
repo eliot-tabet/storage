@@ -115,6 +115,10 @@ namespace Cmdty.Storage.Excel
             {
                 interpolationType = InterpolationType.PolynomialWithParams(newtonRaphsonAccuracy);
             }
+            else if (injectWithdrawInterpolationIn == "Step")
+            {
+                interpolationType = InterpolationType.Step;
+            }
             else
             {
                 throw new ArgumentException($"Value of Inject_withdraw_interpolation '{injectWithdrawInterpolationIn}' not recognised. Must be either 'PiecewiseLinear' or 'Polynomial'.");

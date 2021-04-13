@@ -31,21 +31,21 @@ from tests import utils
 class TestCmdtyStorage(unittest.TestCase):
 
     _default_freq = 'D'
-    _default_constraints = [
+    _default_ratchets = (
                                     (date(2019, 8, 28),
-                                        [
+                                     (
                                             (0.0, -150.0, 255.2),
                                             (2000.0, -200.0, 175.0),
-                                        ]),
+                                     )),
                             (date(2019, 9, 10),
-                                     [
+                                    (
                                          (0.0, -170.5, 235.8),
                                          (700.0, -180.2, 200.77),
                                          (1800.0, -190.5, 174.45),
-                                    ])
-                ]
+                                    ))
+                            )
 
-    _constant_min_inventory = 2.54;
+    _constant_min_inventory = 2.54
     _constant_max_inventory = 1234.56
     _constant_max_injection_rate = 65.64
     _constant_max_withdrawal_rate = 107.07
@@ -61,13 +61,15 @@ class TestCmdtyStorage(unittest.TestCase):
 
     _default_storage_start = date(2019, 8, 28)
     _default_storage_end = date(2019, 9, 25)
-    
+    _default_ratchets_interp = cs.RatchetInterp.LINEAR
+
     _constant_injection_cost = 0.015
     _constant_cmdty_consumed_inject = 0.0001
     _constant_withdrawal_cost = 0.02
     _constant_cmdty_consumed_withdraw = 0.000088
-    _constant_inventory_loss = 0.001;
-    _constant_inventory_cost = 0.002;
+    _constant_inventory_loss = 0.001
+    _constant_inventory_cost = 0.002
+
 
     _series_injection_cost = utils.create_piecewise_flat_series([1.41384, 2.284, 0.75, 0.75],
                             [date(2019, 8, 28), date(2019, 9, 1), date(2019, 9, 10), date(2019, 9, 25)], 'D')
@@ -84,56 +86,85 @@ class TestCmdtyStorage(unittest.TestCase):
 
     _default_terminal_npv_calc = lambda price, inventory: price * inventory - 15.4 # Some arbitrary calculation
     
-    def _create_storage(cls, freq=_default_freq, storage_start=_default_storage_start, storage_end=_default_storage_end, 
-                   constraints=_default_constraints, 
-                   min_inventory=None, max_inventory=None, max_injection_rate=None, max_withdrawal_rate=None,
-                   injection_cost=_constant_injection_cost, 
-                   withdrawal_cost=_constant_withdrawal_cost, cmdty_consumed_inject=_constant_cmdty_consumed_inject, 
-                   cmdty_consumed_withdraw=_constant_cmdty_consumed_withdraw, terminal_storage_npv=_default_terminal_npv_calc,
-                   inventory_loss=_constant_inventory_loss, inventory_cost=_constant_inventory_cost):
+    def _create_storage(cls, freq=_default_freq, storage_start=_default_storage_start, storage_end=_default_storage_end,
+                        ratchets=_default_ratchets, ratchet_interp = _default_ratchets_interp,
+                        min_inventory=None, max_inventory=None, max_injection_rate=None, max_withdrawal_rate=None,
+                        injection_cost=_constant_injection_cost,
+                        withdrawal_cost=_constant_withdrawal_cost, cmdty_consumed_inject=_constant_cmdty_consumed_inject,
+                        cmdty_consumed_withdraw=_constant_cmdty_consumed_withdraw, terminal_storage_npv=_default_terminal_npv_calc,
+                        inventory_loss=_constant_inventory_loss, inventory_cost=_constant_inventory_cost):
 
         return cs.CmdtyStorage(freq, storage_start, storage_end, injection_cost,
-                                withdrawal_cost, constraints=constraints, 
-                                min_inventory=min_inventory, max_inventory=max_inventory, 
-                                max_injection_rate=max_injection_rate, max_withdrawal_rate=max_withdrawal_rate,
-                                cmdty_consumed_inject=cmdty_consumed_inject, 
-                                cmdty_consumed_withdraw=cmdty_consumed_withdraw,
-                                terminal_storage_npv=terminal_storage_npv, inventory_loss=inventory_loss, 
-                                inventory_cost=inventory_cost)
+                               withdrawal_cost, ratchets=ratchets, ratchet_interp=ratchet_interp,
+                               min_inventory=min_inventory, max_inventory=max_inventory,
+                               max_injection_rate=max_injection_rate, max_withdrawal_rate=max_withdrawal_rate,
+                               cmdty_consumed_inject=cmdty_consumed_inject,
+                               cmdty_consumed_withdraw=cmdty_consumed_withdraw,
+                               terminal_storage_npv=terminal_storage_npv, inventory_loss=inventory_loss,
+                               inventory_cost=inventory_cost)
 
-    def test_init_constraints_arg_not_none_other_constraint_args_not_none_raises(self):
-        with self.assertRaisesRegex(ValueError, "min_inventory parameter should not be provided if constraints parameter is provided."):
-            storage = self._create_storage(constraints=self._default_constraints, min_inventory=self._constant_min_inventory)
-        
-        with self.assertRaisesRegex(ValueError, "max_inventory parameter should not be provided if constraints parameter is provided."):
-            storage = self._create_storage(constraints=self._default_constraints, max_inventory=self._constant_max_inventory)
-        
-        with self.assertRaisesRegex(ValueError, "max_injection_rate parameter should not be provided if constraints parameter is provided."):
-            storage = self._create_storage(constraints=self._default_constraints, max_injection_rate=self._constant_max_injection_rate)
-        
-        with self.assertRaisesRegex(ValueError, "max_withdrawal_rate parameter should not be provided if constraints parameter is provided."):
-            storage = self._create_storage(constraints=self._default_constraints, max_withdrawal_rate=self._constant_max_withdrawal_rate)
+    def test_ratchets_step_interp_as_expected(self):
+        step_ratchets = (('2019-08-28',
+                          (
+                                 (0.0, -150.0, 255.2),
+                                 (2000.0, -150.0, 255.2),
+                             )),
+                         ('2019-09-10',
+                                 (
+                                     (0.0, -170.5, 235.8),
+                                     (700.0, -180.2, 200.77),
+                                     (1800.0, -180.2, 200.77),
+                                 )))
+        storage = self._create_storage(ratchets=step_ratchets, ratchet_interp=cs.RatchetInterp.STEP)
+        for inventory in [0.0, 1252.5, 1999.0]:
+            with_rate, inj_rate = storage.inject_withdraw_range('2019-09-05', inventory)
+            self.assertEqual(-150.0, with_rate)
+            self.assertEqual(255.2, inj_rate)
 
-    def test_init_constraints_arg_none_other_constraint_args_none_raises(self):
-        with self.assertRaisesRegex(ValueError, "min_inventory parameter should be provided if constraints parameter is not provided."):
-            storage = self._create_storage(constraints=None, min_inventory=None,
+    def test_init_ratchets_arg_not_none_other_constraint_args_not_none_raises(self):
+        with self.assertRaisesRegex(ValueError, "min_inventory parameter should not be provided if ratchets parameter is provided."):
+            storage = self._create_storage(ratchets=self._default_ratchets, min_inventory=self._constant_min_inventory)
+        
+        with self.assertRaisesRegex(ValueError, "max_inventory parameter should not be provided if ratchets parameter is provided."):
+            storage = self._create_storage(ratchets=self._default_ratchets, max_inventory=self._constant_max_inventory)
+        
+        with self.assertRaisesRegex(ValueError, "max_injection_rate parameter should not be provided if ratchets parameter is provided."):
+            storage = self._create_storage(ratchets=self._default_ratchets, max_injection_rate=self._constant_max_injection_rate)
+        
+        with self.assertRaisesRegex(ValueError, "max_withdrawal_rate parameter should not be provided if ratchets parameter is provided."):
+            storage = self._create_storage(ratchets=self._default_ratchets, max_withdrawal_rate=self._constant_max_withdrawal_rate)
+
+    def test_init_ratchets_arg_none_other_constraint_args_none_raises(self):
+        with self.assertRaisesRegex(ValueError, "min_inventory parameter should be provided if ratchets parameter is not provided."):
+            storage = self._create_storage(ratchets=None, ratchet_interp=None, min_inventory=None,
                         max_inventory=self._constant_max_inventory, max_injection_rate=self._constant_max_injection_rate, 
                         max_withdrawal_rate=self._constant_max_withdrawal_rate)
         
-        with self.assertRaisesRegex(ValueError, "max_inventory parameter should be provided if constraints parameter is not provided."):
-            storage = self._create_storage(constraints=None, min_inventory=self._constant_min_inventory,
+        with self.assertRaisesRegex(ValueError, "max_inventory parameter should be provided if ratchets parameter is not provided."):
+            storage = self._create_storage(ratchets=None, ratchet_interp=None, min_inventory=self._constant_min_inventory,
                         max_inventory=None, max_injection_rate=self._constant_max_injection_rate, 
                         max_withdrawal_rate=self._constant_max_withdrawal_rate)
         
-        with self.assertRaisesRegex(ValueError, "max_injection_rate parameter should be provided if constraints parameter is not provided."):
-            storage = self._create_storage(constraints=None, min_inventory=self._constant_min_inventory,
+        with self.assertRaisesRegex(ValueError, "max_injection_rate parameter should be provided if ratchets parameter is not provided."):
+            storage = self._create_storage(ratchets=None, ratchet_interp=None, min_inventory=self._constant_min_inventory,
                         max_inventory=self._constant_max_inventory, max_injection_rate=None, 
                         max_withdrawal_rate=self._constant_max_withdrawal_rate)
         
-        with self.assertRaisesRegex(ValueError, "max_withdrawal_rate parameter should be provided if constraints parameter is not provided."):
-            storage = self._create_storage(constraints=None, min_inventory=self._constant_min_inventory,
+        with self.assertRaisesRegex(ValueError, "max_withdrawal_rate parameter should be provided if ratchets parameter is not provided."):
+            storage = self._create_storage(ratchets=None, ratchet_interp=None, min_inventory=self._constant_min_inventory,
                         max_inventory=self._constant_max_inventory, max_injection_rate=self._constant_max_injection_rate, 
                         max_withdrawal_rate=None)
+
+    def test_init_ratchets_arg_none_ratchets_interp_not_none_raises(self):
+        with self.assertRaisesRegex(ValueError, "ratchet_interp should not be provided if ratchets parameter is not provided."):
+            storage = self._create_storage(ratchets=None, ratchet_interp=cs.RatchetInterp.LINEAR, min_inventory=self._constant_min_inventory,
+                        max_inventory=self._constant_max_inventory, max_injection_rate=self._constant_max_injection_rate,
+                        max_withdrawal_rate=self._constant_max_withdrawal_rate)
+
+    def test_init_ratchets_arg_not_none_ratchets_none_raises(self):
+        with self.assertRaisesRegex(ValueError, "ratchet_interp parameter should be provided if ratchets parameter is provided."):
+            storage = self._create_storage(ratchets=self._default_ratchets, ratchet_interp=None, min_inventory=None,
+                        max_inventory=None, max_injection_rate=None, max_withdrawal_rate=None)
 
     def test_start_property(self):
         storage = self._create_storage()
@@ -176,7 +207,7 @@ class TestCmdtyStorage(unittest.TestCase):
         self.assertEqual((255.2 + 175.0)/2.0, max_dec)
 
     def test_inject_withdraw_range_from_float_init_parameters(self):
-        storage = self._create_storage(constraints=None, min_inventory=self._constant_min_inventory,
+        storage = self._create_storage(ratchets=None, ratchet_interp=None, min_inventory=self._constant_min_inventory,
                         max_inventory=self._constant_max_inventory, max_injection_rate=self._constant_max_injection_rate, 
                         max_withdrawal_rate=self._constant_max_withdrawal_rate)
         
@@ -189,7 +220,7 @@ class TestCmdtyStorage(unittest.TestCase):
     def test_inject_withdraw_range_from_int_init_parameters(self):
         int_max_injection_rate = int(self._constant_max_injection_rate)
         int_max_withdrawal_rate = int(self._constant_max_withdrawal_rate)
-        storage = self._create_storage(constraints=None, min_inventory=self._constant_min_inventory,
+        storage = self._create_storage(ratchets=None, ratchet_interp=None, min_inventory=self._constant_min_inventory,
                         max_inventory=self._constant_max_inventory, max_injection_rate=int_max_injection_rate, 
                         max_withdrawal_rate=int_max_withdrawal_rate)
         
@@ -200,7 +231,7 @@ class TestCmdtyStorage(unittest.TestCase):
                 self.assertEqual(int_max_injection_rate, max_dec)
 
     def test_inject_withdraw_range_from_series_init_parameters(self):
-        storage = self._create_storage(constraints=None, min_inventory=self._constant_min_inventory,
+        storage = self._create_storage(ratchets=None, ratchet_interp=None, min_inventory=self._constant_min_inventory,
                         max_inventory=self._constant_max_inventory, max_injection_rate=self._series_max_injection_rate, 
                         max_withdrawal_rate=self._series_max_withdrawal_rate)
 
@@ -213,7 +244,7 @@ class TestCmdtyStorage(unittest.TestCase):
                 self.assertEqual(expeted_max_dec, max_dec)
                 
     def test_inject_withdraw_range_from_series_max_injection_rate_init_parameters(self):
-        storage = self._create_storage(constraints=None, min_inventory=self._constant_min_inventory,
+        storage = self._create_storage(ratchets=None, ratchet_interp=None, min_inventory=self._constant_min_inventory,
                         max_inventory=self._constant_max_inventory, max_injection_rate=self._series_max_injection_rate, 
                         max_withdrawal_rate=self._constant_max_withdrawal_rate)
 
@@ -226,7 +257,7 @@ class TestCmdtyStorage(unittest.TestCase):
                 self.assertEqual(expeted_max_dec, max_dec)
 
     def test_inject_withdraw_range_from_series_max_withdrawal_rate_init_parameters(self):
-        storage = self._create_storage(constraints=None, min_inventory=self._constant_min_inventory,
+        storage = self._create_storage(ratchets=None, ratchet_interp=None, min_inventory=self._constant_min_inventory,
                         max_inventory=self._constant_max_inventory, max_injection_rate=self._constant_max_injection_rate, 
                         max_withdrawal_rate=self._series_max_withdrawal_rate)
 
@@ -244,14 +275,14 @@ class TestCmdtyStorage(unittest.TestCase):
         self.assertEqual(0.0, storage.min_inventory(date(2019, 9, 11)))
 
     def test_min_inventory_property_from_float_init_param(self):
-        storage = self._create_storage(constraints=None, min_inventory=self._constant_min_inventory,
+        storage = self._create_storage(ratchets=None, ratchet_interp=None, min_inventory=self._constant_min_inventory,
                         max_inventory=self._constant_max_inventory, max_injection_rate=self._constant_max_injection_rate, 
                         max_withdrawal_rate=self._constant_max_withdrawal_rate)
         self.assertEqual(self._constant_min_inventory, storage.min_inventory(date(2019, 8, 29)))
         self.assertEqual(self._constant_min_inventory, storage.min_inventory(date(2019, 9, 11)))
         
     def test_min_inventory_property_from_series_init_param(self):
-        storage = self._create_storage(constraints=None, min_inventory=self._series_min_inventory,
+        storage = self._create_storage(ratchets=None, ratchet_interp=None, min_inventory=self._series_min_inventory,
                         max_inventory=self._series_max_inventory, max_injection_rate=self._constant_max_injection_rate, 
                         max_withdrawal_rate=self._constant_max_withdrawal_rate)
         self.assertEqual(2.4, storage.min_inventory(date(2019, 8, 29)))
@@ -259,14 +290,14 @@ class TestCmdtyStorage(unittest.TestCase):
         self.assertEqual(0.0, storage.min_inventory(date(2019, 9, 11)))
 
     def test_max_inventory_property_from_float_init_param(self):
-        storage = self._create_storage(constraints=None, min_inventory=self._constant_min_inventory,
+        storage = self._create_storage(ratchets=None, ratchet_interp=None, min_inventory=self._constant_min_inventory,
                         max_inventory=self._constant_max_inventory, max_injection_rate=self._constant_max_injection_rate, 
                         max_withdrawal_rate=self._constant_max_withdrawal_rate)
         self.assertEqual(self._constant_max_inventory, storage.max_inventory(date(2019, 8, 29)))
         self.assertEqual(self._constant_max_inventory, storage.max_inventory(date(2019, 9, 11)))
 
     def test_max_inventory_property_from_series_init_param(self):
-        storage = self._create_storage(constraints=None, min_inventory=self._series_min_inventory,
+        storage = self._create_storage(ratchets=None, ratchet_interp=None, min_inventory=self._series_min_inventory,
                         max_inventory=self._series_max_inventory, max_injection_rate=self._constant_max_injection_rate, 
                         max_withdrawal_rate=self._constant_max_withdrawal_rate)
         self.assertEqual(1250.5, storage.max_inventory(date(2019, 8, 29)))

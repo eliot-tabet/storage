@@ -32,7 +32,7 @@ class TestIntrinsicValue(unittest.TestCase):
 
     def test_intrinsic_value_runs(self):
 
-        constraints = [
+        ratchets = [
                             (date(2019, 8, 28),
                                         [
                                             (0.0, -150.0, 255.2),
@@ -58,7 +58,8 @@ class TestIntrinsicValue(unittest.TestCase):
         def terminal_npv_calc(price, inventory):
             return price * inventory - 15.4 # Some arbitrary calculation
 
-        cmdty_storage = cs.CmdtyStorage('D', storage_start, storage_end, constant_injection_cost, constant_withdrawal_cost, constraints,
+        cmdty_storage = cs.CmdtyStorage('D', storage_start, storage_end, constant_injection_cost, constant_withdrawal_cost,
+                                        ratchets, ratchet_interp=cs.RatchetInterp.LINEAR,
                                 cmdty_consumed_inject=constant_pcnt_consumed_inject, cmdty_consumed_withdraw=constant_pcnt_consumed_withdraw,
                                 terminal_storage_npv=terminal_npv_calc,
                                 inventory_loss=constant_pcnt_inventory_loss, inventory_cost=constant_pcnt_inventory_cost)

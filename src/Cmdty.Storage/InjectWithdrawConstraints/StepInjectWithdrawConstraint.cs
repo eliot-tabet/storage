@@ -30,7 +30,7 @@ using JetBrains.Annotations;
 
 namespace Cmdty.Storage
 {
-    public sealed class PiecewiseFlatInjectWithdrawConstraint : IInjectWithdrawConstraint
+    public sealed class StepInjectWithdrawConstraint : IInjectWithdrawConstraint
     {
         private readonly InjectWithdrawRangeByInventory[] _injectWithdrawRanges;
         private readonly double[] _inventories;
@@ -38,7 +38,7 @@ namespace Cmdty.Storage
         //private readonly double[] _bracketLowerInventoryAfterMaxWithdraw;
         //private readonly double[] _bracketUpperInventoryAfterMaxWithdraw;
 
-        public PiecewiseFlatInjectWithdrawConstraint([NotNull] IEnumerable<InjectWithdrawRangeByInventory> injectWithdrawRanges)
+        public StepInjectWithdrawConstraint([NotNull] IEnumerable<InjectWithdrawRangeByInventory> injectWithdrawRanges)
         {
             if (injectWithdrawRanges == null) throw new ArgumentNullException(nameof(injectWithdrawRanges));
 
@@ -47,6 +47,15 @@ namespace Cmdty.Storage
             if (_injectWithdrawRanges.Length < 2)
                 throw new ArgumentException("Inject/withdraw ranges collection must contain at least two elements.", nameof(injectWithdrawRanges));
 
+
+            InjectWithdrawRange secondHighestInventoryRange = _injectWithdrawRanges[_injectWithdrawRanges.Length - 2].InjectWithdrawRange;
+            InjectWithdrawRange highestInventoryRange = _injectWithdrawRanges[_injectWithdrawRanges.Length - 1].InjectWithdrawRange;
+            
+            if (!StorageHelper.EqualsWithinTol(secondHighestInventoryRange.MaxInjectWithdrawRate,highestInventoryRange.MaxInjectWithdrawRate, 1E-12))
+                throw new ArgumentException("Top two ratchets do not have he same max injection rate.", nameof(injectWithdrawRanges));
+            if (!StorageHelper.EqualsWithinTol(secondHighestInventoryRange.MinInjectWithdrawRate, highestInventoryRange.MinInjectWithdrawRate, 1E-12))
+                throw new ArgumentException("Top two ratchets do not have he same max withdrawal rate.", nameof(injectWithdrawRanges));
+            
             _inventories = _injectWithdrawRanges.Select(injectWithdrawRange => injectWithdrawRange.Inventory)
                                                 .ToArray();
             //_bracketLowerInventoryAfterMaxWithdraw = new double[_injectWithdrawRanges.Length];

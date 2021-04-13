@@ -51,7 +51,7 @@ storage_with_ratchets = CmdtyStorage(
     storage_end = '2022-04-01',
     injection_cost = 0.01,
     withdrawal_cost = 0.025,
-    constraints= [
+    ratchets= [
                 ('2021-04-01', # For days after 2021-04-01 (inclusive) until 2022-10-01 (exclusive):
                        [
                             (0.0, -150.0, 250.0),    # At min inventory of zero, max withdrawal of 150, max injection 250
