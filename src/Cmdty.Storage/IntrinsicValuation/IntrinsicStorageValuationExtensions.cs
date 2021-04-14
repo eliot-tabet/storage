@@ -107,8 +107,8 @@ namespace Cmdty.Storage
             {
                 T[] storagePeriods = storage.StartPeriod.EnumerateTo(storage.EndPeriod).ToArray();
 
-                double globalMaxInventory = storagePeriods.Max(period => storage.MaxInventory(period));
-                double globalMinInventory = storagePeriods.Min(period => storage.MaxInventory(period));
+                double globalMaxInventory = storagePeriods.Max(storage.MaxInventory);
+                double globalMinInventory = storagePeriods.Min(storage.MinInventory);
                 double gridSpacing = (globalMaxInventory - globalMinInventory) /
                                      (numGridPointsOverGlobalInventoryRange - 1);
                 return new FixedSpacingStateSpaceGridCalc(gridSpacing);
