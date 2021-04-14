@@ -41,7 +41,7 @@ import math
 import cmdty_storage.intrinsic as cs_intrinsic
 import logging
 
-logger = logging.getLogger('cmdty.storage.multi-factor')
+logger: logging.Logger = logging.getLogger('cmdty.storage.multi-factor')
 
 FactorCorrsType = tp.Optional[tp.Union[float, np.ndarray]]
 

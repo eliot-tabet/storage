@@ -34,6 +34,9 @@ from datetime import datetime, date
 import pandas as pd
 from enum import Enum
 from cmdty_storage import utils
+import logging
+
+logger: logging.Logger = logging.getLogger('cmdty.storage')
 
 
 class InjectWithdrawRange(NamedTuple):
@@ -98,6 +101,9 @@ class CmdtyStorage:
                 net_cs.CmdtyStorageBuilderExtensions.WithTimeAndInventoryVaryingInjectWithdrawRatesPiecewiseLinear[time_period_type](builder, net_constraints)
             elif ratchet_interp == RatchetInterp.STEP:
                 net_cs.CmdtyStorageBuilderExtensions.WithStepRatchets[time_period_type](builder, net_constraints)
+                if terminal_storage_npv is None:
+                    logger.warning('When ratchet_interp is RatchetInterp.STEP it is advisable to specify '
+                                   'terminal_storage_npv otherwise exceptions are likely to occur during valuation.')
         else:
             utils.raise_if_not_none(ratchet_interp, "ratchet_interp should not be provided if ratchets parameter is not provided.")
             utils.raise_if_none(min_inventory, "min_inventory parameter should be provided if ratchets parameter is not provided.")
