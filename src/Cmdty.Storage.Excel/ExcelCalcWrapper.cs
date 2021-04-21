@@ -1,5 +1,5 @@
 ﻿#region License
-// Copyright (c) 2019 Jake Fowler
+// Copyright (c) 2021 Jake Fowler
 //
 // Permission is hereby granted, free of charge, to any person 
 // obtaining a copy of this software and associated documentation 
@@ -23,26 +23,29 @@
 // OTHER DEALINGS IN THE SOFTWARE.
 #endregion
 
-using ExcelDna.Integration;
-using ExcelDna.Registration;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace Cmdty.Storage.Excel
 {
-    internal class AddIn : IExcelAddIn
+    public abstract class ExcelCalcWrapper
     {
-        public const string ExcelFunctionNamePrefix = "cmdty.";
-        public const string ExcelFunctionCategory = "CMDTY Storage";
+        public event Action<double> OnProgressUpdate;
+        public double Progress { get; protected set; }
+        public Task CalcTask { get; protected set; }
+        public object Results { get; protected set; } // TODO use generic Task<TResult>?
 
-
-        public void AutoOpen()
+        protected void UpdateProgress(double progress)
         {
-            //ExcelRegistration.GetExcelFunctions()
-            //    .ProcessAsyncRegistrations(nativeAsyncIfAvailable: false)
-            //    .RegisterFunctions();
+            // TODO some sort of synchonisation needed? Look online.
+            Progress = progress;
+            OnProgressUpdate?.Invoke(progress);
         }
 
-        public void AutoClose()
-        {
-        }
     }
+
 }

@@ -26,6 +26,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 using Cmdty.TimePeriodValueTypes;
 using Cmdty.TimeSeries;
 using ExcelDna.Integration;
@@ -43,6 +44,21 @@ namespace Cmdty.Storage.Excel
             try
             {
                 return functionBody();
+            }
+            catch (Exception e)
+            {
+                return e.Message;
+            }
+        }
+
+        public static async Task<object> ExecuteExcelFunctionAsync(Func<Task<object>> functionBody)
+        {
+            if (ExcelDnaUtil.IsInFunctionWizard())
+                return "Currently in Function Wizard.";
+
+            try
+            {
+                return await functionBody();
             }
             catch (Exception e)
             {
