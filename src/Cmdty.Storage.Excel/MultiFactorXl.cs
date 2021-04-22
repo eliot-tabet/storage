@@ -125,49 +125,29 @@ namespace Cmdty.Storage.Excel
 
     }
 
-    class CalcWrapperStatusObservable : IExcelObservable
+    sealed class CalcWrapperStatusObservable : CalcWrapperObservableBase
     {
-        private readonly MultiFactorCalcWrapper _calcWrapper;
-        private IExcelObserver _observer;
-
-        public CalcWrapperStatusObservable(MultiFactorCalcWrapper calcWrapper)
+        public CalcWrapperStatusObservable(ExcelCalcWrapper calcWrapper) : base(calcWrapper)
         {
-            _calcWrapper = calcWrapper;
-            _calcWrapper.CalcTask.ContinueWith(task =>
-            {
-                TaskStatusUpdate(task.Status);
-                _observer?.OnCompleted();
-            });
+            calcWrapper.CalcTask.ContinueWith(task => TaskStatusUpdate(task.Status));
         }
 
-        internal void TaskStatusUpdate(TaskStatus taskStatus)
+        private void TaskStatusUpdate(TaskStatus taskStatus)
         {
             _observer?.OnNext(taskStatus.ToString("G"));
         }
 
-        private void OnDispose()
+        protected override void OnSubscribe()
         {
-            _observer = null;
-        }
-
-        public IDisposable Subscribe(IExcelObserver excelObserver)
-        {
-            _observer = excelObserver;
             TaskStatusUpdate(_calcWrapper.CalcTask.Status);
-            return new ActionDisposable(OnDispose);
         }
     }
 
-    class CalcWrapperProgressObservable : IExcelObservable
+    sealed class CalcWrapperProgressObservable : CalcWrapperObservableBase
     {
-        private readonly MultiFactorCalcWrapper _calcWrapper;
-        private IExcelObserver _observer;
-
-        public CalcWrapperProgressObservable(MultiFactorCalcWrapper calcWrapper)
+        public CalcWrapperProgressObservable(ExcelCalcWrapper calcWrapper) : base(calcWrapper)
         {
-            _calcWrapper = calcWrapper;
             _calcWrapper.OnProgressUpdate += ProgressUpdate;
-            calcWrapper.CalcTask.ContinueWith(task => _observer?.OnCompleted());
         }
 
         internal void ProgressUpdate(double progress)
@@ -175,20 +155,45 @@ namespace Cmdty.Storage.Excel
             _observer?.OnNext(progress);
         }
 
-        private void OnDispose()
+        protected override void OnSubscribe()
+        {
+            _observer.OnNext(_calcWrapper.Progress);
+        }
+
+        protected override void OnDispose()
         {
             _calcWrapper.OnProgressUpdate -= ProgressUpdate;
-            _observer = null;
+            base.OnDispose();
+        }
+    }
+
+    abstract class CalcWrapperObservableBase : IExcelObservable
+    {
+        // TODO update ReSharper conventions for protected fields
+        protected readonly ExcelCalcWrapper _calcWrapper;
+        protected IExcelObserver _observer;
+
+        protected CalcWrapperObservableBase(ExcelCalcWrapper calcWrapper)
+        {
+            _calcWrapper = calcWrapper;
+            _calcWrapper.CalcTask.ContinueWith(task => _observer?.OnCompleted());
         }
 
         public IDisposable Subscribe(IExcelObserver excelObserver)
         {
             _observer = excelObserver;
-            _observer.OnNext(_calcWrapper.Progress);
+            OnSubscribe();
             return new ActionDisposable(OnDispose);
         }
-    }
 
+        protected abstract void OnSubscribe();
+        
+        protected virtual void OnDispose()
+        {
+            _observer = null;
+        }
+
+    }
 
     class ActionDisposable : IDisposable
     {
