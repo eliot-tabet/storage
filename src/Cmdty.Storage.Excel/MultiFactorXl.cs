@@ -133,7 +133,11 @@ namespace Cmdty.Storage.Excel
         public CalcWrapperStatusObservable(MultiFactorCalcWrapper calcWrapper)
         {
             _calcWrapper = calcWrapper;
-            _calcWrapper.CalcTask.ContinueWith(task => TaskStatusUpdate(task.Status));
+            _calcWrapper.CalcTask.ContinueWith(task =>
+            {
+                TaskStatusUpdate(task.Status);
+                _observer?.OnCompleted();
+            });
         }
 
         internal void TaskStatusUpdate(TaskStatus taskStatus)
@@ -163,6 +167,7 @@ namespace Cmdty.Storage.Excel
         {
             _calcWrapper = calcWrapper;
             _calcWrapper.OnProgressUpdate += ProgressUpdate;
+            calcWrapper.CalcTask.ContinueWith(task => _observer?.OnCompleted());
         }
 
         internal void ProgressUpdate(double progress)
