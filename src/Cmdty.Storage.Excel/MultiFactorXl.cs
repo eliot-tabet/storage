@@ -127,38 +127,22 @@ namespace Cmdty.Storage.Excel
 
     sealed class CalcWrapperStatusObservable : CalcWrapperObservableBase
     {
-        public CalcWrapperStatusObservable(ExcelCalcWrapper calcWrapper) : base(calcWrapper)
-        {
-            calcWrapper.CalcTask.ContinueWith(task => TaskStatusUpdate(task.Status));
-        }
-
-        private void TaskStatusUpdate(TaskStatus taskStatus)
-        {
-            _observer?.OnNext(taskStatus.ToString("G"));
-        }
-
-        protected override void OnSubscribe()
-        {
-            TaskStatusUpdate(_calcWrapper.CalcTask.Status);
-        }
+        public CalcWrapperStatusObservable(ExcelCalcWrapper calcWrapper) : base(calcWrapper)    
+            => calcWrapper.CalcTask.ContinueWith(task => TaskStatusUpdate(task.Status));
+        
+        private void TaskStatusUpdate(TaskStatus taskStatus) => _observer?.OnNext(taskStatus.ToString("G"));
+        
+        protected override void OnSubscribe() => TaskStatusUpdate(_calcWrapper.CalcTask.Status);
     }
 
     sealed class CalcWrapperProgressObservable : CalcWrapperObservableBase
     {
         public CalcWrapperProgressObservable(ExcelCalcWrapper calcWrapper) : base(calcWrapper)
-        {
-            _calcWrapper.OnProgressUpdate += ProgressUpdate;
-        }
+                    => _calcWrapper.OnProgressUpdate += ProgressUpdate;
+        
+        internal void ProgressUpdate(double progress) => _observer?.OnNext(progress);
 
-        internal void ProgressUpdate(double progress)
-        {
-            _observer?.OnNext(progress);
-        }
-
-        protected override void OnSubscribe()
-        {
-            _observer.OnNext(_calcWrapper.Progress);
-        }
+        protected override void OnSubscribe() => _observer.OnNext(_calcWrapper.Progress);
 
         protected override void OnDispose()
         {
@@ -188,10 +172,7 @@ namespace Cmdty.Storage.Excel
 
         protected abstract void OnSubscribe();
         
-        protected virtual void OnDispose()
-        {
-            _observer = null;
-        }
+        protected virtual void OnDispose() => _observer = null;
 
     }
 
