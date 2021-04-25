@@ -123,5 +123,73 @@ namespace Cmdty.Storage.Excel
             public const string Description = "Optional parameter specifying the numerical tolerance. This should be small number that is used as a tolerance in numerical routines when comparing two floating point numbers. Defaults to 1E-10 if omitted.";
         }
 
+        internal static class StorageHandle
+        {
+            public const string Name = "Storage_handle";
+            public const string Description = "Handle to cached storage object.";
+        }
+
+        internal static class SpotMeanReversion
+        {
+            public const string Name = "Spot_mean_reversion";
+            public const string Description = "Mean reversion of the spot factor of a three-factor seasonal process."; // TODO change this if decided to automatically multiply by 365.25
+        }
+
+        internal static class SpotVol
+        {
+            public const string Name = "Spot_vol";
+            public const string Description = "Volatility of the spot factor of a three-factor seasonal process.";
+        }
+
+        internal static class LongTermVol
+        {
+            public const string Name = "Long_term_vol";
+            public const string Description = "Volatility of the long-term of for a three-factor seasonal process.";
+        }
+
+        internal static class SeasonalVol
+        {
+            public const string Name = "Seasonal_vol";
+            public const string Description = "Volatility of the seasonal of for a three-factor seasonal process.";
+        }
+
+        internal static class NumSims
+        {
+            public const string Name = "Num_sims";
+            public const string Description = "Number of Monte Carlo paths used for the simulation.";
+        }
+
+        internal static class BasisFunctions
+        {
+            public const string Name = "Basis_functions";
+            public const string Description = "Text representing basis functions use when calculating continuations values using regression.";
+        }
+
+        internal static class DiscountDeltas
+        {
+            public const string Name = "Discount_deltas";
+            public const string Description = "Boolean flag indicating whether the deltas should be discounted or not.";
+        }
+
+        internal static class Seed
+        {
+            public const string Name = "[Seed]";
+            public const string Description = "Optional integer argument used as the seed to the Mersenne Twister random number generator. Defaults to a random seed if omitted.";
+        }
+
+        internal static class ForwardSimSeed
+        {
+            public const string Name = "[Fwd_seed]";
+            public const string Description = "Optional integer argument used as the seed Mersenne seed for the forward simulation. If omitted the forward simulation will use " 
+                                              + "a continuation for the backward simulation stream.";
+        }
+
+        internal static class ExtraDecisions
+        {
+            public const string Name = "[Extra_decisions]";
+            public const string Description = "Optional integer argument specifying the number of decision pairs to use on top of the usual bang-bang decision set. Defaults to 0 if omitted.";
+        }
+
+
     }
 }

@@ -108,10 +108,27 @@ namespace Cmdty.Storage.Excel
         }
 
 
-        [ExcelFunction(Name = AddIn.ExcelFunctionNamePrefix + nameof(StorageThreeFactor),
-            Description = "Calculates the NPV, deltas, trigger prices and other metadata using a 3-factor seasonal model of price dynamics.",
+        [ExcelFunction(Name = AddIn.ExcelFunctionNamePrefix + nameof(StorageValueThreeFactor),
+            Description = "Calculates the NPV, Deltas, Trigger prices and other metadata using a 3-factor seasonal model of price dynamics.",
             Category = AddIn.ExcelFunctionCategory, IsThreadSafe = false, IsVolatile = false, IsExceptionSafe = true)] // TODO turn IsThreadSafe to true and use ConcurrentDictionary?
-        public static object StorageThreeFactor(string name)
+        public static object StorageValueThreeFactor(
+            [ExcelArgument(Name = "Name", Description = "Name of cached object to create.")] string name,
+            [ExcelArgument(Name = ExcelArg.StorageHandle.Name, Description = ExcelArg.StorageHandle.Description)] string storageHandle,
+            [ExcelArgument(Name = ExcelArg.ValDate.Name, Description = ExcelArg.ValDate.Description)] DateTime valuationDate,
+            [ExcelArgument(Name = ExcelArg.Inventory.Name, Description = ExcelArg.Inventory.Description)] double currentInventory,
+            [ExcelArgument(Name = ExcelArg.ForwardCurve.Name, Description = ExcelArg.ForwardCurve.Description)] object forwardCurve,
+            [ExcelArgument(Name = ExcelArg.InterestRateCurve.Name, Description = ExcelArg.InterestRateCurve.Description)] object interestRateCurve,
+            [ExcelArgument(Name = ExcelArg.SpotMeanReversion.Name, Description = ExcelArg.SpotMeanReversion.Description)] double spotMeanReversion,
+            [ExcelArgument(Name = ExcelArg.SpotVol.Name, Description = ExcelArg.SpotVol.Description)] double spotVol,
+            [ExcelArgument(Name = ExcelArg.LongTermVol.Name, Description = ExcelArg.LongTermVol.Description)] double longTermVol,
+            [ExcelArgument(Name = ExcelArg.SeasonalVol.Name, Description = ExcelArg.SeasonalVol.Description)] double seasonalVol,
+            [ExcelArgument(Name = ExcelArg.NumSims.Name, Description = ExcelArg.NumSims.Description)] int numSims,
+            [ExcelArgument(Name = ExcelArg.BasisFunctions.Name, Description = ExcelArg.BasisFunctions.Description)] string basisFunctions,
+            [ExcelArgument(Name = ExcelArg.DiscountDeltas.Name, Description = ExcelArg.DiscountDeltas.Description)] bool discountDeltas,
+            [ExcelArgument(Name = ExcelArg.Seed.Name, Description = ExcelArg.Seed.Description)] object seed,
+            [ExcelArgument(Name = ExcelArg.ForwardSimSeed.Name, Description = ExcelArg.ForwardSimSeed.Description)] object fwdSimSeed,
+            [ExcelArgument(Name = ExcelArg.ExtraDecisions.Name, Description = ExcelArg.ExtraDecisions.Description)] object extraDecisions
+            )
         {
             return StorageExcelHelper.ExecuteExcelFunction(() =>
             {
