@@ -24,20 +24,25 @@
 #endregion
 
 using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
 namespace Cmdty.Storage.Excel
 {
+    public enum CalcStatus
+    {
+        Running,
+        Error,
+        Success,
+        Cancelled
+    }
     public abstract class ExcelCalcWrapper
     {
         public event Action<double> OnProgressUpdate;
         public double Progress { get; protected set; }
         public Task CalcTask { get; protected set; }
         public object Results { get; protected set; } // TODO use generic Task<TResult>?
+        public CalcStatus Status { get; protected set; }
         protected CancellationTokenSource _cancellationTokenSource;
 
         protected ExcelCalcWrapper()
@@ -57,6 +62,24 @@ namespace Cmdty.Storage.Excel
 
 
         public abstract bool CancellationSupported();
+
+        protected void UpdateStatus(Task task)
+        {
+            switch (task.Status)
+            {
+                case TaskStatus.RanToCompletion:
+                    Status = CalcStatus.Success;
+                    break;
+                case TaskStatus.Canceled:
+                    Status = CalcStatus.Cancelled;
+                    break;
+                case TaskStatus.Faulted:
+                    Status = CalcStatus.Error;
+                    break;
+                default:
+                    throw new ApplicationException($"Task status {task.Status} not supported.");
+            }
+        }
 
     }
 

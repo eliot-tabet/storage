@@ -39,6 +39,7 @@ namespace Cmdty.Storage.Excel
         public MultiFactorCalcWrapper()
         {
             CancellationToken cancelToken = _cancellationTokenSource.Token;
+            Status = CalcStatus.Running;
             CalcTask = Task.Run(() =>
             {
                 TimeSpan timeSpan = TimeSpan.FromSeconds(1);
@@ -64,8 +65,10 @@ namespace Cmdty.Storage.Excel
                 cancelToken.ThrowIfCancellationRequested();
                 UpdateProgress(1.0);
                 base.Results = 12345.6789;
-            }, cancelToken);
-            
+            }, cancelToken)
+            .ContinueWith(UpdateStatus);
+
+
         }
 
         public override bool CancellationSupported() => true;
@@ -139,11 +142,11 @@ namespace Cmdty.Storage.Excel
     sealed class CalcWrapperStatusObservable : CalcWrapperObservableBase
     {
         public CalcWrapperStatusObservable(ExcelCalcWrapper calcWrapper) : base(calcWrapper)    
-            => calcWrapper.CalcTask.ContinueWith(task => TaskStatusUpdate(task.Status));
+            => calcWrapper.CalcTask.ContinueWith(task => TaskStatusUpdate(_calcWrapper.Status));
         
-        private void TaskStatusUpdate(TaskStatus taskStatus) => _observer?.OnNext(taskStatus.ToString("G"));
+        private void TaskStatusUpdate(CalcStatus calcStatus) => _observer?.OnNext(calcStatus.ToString("G"));
         
-        protected override void OnSubscribe() => TaskStatusUpdate(_calcWrapper.CalcTask.Status);
+        protected override void OnSubscribe() => TaskStatusUpdate(_calcWrapper.Status); // TODO could be synchronizations issues, might need to lock
     }
 
     sealed class CalcWrapperProgressObservable : CalcWrapperObservableBase
