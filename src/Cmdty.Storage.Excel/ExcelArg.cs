@@ -45,16 +45,16 @@ namespace Cmdty.Storage.Excel
             public const string Description = "Date-time on which storage facility ceases being active. Injections/withdrawal are only allowed on time periods before the end.";
         }
 
-        internal static class StorageConstraints
+        internal static class Ratchets
         {
-            public const string Name = "Storage_constraints";
+            public const string Name = "Ratchets";
             public const string Description = "Table of time-dependent injection, withdrawal and inventory constraints. Range with 4 columns; date-time, inventory, injection rate and withdrawal rate. Withdrawal rates are expressed as a negative numbers.";
         }
 
-        internal static class InjectWithdrawInterpolation
+        internal static class RatchetInterpolation
         {
-            public const string Name = "Inject_withdraw_interpolation";
-            public const string Description = "Text which determines how injection/withdrawal rates are interpolated by inventory. Must be either 'PiecewiseLinear' or 'Polynomial'.";
+            public const string Name = "Ratchet_interpolation";
+            public const string Description = "Text which determines how injection/withdrawal rates are interpolated by inventory. Must be either 'PiecewiseLinear', 'Polynomial', or 'Step'.";
         }
 
         internal static class InjectionCost

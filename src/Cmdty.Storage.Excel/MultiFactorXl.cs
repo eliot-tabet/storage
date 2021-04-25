@@ -30,6 +30,7 @@ using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using Cmdty.TimePeriodValueTypes;
 using ExcelDna.Integration;
 
 namespace Cmdty.Storage.Excel
@@ -78,6 +79,34 @@ namespace Cmdty.Storage.Excel
     public static class MultiFactorXl
     {
         private static readonly Dictionary<string, MultiFactorCalcWrapper> _calcWrappers = new Dictionary<string, MultiFactorCalcWrapper>();
+        private static readonly Dictionary<string, CmdtyStorage<Day>> _storageObjects = new Dictionary<string, CmdtyStorage<Day>>();
+
+        [ExcelFunction(Name = AddIn.ExcelFunctionNamePrefix + nameof(CreateStorage),
+            Description = "Creates and caches an object representing a storage facility.",
+            Category = AddIn.ExcelFunctionCategory, IsThreadSafe = false, IsVolatile = false, IsExceptionSafe = true)] // TODO turn IsThreadSafe to true and use ConcurrentDictionary?
+        public static object CreateStorage(
+            [ExcelArgument(Name = "Storage_name", Description = "Name of storage object to create.")] string name,
+            [ExcelArgument(Name = ExcelArg.StorageStart.Name, Description = ExcelArg.StorageStart.Description)] DateTime storageStart,
+            [ExcelArgument(Name = ExcelArg.StorageEnd.Name, Description = ExcelArg.StorageEnd.Description)] DateTime storageEnd,
+            [ExcelArgument(Name = ExcelArg.Ratchets.Name, Description = ExcelArg.Ratchets.Description)] object ratchets,
+            [ExcelArgument(Name = ExcelArg.RatchetInterpolation.Name, Description = ExcelArg.RatchetInterpolation.Description)] string ratchetInterpolation,
+            [ExcelArgument(Name = ExcelArg.InjectionCost.Name, Description = ExcelArg.InjectionCost.Description)] double injectionCostRate,
+            [ExcelArgument(Name = ExcelArg.CmdtyConsumedInject.Name, Description = ExcelArg.CmdtyConsumedInject.Description)] double cmdtyConsumedOnInjection,
+            [ExcelArgument(Name = ExcelArg.WithdrawalCost.Name, Description = ExcelArg.WithdrawalCost.Description)] double withdrawalCostRate,
+            [ExcelArgument(Name = ExcelArg.CmdtyConsumedWithdraw.Name, Description = ExcelArg.CmdtyConsumedWithdraw.Description)] double cmdtyConsumedOnWithdrawal,
+            [ExcelArgument(Name = ExcelArg.NumericalTolerance.Name, Description = ExcelArg.NumericalTolerance.Description)] object numericalToleranceIn)
+        {
+            return StorageExcelHelper.ExecuteExcelFunction(() =>
+            {
+                double numericalTolerance = StorageExcelHelper.DefaultIfExcelEmptyOrMissing(numericalToleranceIn, 1E-10, "Numerical_tolerance");
+                CmdtyStorage<Day> storage = StorageExcelHelper.CreateCmdtyStorageFromExcelInputs<Day>(storageStart,
+                    storageEnd, ratchets, ratchetInterpolation, injectionCostRate, cmdtyConsumedOnInjection,
+                    withdrawalCostRate, cmdtyConsumedOnWithdrawal, numericalTolerance);
+                _storageObjects[name] = storage;
+                return name;
+            });
+        }
+
 
         [ExcelFunction(Name = AddIn.ExcelFunctionNamePrefix + nameof(StorageThreeFactor),
             Description = "Calculates the NPV, deltas, trigger prices and other metadata using a 3-factor seasonal model of price dynamics.",

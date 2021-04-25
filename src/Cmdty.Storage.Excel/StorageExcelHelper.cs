@@ -84,22 +84,23 @@ namespace Cmdty.Storage.Excel
 
         public static CmdtyStorage<T> CreateCmdtyStorageFromExcelInputs<T>(DateTime storageStartDateTime,
             DateTime storageEndDateTime,
-            object injectWithdrawConstraintsIn,
-            string injectWithdrawInterpolationIn,
+            object ratchets,
+            string ratchetInterpolationIn,
             double injectionCostRate,
             double cmdtyConsumedOnInjection,
             double withdrawalCostRate,
             double cmdtyConsumedOnWithdrawal, 
-            double newtonRaphsonAccuracy)
+            double numericalTolerance)
             where T : ITimePeriod<T>
         {
+
             T storageStart = TimePeriodFactory.FromDateTime<T>(storageStartDateTime);
             T storageEnd = TimePeriodFactory.FromDateTime<T>(storageEndDateTime);
 
-            if (injectWithdrawConstraintsIn is ExcelMissing || injectWithdrawConstraintsIn is ExcelEmpty)
+            if (ratchets is ExcelMissing || ratchets is ExcelEmpty)
                 throw new ArgumentException("Inject/withdraw constraints haven't been specified.");
 
-            if (!(injectWithdrawConstraintsIn is object[,] injectWithdrawArray))
+            if (!(ratchets is object[,] injectWithdrawArray))
                 throw new ArgumentException("Inject/withdraw constraints have been incorrectly entered. Argument value should be of a range with 4 columns, the first containing dates, the rest containing numbers.");
 
             if (injectWithdrawArray.GetLength(1) != 4)
@@ -123,21 +124,21 @@ namespace Cmdty.Storage.Excel
             }
 
             InterpolationType interpolationType;
-            if (injectWithdrawInterpolationIn == "PiecewiseLinear")
+            if (ratchetInterpolationIn == "PiecewiseLinear")
             {
                 interpolationType = InterpolationType.PiecewiseLinear;
             }
-            else if (injectWithdrawInterpolationIn == "Polynomial")
+            else if (ratchetInterpolationIn == "Polynomial")
             {
-                interpolationType = InterpolationType.PolynomialWithParams(newtonRaphsonAccuracy);
+                interpolationType = InterpolationType.PolynomialWithParams(numericalTolerance);
             }
-            else if (injectWithdrawInterpolationIn == "Step")
+            else if (ratchetInterpolationIn == "Step")
             {
                 interpolationType = InterpolationType.Step;
             }
             else
             {
-                throw new ArgumentException($"Value of Inject_withdraw_interpolation '{injectWithdrawInterpolationIn}' not recognised. Must be either 'PiecewiseLinear' or 'Polynomial'.");
+                throw new ArgumentException($"Value of Inject_withdraw_interpolation '{ratchetInterpolationIn}' not recognised. Must be either 'PiecewiseLinear', 'Polynomial' or 'Step'.");
             }
 
             CmdtyStorage<T> storage = CmdtyStorage<T>.Builder
