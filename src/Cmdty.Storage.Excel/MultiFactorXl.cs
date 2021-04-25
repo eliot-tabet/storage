@@ -162,7 +162,7 @@ namespace Cmdty.Storage.Excel
         }
     }
 
-    abstract class CalcWrapperObservableBase : IExcelObservable
+    abstract class CalcWrapperObservableBase : IExcelObservable, IDisposable
     {
         protected readonly ExcelCalcWrapper _calcWrapper;
         protected IExcelObserver _observer;
@@ -183,25 +183,18 @@ namespace Cmdty.Storage.Excel
         {
             _observer = excelObserver;
             OnSubscribe();
-            return new ActionDisposable(OnDispose);
+            return this;
         }
 
         protected abstract void OnSubscribe();
         
         protected virtual void OnDispose() => _observer = null;
 
-    }
-
-    class ActionDisposable : IDisposable
-    {
-        private readonly Action _disposeAction;
-        public ActionDisposable(Action disposeAction)
-        {
-            _disposeAction = disposeAction;
-        }
         public void Dispose()
         {
-            _disposeAction();
+            OnDispose();
         }
+
     }
+
 }
