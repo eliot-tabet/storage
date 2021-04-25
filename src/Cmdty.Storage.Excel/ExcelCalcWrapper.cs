@@ -38,6 +38,12 @@ namespace Cmdty.Storage.Excel
         public double Progress { get; protected set; }
         public Task CalcTask { get; protected set; }
         public object Results { get; protected set; } // TODO use generic Task<TResult>?
+        protected CancellationTokenSource _cancellationTokenSource;
+
+        protected ExcelCalcWrapper()
+        {
+            _cancellationTokenSource = new CancellationTokenSource();
+        }
 
         protected void UpdateProgress(double progress)
         {
@@ -45,6 +51,12 @@ namespace Cmdty.Storage.Excel
             Progress = progress;
             OnProgressUpdate?.Invoke(progress);
         }
+
+        public void Cancel()
+            => _cancellationTokenSource.Cancel();
+
+
+        public abstract bool CancellationSupported();
 
     }
 

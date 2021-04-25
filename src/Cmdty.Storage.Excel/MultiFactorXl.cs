@@ -38,26 +38,37 @@ namespace Cmdty.Storage.Excel
     {
         public MultiFactorCalcWrapper()
         {
+            CancellationToken cancelToken = _cancellationTokenSource.Token;
             CalcTask = Task.Run(() =>
             {
                 TimeSpan timeSpan = TimeSpan.FromSeconds(1);
                 UpdateProgress(0.0);
+                cancelToken.ThrowIfCancellationRequested();
                 Thread.Sleep(timeSpan);
                 UpdateProgress(0.2);
+                cancelToken.ThrowIfCancellationRequested();
                 Thread.Sleep(timeSpan);
                 UpdateProgress(0.4);
+                cancelToken.ThrowIfCancellationRequested();
                 Thread.Sleep(timeSpan);
                 UpdateProgress(0.6);
+                cancelToken.ThrowIfCancellationRequested();
                 Thread.Sleep(timeSpan);
                 UpdateProgress(0.8);
+                //throw new Exception("My exception");
+                cancelToken.ThrowIfCancellationRequested();
                 Thread.Sleep(timeSpan);
                 UpdateProgress(0.9);
+                cancelToken.ThrowIfCancellationRequested();
                 Thread.Sleep(timeSpan);
+                cancelToken.ThrowIfCancellationRequested();
                 UpdateProgress(1.0);
                 base.Results = 12345.6789;
-            });
-
+            }, cancelToken);
+            
         }
+
+        public override bool CancellationSupported() => true;
 
     }
 
@@ -79,7 +90,7 @@ namespace Cmdty.Storage.Excel
 
         [ExcelFunction(Name = AddIn.ExcelFunctionNamePrefix + nameof(SubscribeProgress),
             Description = "TODO.", // TODO
-            Category = AddIn.ExcelFunctionCategory, IsThreadSafe = false, IsVolatile = false, IsExceptionSafe = true)] // TODO turn IsThreadSafe to true and use ConcurrentDictionary?
+            Category = AddIn.ExcelFunctionCategory, IsThreadSafe = false, IsVolatile = false, IsExceptionSafe = true, IsClusterSafe =true)] // TODO turn IsThreadSafe to true and use ConcurrentDictionary?
         public static object SubscribeProgress(string name)
         {
             return StorageExcelHelper.ExecuteExcelFunction(() =>
@@ -153,14 +164,19 @@ namespace Cmdty.Storage.Excel
 
     abstract class CalcWrapperObservableBase : IExcelObservable
     {
-        // TODO update ReSharper conventions for protected fields
         protected readonly ExcelCalcWrapper _calcWrapper;
         protected IExcelObserver _observer;
 
         protected CalcWrapperObservableBase(ExcelCalcWrapper calcWrapper)
         {
             _calcWrapper = calcWrapper;
-            _calcWrapper.CalcTask.ContinueWith(task => _observer?.OnCompleted());
+            _calcWrapper.CalcTask.ContinueWith(task =>
+            {
+                if (task.IsFaulted) // TODO what about cancelled
+                    _observer?.OnError(task.Exception.InnerException);
+                else 
+                    _observer?.OnCompleted();
+            });
         }
 
         public IDisposable Subscribe(IExcelObserver excelObserver)
