@@ -51,7 +51,7 @@ namespace Cmdty.Storage.Excel
             [ExcelArgument(Name = ExcelArg.SpotVolCurve.Name, Description = ExcelArg.SpotVolCurve.Description)] object spotVolatilityCurve,
             [ExcelArgument(Name = ExcelArg.MeanReversion.Name, Description = ExcelArg.MeanReversion.Description)] double meanReversion,
             [ExcelArgument(Name = ExcelArg.InterestRateCurve.Name, Description = ExcelArg.InterestRateCurve.Description)] object interestRateCurve,
-            [ExcelArgument(Name = ExcelArg.NumGridPoints.Name, Description = ExcelArg.NumGridPoints.Description)] object numGlobalGridPoints, // TODO excel argument says default is 100
+            [ExcelArgument(Name = ExcelArg.NumGridPoints.Name, Description = ExcelArg.NumGridPoints.Description)] object numGlobalGridPoints,
             [ExcelArgument(Name = ExcelArg.NumericalTolerance.Name, Description = ExcelArg.NumericalTolerance.Description)] object numericalTolerance) // TODO add granularity
         {
             return StorageExcelHelper.ExecuteExcelFunction(() =>
@@ -77,7 +77,7 @@ namespace Cmdty.Storage.Excel
                 [ExcelArgument(Name = ExcelArg.Inventory.Name, Description = ExcelArg.Inventory.Description)] double currentInventory,
                 [ExcelArgument(Name = ExcelArg.ForwardCurve.Name, Description = ExcelArg.ForwardCurve.Description)] object forwardCurve,
                 [ExcelArgument(Name = ExcelArg.InterestRateCurve.Name, Description = ExcelArg.InterestRateCurve.Description)] object interestRateCurve,
-                [ExcelArgument(Name = ExcelArg.NumGridPoints.Name, Description = ExcelArg.NumGridPoints.Description)] object numGlobalGridPoints, // TODO excel argument says default is 100
+                [ExcelArgument(Name = ExcelArg.NumGridPoints.Name, Description = ExcelArg.NumGridPoints.Description)] object numGlobalGridPoints,
                 [ExcelArgument(Name = ExcelArg.NumericalTolerance.Name, Description = ExcelArg.NumericalTolerance.Description)] object numericalTolerance) // TODO add granularity
         {
             return StorageExcelHelper.ExecuteExcelFunction(() =>
@@ -115,8 +115,8 @@ namespace Cmdty.Storage.Excel
 
             T currentPeriod = TimePeriodFactory.FromDateTime<T>(valuationDateTime);
 
-            DoubleTimeSeries<T> forwardCurve = StorageExcelHelper.CreateDoubleTimeSeries<T>(forwardCurveIn, "Forward_curve");
-            DoubleTimeSeries<T> spotVolatilityCurve = StorageExcelHelper.CreateDoubleTimeSeries<T>(spotVolatilityCurveIn, "Spot_volatility_curve");
+            TimeSeries<T, double> forwardCurve = StorageExcelHelper.CreateDoubleTimeSeries<T>(forwardCurveIn, "Forward_curve");
+            TimeSeries<T, double> spotVolatilityCurve = StorageExcelHelper.CreateDoubleTimeSeries<T>(spotVolatilityCurveIn, "Spot_volatility_curve");
 
             // TODO input settlement dates
             int numGridPoints =
@@ -169,7 +169,7 @@ namespace Cmdty.Storage.Excel
 
             T currentPeriod = TimePeriodFactory.FromDateTime<T>(valuationDateTime);
 
-            DoubleTimeSeries<T> forwardCurve = StorageExcelHelper.CreateDoubleTimeSeries<T>(forwardCurveIn, "Forward_curve");
+            TimeSeries<T, double> forwardCurve = StorageExcelHelper.CreateDoubleTimeSeries<T>(forwardCurveIn, "Forward_curve");
 
             // TODO input settlement dates
             int numGridPoints =

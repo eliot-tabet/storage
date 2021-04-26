@@ -68,7 +68,7 @@ namespace Cmdty.Storage.Excel
 
         public static T DefaultIfExcelEmptyOrMissing<T>(object excelArgument, T defaultValue, string argumentName)
         {
-            if (excelArgument is ExcelMissing || excelArgument is ExcelEmpty)
+            if (IsExcelEmptyOrMissing(excelArgument))
                 return defaultValue;
 
             try
@@ -81,6 +81,9 @@ namespace Cmdty.Storage.Excel
                 throw new ArgumentException($"Excel argument '{argumentName}' is not of type {typeName}, and cannot be converted to this type.");
             }
         }
+
+        public static bool IsExcelEmptyOrMissing(object excelArgument) 
+            => excelArgument is ExcelMissing || excelArgument is ExcelEmpty;
 
         public static CmdtyStorage<T> CreateCmdtyStorageFromExcelInputs<T>(DateTime storageStartDateTime,
             DateTime storageEndDateTime,
@@ -174,8 +177,65 @@ namespace Cmdty.Storage.Excel
             }
         }
 
-        public static DoubleTimeSeries<T> CreateDoubleTimeSeries<T>(object excelValues, string excelArgumentName)
-            where T : ITimePeriod<T>
+
+        public static TimeSeries<TIndex, double> CreateDoubleTimeSeries<TIndex>(object excelValues, string excelArgumentName)
+            where TIndex : ITimePeriod<TIndex>
+        {
+            bool TryCreateDouble(object excelInput, out double inputAsDouble)
+            {
+                if (!(excelInput is double d))
+                {
+                    inputAsDouble = 0.0;
+                    return false;
+                }
+                inputAsDouble = d;
+                return true;
+            }
+            return CreateTimeSeries<TIndex, double>(excelValues, excelArgumentName, TryCreateDouble);
+        }
+
+        public delegate bool TryCreateData<TData>(object excelInput, out TData createdData);
+
+        public static Func<Day, Day> CreateSettlementRule(object excelValues, string excelArgumentName)
+        {
+            TimeSeries<Month, Day> settlementSeries = CreateSettlementSeries(excelValues, excelArgumentName);
+            Day GetSettlementDate(Day deliveryDate)
+            {
+                Month deliveryMonth = Month.FromDateTime(deliveryDate.Start);
+                if (!settlementSeries.TryGetValue(deliveryMonth, out Day settlementDate))
+                    throw new ApplicationException($"No settlement date for delivery month {deliveryMonth}.");
+                return settlementDate;
+            }
+            return GetSettlementDate;
+        }
+
+        public static TimeSeries<Month, Day> CreateSettlementSeries(object excelValues, string excelArgumentName)
+        {
+            bool TryCreateDay(object excelInput, out Day inputAsDay)
+            {
+                if (!(excelInput is double d))
+                {
+                    inputAsDay = new Day();
+                    return false;
+                }
+                try
+                {
+                    DateTime inputAsDateTime = DateTime.FromOADate(d);
+                    inputAsDay = Day.FromDateTime(inputAsDateTime);
+                    return true;
+                }
+                catch
+                {
+                    inputAsDay = new Day();
+                    return false;
+                }
+            }
+            return CreateTimeSeries<Month, Day>(excelValues, excelArgumentName, TryCreateDay);
+        }
+
+        public static TimeSeries<TIndex, TData> CreateTimeSeries<TIndex, TData>(object excelValues, string excelArgumentName,
+            TryCreateData<TData> tryCreateData)
+            where TIndex : ITimePeriod<TIndex>
         {
             if (excelValues is ExcelMissing || excelValues is ExcelEmpty)
                 throw new ArgumentException(excelArgumentName + " hasn't been specified.");
@@ -186,20 +246,21 @@ namespace Cmdty.Storage.Excel
             if (excelValuesArray.GetLength(1) != 2)
                 throw new ArgumentException(excelArgumentName + " has been incorrectly entered. Argument value should be a range with 2 columns.");
 
-            var builder = new DoubleTimeSeries<T>.Builder();
+            var builder = new TimeSeries<TIndex, TData>.Builder();
 
             for (int i = 0; i < excelValuesArray.GetLength(0); i++)
             {
                 if (excelValuesArray[i, 0] is ExcelEmpty || excelValuesArray[i, 0] is ExcelError)
                     break;
 
-                if (!(excelValuesArray[i, 1] is double doubleValue))
-                    throw new ArgumentException($"Value in the second column of row {i} for argument {excelArgumentName} is not a number.");
+                object dataValueIn = excelValuesArray[i, 1];
+                if (!tryCreateData(dataValueIn, out TData dataValue))
+                    throw new ArgumentException($"Value in the second column of row {i} for argument {excelArgumentName} cannot be converted to type {typeof(TData).Name}.");
 
                 DateTime curvePointDateTime = ObjectToDateTime(excelValuesArray[i, 0], $"Cannot create DateTime from value in first row of argument {excelArgumentName}.");
-                T curvePointPeriod = TimePeriodFactory.FromDateTime<T>(curvePointDateTime);
+                TIndex curvePointPeriod = TimePeriodFactory.FromDateTime<TIndex>(curvePointDateTime);
 
-                builder.Add(curvePointPeriod, doubleValue);
+                builder.Add(curvePointPeriod, dataValue);
             }
 
             return builder.Build();

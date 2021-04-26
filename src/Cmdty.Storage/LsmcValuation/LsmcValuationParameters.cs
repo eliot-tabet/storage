@@ -82,6 +82,8 @@ namespace Cmdty.Storage
 
         public sealed class Builder
         {
+            // ReSharper disable once StaticMemberInGenericType
+            public static double DefaultNumericalTolerance { get; } = 1E-10;
             public double? Inventory { get; set; }
             public TimeSeries<T, double> ForwardCurve { get; set; }
             public ICmdtyStorage<T> Storage { get; set; }
@@ -113,7 +115,7 @@ namespace Cmdty.Storage
             public Builder()
             {
                 CancellationToken = CancellationToken.None; // TODO see if this can be removed
-                NumericalTolerance = 1E-10;
+                NumericalTolerance = DefaultNumericalTolerance;
             }
 
             public LsmcValuationParameters<T> Build()

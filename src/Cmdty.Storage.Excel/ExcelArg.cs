@@ -114,13 +114,14 @@ namespace Cmdty.Storage.Excel
         internal static class NumGridPoints
         {
             public const string Name = "[Num_grid_points]";
-            public const string Description = "Optional parameter specifying the number of points in the inventory space grid used for backward induction. A higher value generally gives a more accurate valuation, but a longer running time. Defaults to 100 if omitted.";
+            public const string Description = "Optional parameter specifying the number of points in the inventory space grid used for backward induction. A higher value gives more accuracy, but a longer running time. Defaults to 100 if omitted.";
+            public const int Default = 100;
         }
 
         internal static class NumericalTolerance
         {
             public const string Name = "[Numerical_tolerance]";
-            public const string Description = "Optional parameter specifying the numerical tolerance. This should be small number that is used as a tolerance in numerical routines when comparing two floating point numbers. Defaults to 1E-10 if omitted.";
+            public const string Description = "Optional parameter specifying the numerical tolerance. This should be small number used as a tolerance in numerical routines when comparing two floating point numbers. Defaults to 1E-10 if omitted.";
         }
 
         internal static class StorageHandle
@@ -190,6 +191,11 @@ namespace Cmdty.Storage.Excel
             public const string Description = "Optional integer argument specifying the number of decision pairs to use on top of the usual bang-bang decision set. Defaults to 0 if omitted.";
         }
 
+        internal static class SettleDates
+        {
+            public const string Name = "Settle_dates";
+            public const string Description = "Dates on which delivered volume is financially settled. Should consist of a two column range, with months in the first column (the delivery month), and dates in the second column (the settlement dates).";
+        }
 
     }
 }

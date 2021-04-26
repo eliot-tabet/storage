@@ -36,12 +36,14 @@ namespace Cmdty.Storage.Excel
         Success,
         Cancelled
     }
-    public abstract class ExcelCalcWrapper
+    public class ExcelCalcWrapper
     {
         public event Action<double> OnProgressUpdate;
         public double Progress { get; protected set; }
-        public Task CalcTask { get; protected set; }
+        public Task<object> CalcTask { get; protected set; }
+        public Type ResultType { get; }
         public object Results { get; protected set; } // TODO use generic Task<TResult>?
+        public bool CancellationSupported { get; }
         public CalcStatus Status { get; protected set; }
         protected CancellationTokenSource _cancellationTokenSource;
 
@@ -49,6 +51,27 @@ namespace Cmdty.Storage.Excel
         {
             _cancellationTokenSource = new CancellationTokenSource();
         }
+
+        private ExcelCalcWrapper(Task<object> calcTask, Type resultType, CancellationTokenSource cancellationTokenSource)
+        {
+            CalcTask = calcTask;
+            ResultType = resultType;
+            _cancellationTokenSource = cancellationTokenSource;
+            CancellationSupported = true;
+        }
+        
+        public static ExcelCalcWrapper CreateCancellable<TResult>(Func<CancellationToken, Action<double>, TResult> calculation)
+        {
+            var cancellationTokenSource = new CancellationTokenSource();
+            Type resultType = typeof(TResult);
+            var calcTaskWrapper = new ExcelCalcWrapper(null, resultType, cancellationTokenSource);
+            void OnProgress(double progress) => UpdateProgress(calcTaskWrapper, progress);
+            calcTaskWrapper.CalcTask = Task.Run(() => (object)calculation(cancellationTokenSource.Token, OnProgress), cancellationTokenSource.Token);
+            return calcTaskWrapper;
+        }
+
+        private static void UpdateProgress(ExcelCalcWrapper calcWrapper, double progress)
+                                    => calcWrapper.UpdateProgress(progress);
 
         protected void UpdateProgress(double progress)
         {
@@ -59,9 +82,7 @@ namespace Cmdty.Storage.Excel
 
         public void Cancel()
             => _cancellationTokenSource.Cancel();
-
-
-        public abstract bool CancellationSupported();
+        
 
         protected void UpdateStatus(Task task)
         {

@@ -125,7 +125,7 @@ namespace Cmdty.Storage.Excel
 
             T currentPeriod = TimePeriodFactory.FromDateTime<T>(valuationDateTime);
 
-            DoubleTimeSeries<T> forwardCurve = StorageExcelHelper.CreateDoubleTimeSeries<T>(forwardCurveIn, "Forward_curve");
+            TimeSeries<T, double> forwardCurve = StorageExcelHelper.CreateDoubleTimeSeries<T>(forwardCurveIn, "Forward_curve");
             
             // TODO input settlement dates and use interest rates
             int numGridPoints =
