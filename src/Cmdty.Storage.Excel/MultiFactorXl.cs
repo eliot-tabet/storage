@@ -37,47 +37,46 @@ using ExcelDna.Integration;
 
 namespace Cmdty.Storage.Excel
 {
-    public class MultiFactorCalcWrapper : ExcelCalcWrapper
-    {
-        public MultiFactorCalcWrapper()
-        {
-            CancellationToken cancelToken = _cancellationTokenSource.Token;
-            Status = CalcStatus.Running;
-            CalcTask = Task.Run(() =>
-            {
-                TimeSpan timeSpan = TimeSpan.FromSeconds(1);
-                UpdateProgress(0.0);
-                cancelToken.ThrowIfCancellationRequested();
-                Thread.Sleep(timeSpan);
-                UpdateProgress(0.2);
-                cancelToken.ThrowIfCancellationRequested();
-                Thread.Sleep(timeSpan);
-                UpdateProgress(0.4);
-                cancelToken.ThrowIfCancellationRequested();
-                Thread.Sleep(timeSpan);
-                UpdateProgress(0.6);
-                cancelToken.ThrowIfCancellationRequested();
-                Thread.Sleep(timeSpan);
-                UpdateProgress(0.8);
-                //throw new Exception("My exception");
-                cancelToken.ThrowIfCancellationRequested();
-                Thread.Sleep(timeSpan);
-                UpdateProgress(0.9);
-                cancelToken.ThrowIfCancellationRequested();
-                Thread.Sleep(timeSpan);
-                cancelToken.ThrowIfCancellationRequested();
-                UpdateProgress(1.0);
-                return (object)12345.6789;
-            }, cancelToken);
+    //public class MultiFactorCalcWrapper : ExcelCalcWrapper
+    //{
+    //    public MultiFactorCalcWrapper()
+    //    {
+    //        CancellationToken cancelToken = _cancellationTokenSource.Token;
+    //        Status = CalcStatus.Running;
+    //        CalcTask = Task.Run(() =>
+    //        {
+    //            TimeSpan timeSpan = TimeSpan.FromSeconds(1);
+    //            UpdateProgress(0.0);
+    //            cancelToken.ThrowIfCancellationRequested();
+    //            Thread.Sleep(timeSpan);
+    //            UpdateProgress(0.2);
+    //            cancelToken.ThrowIfCancellationRequested();
+    //            Thread.Sleep(timeSpan);
+    //            UpdateProgress(0.4);
+    //            cancelToken.ThrowIfCancellationRequested();
+    //            Thread.Sleep(timeSpan);
+    //            UpdateProgress(0.6);
+    //            cancelToken.ThrowIfCancellationRequested();
+    //            Thread.Sleep(timeSpan);
+    //            UpdateProgress(0.8);
+    //            //throw new Exception("My exception");
+    //            cancelToken.ThrowIfCancellationRequested();
+    //            Thread.Sleep(timeSpan);
+    //            UpdateProgress(0.9);
+    //            cancelToken.ThrowIfCancellationRequested();
+    //            Thread.Sleep(timeSpan);
+    //            cancelToken.ThrowIfCancellationRequested();
+    //            UpdateProgress(1.0);
+    //            return (object)12345.6789;
+    //        }, cancelToken);
 
-            CalcTask.ContinueWith(UpdateStatus);
+    //        CalcTask.ContinueWith(UpdateStatus);
+            
+    //    }
 
+    //    public new bool CancellationSupported() => true;
 
-        }
-
-        public new bool CancellationSupported() => true;
-
-    }
+    //}
 
     public static class MultiFactorXl
     {
@@ -121,8 +120,8 @@ namespace Cmdty.Storage.Excel
             [ExcelArgument(Name = ExcelArg.Inventory.Name, Description = ExcelArg.Inventory.Description)] double currentInventory,
             [ExcelArgument(Name = ExcelArg.ForwardCurve.Name, Description = ExcelArg.ForwardCurve.Description)] object forwardCurve,
             [ExcelArgument(Name = ExcelArg.InterestRateCurve.Name, Description = ExcelArg.InterestRateCurve.Description)] object interestRateCurve,
-            [ExcelArgument(Name = ExcelArg.SpotMeanReversion.Name, Description = ExcelArg.SpotMeanReversion.Description)] double spotMeanReversion,
             [ExcelArgument(Name = ExcelArg.SpotVol.Name, Description = ExcelArg.SpotVol.Description)] double spotVol,
+            [ExcelArgument(Name = ExcelArg.SpotMeanReversion.Name, Description = ExcelArg.SpotMeanReversion.Description)] double spotMeanReversion,
             [ExcelArgument(Name = ExcelArg.LongTermVol.Name, Description = ExcelArg.LongTermVol.Description)] double longTermVol,
             [ExcelArgument(Name = ExcelArg.SeasonalVol.Name, Description = ExcelArg.SeasonalVol.Description)] double seasonalVol,
             [ExcelArgument(Name = ExcelArg.DiscountDeltas.Name, Description = ExcelArg.DiscountDeltas.Description)] bool discountDeltas,
@@ -172,14 +171,14 @@ namespace Cmdty.Storage.Excel
                         SettleDateRule = settleDateRule
                     };
 
-
                     // TODO test that this works with expired storage
                     Day endDate = new[] {valDate, storage.EndPeriod}.Max();
                     var threeFactorParams =
                         MultiFactorParameters.For3FactorSeasonal(spotMeanReversion, spotVol, longTermVol, seasonalVol, valDate, endDate);
 
-                    int? seed = StorageExcelHelper.DefaultIfExcelEmptyOrMissing(seedIn, (int?) null, ExcelArg.Seed.Name);
-                    int? fwdSimSeed = StorageExcelHelper.DefaultIfExcelEmptyOrMissing(fwdSimSeedIn, (int?) null, ExcelArg.ForwardSimSeed.Name);
+                    // TODO better error messages if seedIn and fwdSimSeedIn cannot be cast
+                    int? seed = StorageExcelHelper.IsExcelEmptyOrMissing(seedIn) ? (int?)null : (int)(double)seedIn;
+                    int? fwdSimSeed = StorageExcelHelper.IsExcelEmptyOrMissing(fwdSimSeedIn) ? (int?)null : (int)(double)fwdSimSeedIn;
                     
                     lsmcParamsBuilder.SimulateWithMultiFactorModelAndMersenneTwister(threeFactorParams, numSims,seed, fwdSimSeed);
 

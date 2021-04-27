@@ -47,11 +47,6 @@ namespace Cmdty.Storage.Excel
         public CalcStatus Status { get; protected set; }
         protected CancellationTokenSource _cancellationTokenSource;
 
-        protected ExcelCalcWrapper()
-        {
-            _cancellationTokenSource = new CancellationTokenSource();
-        }
-
         private ExcelCalcWrapper(Task<object> calcTask, Type resultType, CancellationTokenSource cancellationTokenSource)
         {
             CalcTask = calcTask;
