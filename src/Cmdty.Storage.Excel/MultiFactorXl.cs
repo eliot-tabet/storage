@@ -27,6 +27,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using System.Reflection;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -222,16 +223,66 @@ namespace Cmdty.Storage.Excel
             });
         }
 
-        [ExcelFunction(Name = AddIn.ExcelFunctionNamePrefix + nameof(SubscribeResult),
+        [ExcelFunction(Name = AddIn.ExcelFunctionNamePrefix + nameof(SubscribeResultProperty),
             Description = "TODO.", // TODO
             Category = AddIn.ExcelFunctionCategory, IsThreadSafe = false, IsVolatile = false, IsExceptionSafe = true)] // TODO turn IsThreadSafe to true and use ConcurrentDictionary?
-        public static Task<object> SubscribeResult(string name)
+        public static object SubscribeResultProperty(string objectHandle, string propertyName, object returnedWhilstWaiting)
         {
-            return StorageExcelHelper.ExecuteExcelFunctionAsync(async () =>
+            return StorageExcelHelper.ExecuteExcelFunction(() =>
             {
-                ExcelCalcWrapper wrapper = _calcWrappers[name];
-                return await wrapper.CalcTask;
+                const string functionName = nameof(SubscribeResultProperty);
+                return ExcelAsyncUtil.Observe(functionName, new [] { objectHandle, propertyName, returnedWhilstWaiting}, () =>
+                {
+                    ExcelCalcWrapper wrapper = _calcWrappers[objectHandle];
+                    var excelObservable = new CalcWrapperResultPropertyObservable(wrapper, propertyName, returnedWhilstWaiting);
+                    return excelObservable;
+                });
             });
+        }
+
+    }
+
+    sealed class CalcWrapperResultPropertyObservable : CalcWrapperObservableBase
+    {
+        private readonly object _returnedWhilstWaiting;
+        private static readonly object[] GetterParams = new object[0];
+        private readonly MethodInfo _propertyGetter;
+        
+        public CalcWrapperResultPropertyObservable(ExcelCalcWrapper calcWrapper, string resultPropertyName, object returnedWhilstWaiting) : base(calcWrapper)
+        {
+            PropertyInfo[] properties = calcWrapper.ResultType.GetProperties(BindingFlags.Instance | BindingFlags.Public | BindingFlags.GetProperty);
+            PropertyInfo propertyInfo = properties.FirstOrDefault(info => info.Name.Equals(resultPropertyName, StringComparison.OrdinalIgnoreCase));
+
+            if (propertyInfo == null)
+                throw new ArgumentException($"Result type {calcWrapper.ResultType.Name} has not public instance property called {resultPropertyName}."); // TODO test and maybe rework
+            _propertyGetter = propertyInfo.GetMethod;
+
+            _returnedWhilstWaiting = returnedWhilstWaiting;
+            calcWrapper.CalcTask.ContinueWith(task =>
+                {
+                    if (task.Status == TaskStatus.RanToCompletion)
+                        PropertyValueUpdate();
+                });
+        }
+
+        private static object GetPropertyValueToReturn(MethodInfo propertyGetter, object resultObject)
+        {
+            // TODO transform for excel
+            return propertyGetter.Invoke(resultObject, GetterParams);
+        }
+
+        protected override void OnSubscribe()
+        {
+            if (_calcWrapper.Status == CalcStatus.Success) // Has already completed
+                PropertyValueUpdate();
+            else
+                _observer?.OnNext(_returnedWhilstWaiting);
+        }
+
+        private void PropertyValueUpdate()
+        {
+            object propertyValue = GetPropertyValueToReturn(_propertyGetter, _calcWrapper.CalcTask.Result); 
+            _observer?.OnNext(propertyValue);
         }
 
     }
