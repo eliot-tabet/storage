@@ -230,7 +230,7 @@ namespace Cmdty.Storage.Excel
             return StorageExcelHelper.ExecuteExcelFunctionAsync(async () =>
             {
                 ExcelCalcWrapper wrapper = _calcWrappers[name];
-                return await wrapper.CalcTask.ContinueWith(task => wrapper.Results);
+                return await wrapper.CalcTask;
             });
         }
 
@@ -290,10 +290,7 @@ namespace Cmdty.Storage.Excel
         
         protected virtual void OnDispose() => _observer = null;
 
-        public void Dispose()
-        {
-            OnDispose();
-        }
+        public void Dispose() => OnDispose();
 
     }
 

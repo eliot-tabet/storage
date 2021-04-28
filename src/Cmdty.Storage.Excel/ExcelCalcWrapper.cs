@@ -36,16 +36,15 @@ namespace Cmdty.Storage.Excel
         Success,
         Cancelled
     }
-    public class ExcelCalcWrapper
+    public sealed class ExcelCalcWrapper
     {
         public event Action<double> OnProgressUpdate;
-        public double Progress { get; protected set; }
-        public Task<object> CalcTask { get; protected set; }
+        public double Progress { get; private set; }
+        public Task<object> CalcTask { get; private set; }
         public Type ResultType { get; }
-        public object Results { get; protected set; } // TODO use generic Task<TResult>?
         public bool CancellationSupported { get; }
-        public CalcStatus Status { get; protected set; }
-        protected CancellationTokenSource _cancellationTokenSource;
+        public CalcStatus Status { get; private set; }
+        private readonly CancellationTokenSource _cancellationTokenSource;
 
         private ExcelCalcWrapper(Task<object> calcTask, Type resultType, CancellationTokenSource cancellationTokenSource)
         {
@@ -62,13 +61,14 @@ namespace Cmdty.Storage.Excel
             var calcTaskWrapper = new ExcelCalcWrapper(null, resultType, cancellationTokenSource);
             void OnProgress(double progress) => UpdateProgress(calcTaskWrapper, progress);
             calcTaskWrapper.CalcTask = Task.Run(() => (object)calculation(cancellationTokenSource.Token, OnProgress), cancellationTokenSource.Token);
+            calcTaskWrapper.CalcTask.ContinueWith(task => calcTaskWrapper.UpdateStatus(task), cancellationTokenSource.Token);
             return calcTaskWrapper;
         }
 
         private static void UpdateProgress(ExcelCalcWrapper calcWrapper, double progress)
                                     => calcWrapper.UpdateProgress(progress);
 
-        protected void UpdateProgress(double progress)
+        private void UpdateProgress(double progress)
         {
             // TODO some sort of synchonisation needed? Look online.
             Progress = progress;
@@ -79,7 +79,7 @@ namespace Cmdty.Storage.Excel
             => _cancellationTokenSource.Cancel();
         
 
-        protected void UpdateStatus(Task task)
+        private void UpdateStatus(Task task)
         {
             switch (task.Status)
             {
