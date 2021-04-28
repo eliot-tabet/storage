@@ -23,26 +23,11 @@
 // OTHER DEALINGS IN THE SOFTWARE.
 #endregion
 
-using ExcelDna.Integration;
-using ExcelDna.Registration;
-
 namespace Cmdty.Storage.Excel
 {
-    internal class AddIn : IExcelAddIn
+    internal class AddIn
     {
         public const string ExcelFunctionNamePrefix = "cmdty.";
         public const string ExcelFunctionCategory = "CMDTY Storage";
-
-
-        public void AutoOpen()
-        {
-            //ExcelRegistration.GetExcelFunctions()
-            //    .ProcessAsyncRegistrations(nativeAsyncIfAvailable: false)
-            //    .RegisterFunctions();
-        }
-
-        public void AutoClose()
-        {
-        }
     }
 }
