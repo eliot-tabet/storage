@@ -188,7 +188,7 @@ Task("Pack-Python")
     setupContext.Environment.WorkingDirectory = pythonProjDir;
     try
     {    
-        StartProcessThrowOnError("python", "setup.py", "sdist", "bdist_wheel");
+        StartProcessThrowOnError("python", "setup.py", "bdist_wheel");
     }
     finally
     {
