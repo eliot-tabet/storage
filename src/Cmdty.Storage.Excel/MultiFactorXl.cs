@@ -240,6 +240,14 @@ namespace Cmdty.Storage.Excel
             });
         }
 
+        //[ExcelFunction(Name = AddIn.ExcelFunctionNamePrefix + nameof(GetError),
+        //    Description = "TODO.", // TODO
+        //    Category = AddIn.ExcelFunctionCategory, IsThreadSafe = false, IsVolatile = false, IsExceptionSafe = true)]
+        //public static object GetError()
+        //{
+        //    return ExcelError.ExcelErrorGettingData;
+        //}
+
     }
 
     sealed class CalcWrapperResultPropertyObservable : CalcWrapperObservableBase
@@ -267,8 +275,8 @@ namespace Cmdty.Storage.Excel
 
         private static object GetPropertyValueToReturn(MethodInfo propertyGetter, object resultObject)
         {
-            // TODO transform for excel
-            return propertyGetter.Invoke(resultObject, GetterParams);
+            object propertyValue = propertyGetter.Invoke(resultObject, GetterParams);
+            return StorageExcelHelper.TransformForExcelReturn(propertyValue);
         }
 
         protected override void OnSubscribe()

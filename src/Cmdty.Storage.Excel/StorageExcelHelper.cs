@@ -27,15 +27,43 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using Cmdty.Core.Common;
 using Cmdty.TimePeriodValueTypes;
 using Cmdty.TimeSeries;
 using ExcelDna.Integration;
 using MathNet.Numerics.Interpolation;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
 
 namespace Cmdty.Storage.Excel
 {
     public static class StorageExcelHelper
     {
+        private static readonly HashSet<Type> ReturnableAsObject;
+
+        static StorageExcelHelper()
+        {
+            ReturnableAsObject = new HashSet<Type>
+            {
+                typeof(double),
+                typeof(string),
+                typeof(DateTime),
+                typeof(bool),
+                typeof(double[]),
+                typeof(double[,]),
+                typeof(object[]),
+                typeof(object[,]),
+                typeof(ExcelError),
+                typeof(ExcelMissing),
+                typeof(ExcelEmpty),
+                typeof(ExcelReference), // TODO check what happens if this is returned
+                typeof(int),
+                typeof(short),
+                typeof(ushort),
+                typeof(decimal),
+                typeof(long)
+            };
+        }
+
         public static object ExecuteExcelFunction(Func<object> functionBody)
         {
             if (ExcelDnaUtil.IsInFunctionWizard())
@@ -342,14 +370,98 @@ namespace Cmdty.Storage.Excel
             where TIndex : ITimePeriod<TIndex>
         {
             var resultArray = new object[timeSeries.Count, 2];
-
             for (int i = 0; i < timeSeries.Count; i++)
             {
                 resultArray[i, 0] = indicesAsText ? (object)timeSeries.Indices[i].ToString() : timeSeries.Indices[i].Start;
                 resultArray[i, 1] = timeSeries[i];
             }
-
             return resultArray;
+        }
+
+        public static object[,] TimeSeriesToExcelReturnValues<TIndex, TData>(TimeSeries<TIndex, TData> timeSeries, Action<TData, int, object[,]> populateData, 
+                        int numDataFields, bool indicesAsText)
+            where TIndex : ITimePeriod<TIndex>
+        {
+            var resultArray = new object[timeSeries.Count, numDataFields + 1];
+            for (int i = 0; i < timeSeries.Count; i++)
+            {
+                TIndex index = timeSeries.Indices[i];
+                resultArray[i, 0] = indicesAsText ? (object)index.ToString() : index.Start;
+                populateData(timeSeries[index], i, resultArray);
+            }
+            return resultArray;
+        }
+
+        public static object[,] StorageProfileToExcelReturnValues<TIndex>(TimeSeries<TIndex, StorageProfile> storageProfiles, bool indicesAsText)
+            where TIndex : ITimePeriod<TIndex>
+        {
+            return TimeSeriesToExcelReturnValues(storageProfiles, (storageProfile, rowIndex, resultArray) =>
+            {
+                resultArray[rowIndex, 1] = storageProfile.Inventory;
+                resultArray[rowIndex, 2] = storageProfile.InjectWithdrawVolume;
+                resultArray[rowIndex, 3] = storageProfile.CmdtyConsumed;
+                resultArray[rowIndex, 4] = storageProfile.InventoryLoss;
+                resultArray[rowIndex, 5] = storageProfile.NetVolume;
+                resultArray[rowIndex, 6] = storageProfile.PeriodPv;
+
+            }, 6, indicesAsText);
+        }
+
+        public static object[,] TriggerPricesToExcelReturnValues<TIndex>(TimeSeries<TIndex, TriggerPrices> triggerPriceSeries, bool indicesAsText)
+            where TIndex : ITimePeriod<TIndex>
+        {
+            return TimeSeriesToExcelReturnValues(triggerPriceSeries, (triggerPrices, rowIndex, resultArray) =>
+            {
+                resultArray[rowIndex, 1] = TransformNullableForExcel(triggerPrices.MaxInjectVolume);
+                resultArray[rowIndex, 2] = TransformNullableForExcel(triggerPrices.MaxInjectTriggerPrice);
+                resultArray[rowIndex, 3] = TransformNullableForExcel(triggerPrices.MaxWithdrawVolume);
+                resultArray[rowIndex, 4] = TransformNullableForExcel(triggerPrices.MaxWithdrawTriggerPrice);
+            }, 4, indicesAsText);
+        }
+
+        public static object TransformNullableForExcel<T>(T? nullable)
+            where T : struct => nullable == null ? ExcelError.ExcelErrorNA : (object)nullable.Value;
+
+        public static object[,] PaneToExcelReturnValues<TIndex>(Panel<TIndex, double> panel, bool indicesAsText)
+            where TIndex : ITimePeriod<TIndex>
+        {
+            var resultArray = new object[panel.NumRows, panel.NumCols + 1];
+            int i = 0;
+            foreach (TIndex timePeriod in panel.RowKeys)
+            {
+                resultArray[i, 0] = indicesAsText ? (object)timePeriod.ToString() : timePeriod.Start;
+                Span<double> row = panel[timePeriod];
+                for (int j = 0; j < row.Length; j++)
+                    resultArray[i, j + 1] = row[j];
+                i++;
+            }
+            return resultArray;
+        }
+        
+        public static object TransformForExcelReturn(object obj)
+        {
+            if (ReferenceEquals(obj, null))
+                return ExcelError.ExcelErrorNull;
+
+            if (obj is TimeSeries<Day, double> dailyTimeSeries)
+                return TimeSeriesToExcelReturnValues(dailyTimeSeries, false);
+
+            if (obj is Panel<Day, double> dailyPanel)
+                return PaneToExcelReturnValues(dailyPanel, false);
+
+            if (obj is TimeSeries<Day, StorageProfile> dailyProfile)
+                return StorageProfileToExcelReturnValues(dailyProfile, false);
+
+            if (obj is TimeSeries<Day, TriggerPrices> dailyTriggerPrices)
+                return TriggerPricesToExcelReturnValues(dailyTriggerPrices, false);
+
+            Type objType = obj.GetType();
+            if (ReturnableAsObject.Contains(objType))
+                return obj;
+
+            // TODO handle enums
+
+            throw new NotImplementedException($"Returning objects of type {objType.Name} not supported yet.");
         }
 
     }
