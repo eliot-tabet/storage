@@ -526,6 +526,9 @@ pretty much as quickly as you can get. The only real annoyances with the structu
 * [pythonnet](https://github.com/pythonnet/pythonnet) not currently supporting .NET Core. A fix for
 this is currently [in the pipeline](https://github.com/pythonnet/pythonnet/issues/984) for the next pythonnet release. At current this means that Mono needs to be installed in order to use the Python API on Linux.
 * The PyPI package size.
+* If a version of the [curves](https://pypi.org/project/curves/) package is installed which has
+a .NET dependency with a different version to a dependency of the cmdty-storage package 
+ this can cause strange errors.
 
 ## License
 
