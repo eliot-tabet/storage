@@ -1,13 +1,18 @@
 
-def generate_ratchets_with_maintenances(init_ratchet, maint_dates, storage_end
-                                        c_inj, c_wit, maint = True):
+def generate_ratchets_with_maintenances(init_ratchet, maint_dates, storage_end c_inj, c_wit, maint = True, perc = False,
+                                        inj_max = None, wit_max = None, max_wg = None):
     
     if not maint:
         return init_ratchet
     
     assert len(maint_dates) != 0, "maint_dates is empty"
     assert len(maint_dates) == len(c_inj) & len(c_wit) == len(c_inj), "c_inj, c_wit and maint_dates have different lengths"
-
+    
+    if perc:
+        assert inj_max is not None
+        assert wit_max is not None
+        assert max_wg is not None
+        
     from datetime import datetime, timedelta
     
     '''
@@ -39,6 +44,8 @@ def generate_ratchets_with_maintenances(init_ratchet, maint_dates, storage_end
     maint_dates is a list of date strings : maint_dates = ["2021-06-01", "2022-06-05", "2022-11-01"]
     c_inj and c_wit are lists of floats : c_inj = [0.25, 0.2, 0.0], c_wit = [0.8, 0.5, 0.0]
     storage_end is a string : storage_end = '2022-12-01'
+    inj_max, wit_max are in percentage - so already divided by 100
+    max_wg is the max working volume or max inventory
     '''
     
     #maint_dates string list to 
@@ -89,11 +96,35 @@ def generate_ratchets_with_maintenances(init_ratchet, maint_dates, storage_end
     rd = [datetime.strptime(new_ratchet[i][0], "%Y-%m-%d") for i in range(len(new_ratchet))]
     new_ratchet = [x for _,x in sorted(zip(rd, new_ratchet))]
     
+    if perc:
+        for i in range(len(new_ratchet)):
+            temp = new_ratchet[i][1]
+            for j in range(len(temp)):
+                k = temp[j]
+                k = list(k)
+                k[0] = k[0] * max_wg  #inventory
+                k[1] = k[1] * wit_max #wit
+                k[2] = k[2] * inj_max #inj
+                k = tuple(k)
+                temp[j] = k
     return new_ratchet
 
-#do same with perc functions on ratchets
 
-
-#function for gate constraints so to create a pddate series
+def generate_min_max_inventory_with_gates(storage_start = '2021-04-01', storage_end = '2022-04-01',
+                                          max_wg = 100, gate_dates = ["2021-04-02", "2022-01-05"],
+                                          gmin = [0.25, 0.2], gmax = [0.8, 0.5]):
     
-
+    assert len(gate_dates) != 0, "gate_dates is empty"
+    assert len(gate_dates) == len(gmin) & len(gmin) == len(gmax), "gmin, gmax and gate_dates have different lengths"
+    
+    #create a series with date as index
+    #then change the values on gate day
+    dr = pd.date_range(start = storage_start, end = storage_end).to_period("D")
+    maxi = pd.Series([max_wg]*len(dr), dr)
+    mini = pd.Series([0]*len(dr), dr)
+    for i in range(len(gate_dates)):
+        maxi.loc[pd.Period(gate_dates[i], 'D')] = gmax[i] * max_wg
+        mini.loc[pd.Period(gate_dates[i], 'D')] = gmin[i] * max_wg
+        
+    return [mini, maxi]
+    
